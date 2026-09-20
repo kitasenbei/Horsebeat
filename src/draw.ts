@@ -1,6 +1,6 @@
 import type { Range } from './range'
 import { applyCurve, type Curve } from './curve'
-import { sectionSpans, type Section } from './timing'
+import { sectionSpans, type Section, type SectionSpan } from './timing'
 import { ENVELOPE_HOP, type PeakLevel, type Pyramid } from './audio'
 
 export const WAVE_ALPHA = 1
@@ -822,4 +822,175 @@ export function drawEnvelopeStrip(
   context.closePath()
   context.fill()
   context.globalAlpha = 1
+}
+
+export const BEATS_PER_BAR = 4
+
+export type Bar = {
+  start: number
+  end: number
+}
+
+export function collectBars(span: SectionSpan, limit = 2000): Bar[] {
+  const bars: Bar[] = []
+  const length = span.beat * BEATS_PER_BAR
+  if (length <= 0) return bars
+
+  for (let at = span.start; at + length <= span.end + 1e-9 && bars.length < limit; at += length) {
+    bars.push({ start: at, end: at + length })
+  }
+
+  return bars
+}
+
+export const BLOCK_GAP = 8
+const BLOCK_WEIGHTS = [0.4, 0.2, 0.4]
+
+export type BarSources = {
+  loudness: Float32Array | null
+  onsets: Float32Array | null
+  bands: Float32Array | null
+}
+
+function sampleAt(values: Float32Array, at: number, stride = 1): number {
+  const frames = values.length / stride
+  const index = Math.min(frames - 1, Math.max(0, Math.floor(at * frames)))
+  let value = 0
+  for (let offset = 0; offset < stride; offset += 1) {
+    value = Math.max(value, values[index * stride + offset])
+  }
+  return Math.min(1, value)
+}
+
+export function blockHeights(height: number): number[] {
+  const usable = Math.max(0, height - BLOCK_GAP * (BLOCK_WEIGHTS.length - 1))
+  return BLOCK_WEIGHTS.map((weight) => Math.floor(usable * weight))
+}
+
+function parseHex(color: string): [number, number, number] {
+  const value = Number.parseInt(color.replace('#', ''), 16)
+  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]
+}
+
+const LEVEL_RGB = LEVEL_ZONES.map((zone) => ({ limit: zone.limit, rgb: parseHex(zone.color) }))
+const HEAT_RGB = HEAT_STOPS.map(parseHex)
+const BAND_RGB = BAND_COLORS.map((band) => band.rgb.split(',').map(Number) as [number, number, number])
+
+function levelRgb(value: number) {
+  const zone = LEVEL_RGB.find((entry) => value <= entry.limit)
+  return (zone ?? LEVEL_RGB[LEVEL_RGB.length - 1]).rgb
+}
+
+function heatRgb(value: number): [number, number, number] {
+  const clamped = Math.min(1, Math.max(0, value))
+  const scaled = clamped * (HEAT_RGB.length - 1)
+  const index = Math.min(HEAT_RGB.length - 2, Math.floor(scaled))
+  const ratio = scaled - index
+  const from = HEAT_RGB[index]
+  const to = HEAT_RGB[index + 1]
+  return [
+    from[0] + (to[0] - from[0]) * ratio,
+    from[1] + (to[1] - from[1]) * ratio,
+    from[2] + (to[2] - from[2]) * ratio,
+  ]
+}
+
+export function renderBarColumns(
+  context: CanvasRenderingContext2D,
+  sources: BarSources,
+  bars: Bar[],
+  width: number,
+  height: number,
+): ImageData {
+  const image = context.createImageData(Math.max(1, width), Math.max(1, height))
+  const pixels = image.data
+  pixels.fill(255)
+
+  if (bars.length === 0) return image
+
+  const heights = blockHeights(height)
+  const column = width / bars.length
+  const put = (x: number, y: number, rgb: [number, number, number]) => {
+    const offset = (y * width + x) * 4
+    pixels[offset] = rgb[0]
+    pixels[offset + 1] = rgb[1]
+    pixels[offset + 2] = rgb[2]
+  }
+
+  let top = 0
+  for (let block = 0; block < heights.length; block += 1) {
+    const blockHeight = heights[block]
+
+    for (let index = 0; index < bars.length; index += 1) {
+      const bar = bars[index]
+      const span = bar.end - bar.start
+      const left = Math.round(index * column)
+      const right = Math.max(left + 1, Math.round((index + 1) * column))
+
+      for (let row = 0; row < blockHeight; row += 1) {
+        const y = top + row
+        if (y >= height) break
+        const at = bar.start + (row / blockHeight) * span
+
+        if (block === 0 && sources.loudness) {
+          const rgb = levelRgb(sampleAt(sources.loudness, at))
+          for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
+        } else if (block === 1 && sources.onsets) {
+          const rgb = heatRgb(sampleAt(sources.onsets, at))
+          for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
+        } else if (block === 2 && sources.bands) {
+          const frames = sources.bands.length / 3
+          const frame = Math.min(frames - 1, Math.max(0, Math.floor(at * frames)))
+          const stripe = (right - left) / 3
+
+          for (let band = 0; band < 3; band += 1) {
+            const value = Math.min(1, sources.bands[frame * 3 + band])
+            const rgb = BAND_RGB[2 - band]
+            const mixed: [number, number, number] = [
+              255 + (rgb[0] - 255) * value,
+              255 + (rgb[1] - 255) * value,
+              255 + (rgb[2] - 255) * value,
+            ]
+            const from = Math.round(left + band * stripe)
+            const to = Math.round(left + (band + 1) * stripe)
+            for (let x = from; x < to && x < width; x += 1) put(x, y, mixed)
+          }
+        }
+      }
+    }
+
+    top += blockHeight + BLOCK_GAP
+  }
+
+  return image
+}
+
+export const CURSOR_WIDTH = 3
+
+export function drawColumnCursor(
+  context: CanvasRenderingContext2D,
+  bars: Bar[],
+  tops: number[],
+  heights: number[],
+  position: number,
+  width: number,
+  color: string,
+) {
+  const index = bars.findIndex((bar) => position >= bar.start && position < bar.end)
+  if (index < 0) return
+
+  const bar = bars[index]
+  const column = width / bars.length
+  const left = index * column
+  const ratio = (position - bar.start) / (bar.end - bar.start)
+
+  context.strokeStyle = color
+  context.fillStyle = color
+
+  tops.forEach((top, block) => {
+    const y = Math.round(top + ratio * heights[block])
+    context.lineWidth = 1
+    context.strokeRect(left + 0.5, top + 0.5, column - 1, heights[block] - 1)
+    context.fillRect(left, y - CURSOR_WIDTH / 2, column, CURSOR_WIDTH)
+  })
 }

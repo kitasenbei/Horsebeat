@@ -5,6 +5,7 @@ import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import OpenInFullIcon from '@mui/icons-material/OpenInFull'
+import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import { useTheme } from '@mui/material/styles'
 import { drawBands, drawEnvelopeStrip, drawHeatmap, drawLevels } from '../draw'
@@ -25,6 +26,7 @@ type BeatFramesProps = {
   expanded: boolean
   onSectionsChange: (sections: Section[]) => void
   onExpandedChange: (expanded: boolean) => void
+  onCompile: () => void
 }
 
 const LANE_HEIGHT = 20
@@ -50,6 +52,7 @@ export default function BeatFrames({
   expanded,
   onSectionsChange,
   onExpandedChange,
+  onCompile,
 }: BeatFramesProps) {
   const theme = useTheme()
   const spans = sectionSpans(sections, duration)
@@ -186,6 +189,11 @@ export default function BeatFrames({
         <Typography variant="caption" sx={{ flex: 1 }}>
           Beat frames
         </Typography>
+        <Tooltip title="Compile every bar">
+          <IconButton size="small" aria-label="Compile every bar" onClick={onCompile}>
+            <ViewHeadlineIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
         <Tooltip title={expanded ? 'Back to panels' : 'Expand beat frames'}>
           <IconButton
             size="small"

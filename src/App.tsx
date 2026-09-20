@@ -19,6 +19,7 @@ import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
 import TimingPanel from './components/TimingPanel'
 import BeatFrames from './components/BeatFrames'
+import BarGrid from './components/BarGrid'
 import {
   buildPyramid,
   computeBands,
@@ -90,6 +91,7 @@ export default function App() {
   const [ghost, setGhost] = useState<number | null>(null)
   const [fallSpeed, setFallSpeed] = useState(8.5)
   const [framesExpanded, setFramesExpanded] = useState(false)
+  const [barGrid, setBarGrid] = useState(false)
   const [follow, setFollow] = useState(false)
   const [backdrop, setBackdrop] = useState<string | null>(null)
   const {
@@ -311,6 +313,7 @@ export default function App() {
                 expanded={framesExpanded}
                 onSectionsChange={setSections}
                 onExpandedChange={setFramesExpanded}
+                onCompile={() => setBarGrid((current) => !current)}
               />
             </Box>
             <Box sx={{ flex: '0 0 auto', display: framesExpanded ? 'none' : 'block' }}>
@@ -325,28 +328,32 @@ export default function App() {
               flexDirection: 'column',
             }}
           >
-            <SectionRail
-              sections={sections}
-              range={range}
-              duration={duration}
-              onSectionsChange={setSections}
-            />
-            <MarkerRail
-              markers={markers}
-              range={range}
-              enabled={Boolean(samples)}
-              focus={focus}
-              ghost={mode === 'marker' ? ghost : null}
-              onMarkersChange={changeMarkers}
-            />
-            <PlayheadRail
-              positionRef={positionRef}
-              playing={playing}
-              range={range}
-              enabled={Boolean(samples)}
-              onSeek={seek}
-            />
-            <Box sx={{ flex: 1, minHeight: 0 }}>
+            {barGrid ? null : (
+              <>
+                <SectionRail
+                  sections={sections}
+                  range={range}
+                  duration={duration}
+                  onSectionsChange={setSections}
+                />
+                <MarkerRail
+                  markers={markers}
+                  range={range}
+                  enabled={Boolean(samples)}
+                  focus={focus}
+                  ghost={mode === 'marker' ? ghost : null}
+                  onMarkersChange={changeMarkers}
+                />
+                <PlayheadRail
+                  positionRef={positionRef}
+                  playing={playing}
+                  range={range}
+                  enabled={Boolean(samples)}
+                  onSeek={seek}
+                />
+              </>
+            )}
+            <Box sx={{ flex: 1, minHeight: 0, display: barGrid ? 'none' : 'block' }}>
               <Waveform
                 samples={samples}
                 envelope={envelope}
@@ -387,6 +394,20 @@ export default function App() {
                 }}
               />
             </Box>
+            {barGrid ? (
+              <Box sx={{ flex: 1, minHeight: 0 }}>
+                <BarGrid
+                  loudness={loudness}
+                  onsets={onsets}
+                  bands={bands}
+                  position={position}
+                  sections={sections}
+                  duration={duration}
+                  positionRef={positionRef}
+                  playing={playing}
+                />
+              </Box>
+            ) : null}
             <AnalysisLanes loudness={loudness} onsets={onsets} bands={bands} range={range} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>

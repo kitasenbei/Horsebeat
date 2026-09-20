@@ -13,6 +13,7 @@ import CompressIcon from '@mui/icons-material/Compress'
 import Tooltip from '@mui/material/Tooltip'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 import {
   applyCurve,
   CURVE_PRESETS,
@@ -59,6 +60,8 @@ export default function CurvePanel({
   const moveRef = useRef<Move | null>(null)
   const pointRef = useRef<number | null>(null)
   const [spot, setSpot] = useState({ left: 32, top: 96 })
+  const applyCurveChange = useRafCallback(onCurveChange)
+  const applySpot = useRafCallback(setSpot)
 
   const canvasRef = useCanvas((context, width, height) => {
     context.strokeStyle = theme.palette.divider
@@ -131,7 +134,7 @@ export default function CurvePanel({
     const upper = isLast ? 1 : points[index + 1].x - MIN_GAP
     const nextX = isFirst || isLast ? points[index].x : Math.min(upper, Math.max(lower, x))
 
-    onCurveChange({
+    applyCurveChange({
       points: points.map((point, current) =>
         current === index ? { x: nextX, y: Math.min(1, Math.max(0, y)) } : point,
       ),
@@ -187,7 +190,7 @@ export default function CurvePanel({
   const movePanel = (event: React.PointerEvent<HTMLDivElement>) => {
     const move = moveRef.current
     if (!move) return
-    setSpot({
+    applySpot({
       left: Math.max(0, move.left + (event.clientX - move.pointerX)),
       top: Math.max(0, move.top + (event.clientY - move.pointerY)),
     })

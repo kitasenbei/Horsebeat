@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 
 type RulerSliderProps = {
   value: number
@@ -31,6 +32,7 @@ export default function RulerSlider({
 }: RulerSliderProps) {
   const theme = useTheme()
   const dragRef = useRef<{ clientX: number; value: number } | null>(null)
+  const applyValue = useRafCallback(onChange)
 
   const canvasRef = useCanvas((context, width, height) => {
     const middle = width / 2
@@ -88,7 +90,7 @@ export default function RulerSlider({
     if (!drag) return
     const shift = ((drag.clientX - event.clientX) / pixelsPerStep) * step
     const next = Math.round((drag.value + shift) / step) * step
-    onChange(Math.min(max, Math.max(min, next)))
+    applyValue(Math.min(max, Math.max(min, next)))
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {

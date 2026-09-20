@@ -5,6 +5,7 @@ import Typography from '@mui/material/Typography'
 import { useTheme } from '@mui/material/styles'
 import { drawBands, drawEnvelopeStrip, drawHeatmap, drawLevels } from '../draw'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 import { sortSections, sectionSpans, type Section } from '../timing'
 import type { Range } from '../range'
 
@@ -47,6 +48,7 @@ export default function BeatFrames({
   const dragRef = useRef<{ clientX: number; id: string; offsetMs: number; msPerBeat: number } | null>(
     null,
   )
+  const applySections = useRafCallback(onSectionsChange)
 
   const activeSpan = () => {
     const position = positionRef.current
@@ -74,7 +76,7 @@ export default function BeatFrames({
     if (lane <= 0) return
 
     const shift = ((event.clientX - drag.clientX) / lane) * drag.msPerBeat
-    onSectionsChange(
+    applySections(
       sortSections(
         sections.map((section) =>
           section.id === drag.id

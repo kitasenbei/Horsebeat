@@ -13,6 +13,7 @@ import {
   drawWindow,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 import { clampRange, MIN_SPAN, type Range } from '../range'
 import type { ViewMode } from '../view'
 import type { Curve } from '../curve'
@@ -46,6 +47,7 @@ export default function Overview({
   onRangeChange,
 }: OverviewProps) {
   const dragRef = useRef<Drag | null>(null)
+  const applyRange = useRafCallback(onRangeChange)
   const theme = useTheme()
   const [hovered, setHovered] = useState(false)
 
@@ -84,7 +86,7 @@ export default function Overview({
       startDrag(event, { mode: 'move', grab: at - range.start })
     } else {
       startDrag(event, { mode: 'move', grab: span / 2 })
-      onRangeChange(clampRange({ start: at - span / 2, end: at + span / 2 }))
+      applyRange(clampRange({ start: at - span / 2, end: at + span / 2 }))
     }
   }
 
@@ -95,11 +97,11 @@ export default function Overview({
 
     if (drag.mode === 'move') {
       const span = range.end - range.start
-      onRangeChange(clampRange({ start: at - drag.grab, end: at - drag.grab + span }))
+      applyRange(clampRange({ start: at - drag.grab, end: at - drag.grab + span }))
     } else if (drag.mode === 'start') {
-      onRangeChange(clampRange({ start: Math.min(at, range.end - MIN_SPAN), end: range.end }))
+      applyRange(clampRange({ start: Math.min(at, range.end - MIN_SPAN), end: range.end }))
     } else {
-      onRangeChange(clampRange({ start: range.start, end: Math.max(at, range.start + MIN_SPAN) }))
+      applyRange(clampRange({ start: range.start, end: Math.max(at, range.start + MIN_SPAN) }))
     }
   }
 

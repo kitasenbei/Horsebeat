@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { drawEnvelopeAmplitude, drawGrid, drawMarkers, drawPlayhead, drawSamples } from '../draw'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 import { clampRange, type Range } from '../range'
 import type { ViewMode } from '../view'
 import type { Section } from '../timing'
@@ -63,6 +64,8 @@ export default function Waveform({
   const theme = useTheme()
   const panRef = useRef<Pan | null>(null)
   const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
+  const applyRange = useRafCallback((next: Range) => onRangeChange?.(next))
+  const applyGhost = useRafCallback((next: number | null) => onGhostChange?.(next))
 
   const paintStatic = (context: CanvasRenderingContext2D, width: number, height: number) => {
     if (!samples) return
@@ -193,7 +196,7 @@ export default function Waveform({
   }
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (placing && samples) onGhostChange?.(positionAt(event.clientX, event.currentTarget))
+    if (placing && samples) applyGhost(positionAt(event.clientX, event.currentTarget))
 
     const pan = panRef.current
     if (!pan || !onRangeChange) return
@@ -202,7 +205,7 @@ export default function Waveform({
     if (width === 0) return
 
     const shift = ((event.clientX - pan.clientX) / width) * pan.span
-    onRangeChange(clampRange({ start: pan.start - shift, end: pan.start - shift + pan.span }))
+    applyRange(clampRange({ start: pan.start - shift, end: pan.start - shift + pan.span }))
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -223,7 +226,7 @@ export default function Waveform({
       onPointerMove={move}
       onPointerUp={end}
       onPointerCancel={end}
-      onPointerLeave={() => onGhostChange?.(null)}
+      onPointerLeave={() => applyGhost(null)}
       sx={{
         display: 'block',
         width: '100%',

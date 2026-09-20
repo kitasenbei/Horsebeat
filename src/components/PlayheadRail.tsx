@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import { alpha, useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle } from '../draw'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 import type { Range } from '../range'
 
 type PlayheadRailProps = {
@@ -26,6 +27,7 @@ export default function PlayheadRail({
   range = FULL,
 }: PlayheadRailProps) {
   const draggingRef = useRef(false)
+  const applySeek = useRafCallback(onSeek)
   const theme = useTheme()
 
   const canvasRef = useCanvas((context, width, height) => {
@@ -65,7 +67,7 @@ export default function PlayheadRail({
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (!draggingRef.current) return
-    onSeek(positionAt(event.clientX))
+    applySeek(positionAt(event.clientX))
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {

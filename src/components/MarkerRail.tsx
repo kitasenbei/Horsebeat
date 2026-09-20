@@ -7,6 +7,7 @@ import Tooltip from '@mui/material/Tooltip'
 import { useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle, HANDLE_WIDTH } from '../draw'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 import { RAIL_HEIGHT } from './PlayheadRail'
 import type { Range } from '../range'
 
@@ -31,6 +32,7 @@ export default function MarkerRail({
 }: MarkerRailProps) {
   const dragRef = useRef<number | null>(null)
   const downRef = useRef<number | null>(null)
+  const applyMarkers = useRafCallback(onMarkersChange)
   const [selected, setSelected] = useState<number | null>(null)
   const [hovered, setHovered] = useState<number | null>(null)
   const theme = useTheme()
@@ -113,7 +115,7 @@ export default function MarkerRail({
     }
 
     const at = positionAt(event.clientX)
-    onMarkersChange(markers.map((marker, current) => (current === index ? at : marker)))
+    applyMarkers(markers.map((marker, current) => (current === index ? at : marker)))
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {

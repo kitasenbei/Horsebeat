@@ -13,9 +13,7 @@ import SectionRail from './components/SectionRail'
 import SectionBlocks from './components/SectionBlocks'
 import VerticalWaveform from './components/VerticalWaveform'
 import RulerSlider from './components/RulerSlider'
-import Heatmap from './components/Heatmap'
-import LevelRail from './components/LevelRail'
-import SpectrumRail from './components/SpectrumRail'
+import AnalysisLanes from './components/AnalysisLanes'
 import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
@@ -35,6 +33,7 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import type { ViewMode } from './view'
 import { resolveTempo } from './bpm'
+import { readOsz } from './osu'
 import { createSection, sectionSpans, sortSections, type Section } from './timing'
 import type { EditMode } from './mode'
 import { DEFAULT_CURVE, type Curve } from './curve'
@@ -123,10 +122,12 @@ export default function App() {
     syncTempo(next)
   }
 
-  const load = async (next: File) => {
-    setLoadingName(next.name)
+  const load = async (source: File) => {
+    setLoadingName(source.name)
     const context = new AudioContext()
     try {
+      const beatmap = source.name.toLowerCase().endsWith('.osz') ? await readOsz(source) : null
+      const next = beatmap ? beatmap.audio : source
       const buffer = await context.decodeAudioData(await next.arrayBuffer())
       const mono = toMono(buffer)
       setSamples(mono)
@@ -138,7 +139,7 @@ export default function App() {
       setBands(computeBands(mono, buffer.sampleRate))
       setRange(INITIAL_RANGE)
       setMarkers([])
-      setSections([])
+      setSections(beatmap ? beatmap.sections : [])
       setAnchorId(null)
       setFile(next)
     } finally {
@@ -291,9 +292,7 @@ export default function App() {
                 }}
               />
             </Box>
-            <LevelRail values={loudness} range={range} />
-            <Heatmap values={onsets} range={range} />
-            <SpectrumRail bands={bands} range={range} />
+            <AnalysisLanes loudness={loudness} onsets={onsets} bands={bands} range={range} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
             <VerticalWaveform
@@ -419,7 +418,7 @@ export default function App() {
       <input
         ref={inputRef}
         type="file"
-        accept="audio/*"
+        accept="audio/*,.osz"
         hidden
         onChange={(event) => {
           const next = event.target.files?.[0]

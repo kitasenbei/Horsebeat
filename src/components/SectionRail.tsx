@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle, HANDLE_WIDTH } from '../draw'
 import { useCanvas } from '../useCanvas'
+import { useRafCallback } from '../useRafCallback'
 import { RAIL_HEIGHT } from './PlayheadRail'
 import { sortSections, type Section } from '../timing'
 import type { Range } from '../range'
@@ -21,6 +22,7 @@ export default function SectionRail({
   onSectionsChange,
 }: SectionRailProps) {
   const dragRef = useRef<string | null>(null)
+  const applySections = useRafCallback(onSectionsChange)
   const [hovered, setHovered] = useState<string | null>(null)
   const theme = useTheme()
   const color = theme.palette.info.main
@@ -83,7 +85,7 @@ export default function SectionRail({
       return
     }
 
-    onSectionsChange(
+    applySections(
       sortSections(
         sections.map((section) =>
           section.id === id ? { ...section, offsetMs: Math.max(0, at * duration * 1000) } : section,

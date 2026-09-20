@@ -583,14 +583,29 @@ export function drawHeatmap(
   if (span <= 0 || values.length === 0) return
 
   const perPixel = (span * values.length) / width
+  let runColor = ''
+  let runStart = 0
 
   for (let x = 0; x < width; x += 1) {
     const start = Math.max(0, Math.floor((range.start + (x / width) * span) * values.length))
     const end = Math.min(values.length, Math.max(start + 1, Math.floor(start + perPixel)))
     let value = 0
     for (let index = start; index < end; index += 1) value = Math.max(value, values[index])
-    context.fillStyle = heatColor(value)
-    context.fillRect(x, 0, 1, height)
+
+    const color = heatColor(value)
+    if (color !== runColor) {
+      if (runColor) {
+        context.fillStyle = runColor
+        context.fillRect(runStart, 0, x - runStart, height)
+      }
+      runColor = color
+      runStart = x
+    }
+  }
+
+  if (runColor) {
+    context.fillStyle = runColor
+    context.fillRect(runStart, 0, width - runStart, height)
   }
 }
 
@@ -650,18 +665,32 @@ export function drawBands(
 
   const row = height / 3
 
-  for (let x = 0; x < width; x += 1) {
-    const start = Math.max(0, Math.floor((range.start + (x / width) * span) * frames))
-    const end = Math.min(frames, Math.max(start + 1, Math.floor(start + perPixel)))
+  for (let band = 0; band < 3; band += 1) {
+    let runColor = ''
+    let runStart = 0
 
-    for (let band = 0; band < 3; band += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const start = Math.max(0, Math.floor((range.start + (x / width) * span) * frames))
+      const end = Math.min(frames, Math.max(start + 1, Math.floor(start + perPixel)))
       let value = 0
       for (let frame = start; frame < end; frame += 1) {
         value = Math.max(value, bands[frame * 3 + band])
       }
 
-      context.fillStyle = `rgba(${BAND_COLORS[2 - band].rgb}, ${Math.min(1, value)})`
-      context.fillRect(x, band * row, 1, row)
+      const color = `rgba(${BAND_COLORS[2 - band].rgb}, ${Math.min(1, value).toFixed(2)})`
+      if (color !== runColor) {
+        if (runColor) {
+          context.fillStyle = runColor
+          context.fillRect(runStart, band * row, x - runStart, row)
+        }
+        runColor = color
+        runStart = x
+      }
+    }
+
+    if (runColor) {
+      context.fillStyle = runColor
+      context.fillRect(runStart, band * row, width - runStart, row)
     }
   }
 }

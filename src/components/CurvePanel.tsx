@@ -6,14 +6,28 @@ import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import CloseIcon from '@mui/icons-material/Close'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import ShowChartIcon from '@mui/icons-material/ShowChart'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import SsidChartIcon from '@mui/icons-material/SsidChart'
+import CompressIcon from '@mui/icons-material/Compress'
+import Tooltip from '@mui/material/Tooltip'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
-import { applyCurve, DEFAULT_CURVE, MAX_POINTS, MIN_GAP, sortPoints, type Curve } from '../curve'
+import {
+  applyCurve,
+  CURVE_PRESETS,
+  DEFAULT_CURVE,
+  MAX_POINTS,
+  MIN_GAP,
+  sortPoints,
+  type Curve,
+} from '../curve'
 
 type CurvePanelProps = {
   curve: Curve
   onCurveChange: (curve: Curve) => void
-  onClose: () => void
+  onClose?: () => void
+  embedded?: boolean
 }
 
 type Move = {
@@ -23,12 +37,24 @@ type Move = {
   top: number
 }
 
+const PRESETS = [
+  { curve: CURVE_PRESETS.linear, title: 'Linear', icon: <ShowChartIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.lift, title: 'Lift quiet detail', icon: <TrendingUpIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.contrast, title: 'Contrast', icon: <SsidChartIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.tame, title: 'Tame loud parts', icon: <CompressIcon fontSize="small" /> },
+]
+
 const CHART_HEIGHT = 170
 const PANEL_WIDTH = 250
 const GRAB = 12
 const POINT_RADIUS = 5
 
-export default function CurvePanel({ curve, onCurveChange, onClose }: CurvePanelProps) {
+export default function CurvePanel({
+  curve,
+  onCurveChange,
+  onClose,
+  embedded = false,
+}: CurvePanelProps) {
   const theme = useTheme()
   const moveRef = useRef<Move | null>(null)
   const pointRef = useRef<number | null>(null)
@@ -174,21 +200,25 @@ export default function CurvePanel({ curve, onCurveChange, onClose }: CurvePanel
 
   return (
     <Paper
-      elevation={6}
-      sx={{
-        position: 'fixed',
-        left: spot.left,
-        top: spot.top,
-        width: PANEL_WIDTH,
-        zIndex: (current) => current.zIndex.modal,
-        overflow: 'hidden',
-      }}
+      elevation={embedded ? 0 : 6}
+      sx={
+        embedded
+          ? { width: '100%', overflow: 'hidden', border: 1, borderColor: 'divider' }
+          : {
+              position: 'fixed',
+              left: spot.left,
+              top: spot.top,
+              width: PANEL_WIDTH,
+              zIndex: (current) => current.zIndex.modal,
+              overflow: 'hidden',
+            }
+      }
     >
       <Box
-        onPointerDown={startMove}
-        onPointerMove={movePanel}
-        onPointerUp={endMove}
-        onPointerCancel={endMove}
+        onPointerDown={embedded ? undefined : startMove}
+        onPointerMove={embedded ? undefined : movePanel}
+        onPointerUp={embedded ? undefined : endMove}
+        onPointerCancel={embedded ? undefined : endMove}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -196,22 +226,24 @@ export default function CurvePanel({ curve, onCurveChange, onClose }: CurvePanel
           px: 1,
           py: 0.5,
           bgcolor: 'action.hover',
-          cursor: 'move',
+          cursor: embedded ? 'default' : 'move',
           touchAction: 'none',
         }}
       >
-        <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+        {embedded ? null : <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
         <Typography variant="caption" sx={{ flex: 1 }}>
           Amplitude curve
         </Typography>
-        <IconButton
-          size="small"
-          aria-label="Close amplitude curve"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={onClose}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
+        {onClose ? (
+          <IconButton
+            size="small"
+            aria-label="Close amplitude curve"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onClose}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        ) : null}
       </Box>
       <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Box
@@ -222,6 +254,10 @@ export default function CurvePanel({ curve, onCurveChange, onClose }: CurvePanel
           onPointerUp={release}
           onPointerCancel={release}
           onDoubleClick={remove}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            remove(event)
+          }}
           sx={{
             display: 'block',
             width: '100%',
@@ -234,9 +270,15 @@ export default function CurvePanel({ curve, onCurveChange, onClose }: CurvePanel
           }}
         />
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="caption" color="text.secondary">
-            {curve.points.length} points
-          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.25 }}>
+            {PRESETS.map((preset) => (
+              <Tooltip key={preset.title} title={preset.title}>
+                <IconButton size="small" onClick={() => onCurveChange(preset.curve)}>
+                  {preset.icon}
+                </IconButton>
+              </Tooltip>
+            ))}
+          </Box>
           <Button
             size="small"
             onClick={() => onCurveChange(DEFAULT_CURVE)}

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
@@ -19,7 +19,8 @@ import type { Curve } from '../curve'
 
 type OverviewProps = {
   peaks: Float32Array | null
-  position: number
+  positionRef: RefObject<number>
+  playing: boolean
   view: ViewMode
   curve: Curve
   range: Range
@@ -37,7 +38,8 @@ const HANDLE = 22
 
 export default function Overview({
   peaks,
-  position,
+  positionRef,
+  playing,
   view,
   curve,
   range,
@@ -55,9 +57,9 @@ export default function Overview({
       const render = view === 'outline' ? drawPeaksOutline : drawPeaks
       render(context, peaks, FULL, width, height, theme.palette.primary.main)
     }
-    drawPlayhead(context, position, FULL, width, height, theme.palette.error.main)
+    drawPlayhead(context, positionRef.current, FULL, width, height, theme.palette.error.main)
     drawWindow(context, range, width, height, yellow[700])
-  })
+  }, playing)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current

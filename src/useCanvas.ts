@@ -2,28 +2,36 @@ import { useCallback, useEffect, useRef } from 'react'
 
 type Draw = (context: CanvasRenderingContext2D, width: number, height: number) => void
 
-export function useCanvas(draw: Draw) {
+export function useCanvas(draw: Draw, animate = false) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawRef = useRef(draw)
   const frameRef = useRef(0)
 
+  const render = useCallback(() => {
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return
+
+    const ratio = window.devicePixelRatio || 1
+    const width = canvas.clientWidth
+    const height = canvas.clientHeight
+    const backingWidth = Math.round(width * ratio)
+    const backingHeight = Math.round(height * ratio)
+
+    if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+      canvas.width = backingWidth
+      canvas.height = backingHeight
+    }
+
+    context.setTransform(ratio, 0, 0, ratio, 0, 0)
+    context.clearRect(0, 0, width, height)
+    drawRef.current(context, width, height)
+  }, [])
+
   const schedule = useCallback(() => {
     cancelAnimationFrame(frameRef.current)
-    frameRef.current = requestAnimationFrame(() => {
-      const canvas = canvasRef.current
-      const context = canvas?.getContext('2d')
-      if (!canvas || !context) return
-
-      const ratio = window.devicePixelRatio || 1
-      const width = canvas.clientWidth
-      const height = canvas.clientHeight
-      canvas.width = Math.round(width * ratio)
-      canvas.height = Math.round(height * ratio)
-      context.setTransform(ratio, 0, 0, ratio, 0, 0)
-      context.clearRect(0, 0, width, height)
-      drawRef.current(context, width, height)
-    })
-  }, [])
+    frameRef.current = requestAnimationFrame(render)
+  }, [render])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -40,7 +48,21 @@ export function useCanvas(draw: Draw) {
     drawRef.current = draw
   })
 
-  useEffect(schedule)
+  useEffect(() => {
+    if (animate) return
+    schedule()
+  })
+
+  useEffect(() => {
+    if (!animate) return
+
+    let frame = requestAnimationFrame(function tick() {
+      render()
+      frame = requestAnimationFrame(tick)
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [animate, render])
 
   return canvasRef
 }

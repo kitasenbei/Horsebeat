@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { alpha, useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle } from '../draw'
@@ -6,7 +6,8 @@ import { useCanvas } from '../useCanvas'
 import type { Range } from '../range'
 
 type PlayheadRailProps = {
-  position: number
+  positionRef: RefObject<number>
+  playing: boolean
   enabled: boolean
   onSeek: (position: number) => void
   range?: Range
@@ -17,7 +18,8 @@ export const RAIL_HEIGHT = 14
 const FULL: Range = { start: 0, end: 1 }
 
 export default function PlayheadRail({
-  position,
+  positionRef,
+  playing,
   enabled,
   onSeek,
   range = FULL,
@@ -27,8 +29,8 @@ export default function PlayheadRail({
 
   const canvasRef = useCanvas((context, width, height) => {
     if (!enabled) return
-    drawPlayheadHandle(context, position, range, width, height, theme.palette.error.main)
-  })
+    drawPlayheadHandle(context, positionRef.current, range, width, height, theme.palette.error.main)
+  }, playing)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current

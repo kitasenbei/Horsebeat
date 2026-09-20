@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import Paper from '@mui/material/Paper'
 import TopBar from './components/TopBar'
 import StatusBar from './components/StatusBar'
 import Transport from './components/Transport'
@@ -10,11 +11,25 @@ import PlayheadRail from './components/PlayheadRail'
 import MarkerRail from './components/MarkerRail'
 import SectionRail from './components/SectionRail'
 import SectionBlocks from './components/SectionBlocks'
+import VerticalWaveform from './components/VerticalWaveform'
+import RulerSlider from './components/RulerSlider'
+import Heatmap from './components/Heatmap'
+import LevelRail from './components/LevelRail'
+import SpectrumRail from './components/SpectrumRail'
 import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
 import TimingPanel from './components/TimingPanel'
-import { computePeaks, toMono } from './audio'
+import {
+  buildPyramid,
+  computeBands,
+  computeLoudness,
+  computeEnvelope,
+  computeOnsets,
+  computePeaks,
+  toMono,
+  type Pyramid,
+} from './audio'
 import { useAudio } from './useAudio'
 import type { Range } from './range'
 import type { ViewMode } from './view'
@@ -24,26 +39,44 @@ import type { EditMode } from './mode'
 import { DEFAULT_CURVE, type Curve } from './curve'
 
 const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
+const FALL_RANGE = 10.5
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [samples, setSamples] = useState<Float32Array | null>(null)
+  const [pyramid, setPyramid] = useState<Pyramid | null>(null)
+  const [envelope, setEnvelope] = useState<Float32Array | null>(null)
+  const [onsets, setOnsets] = useState<Float32Array | null>(null)
+  const [loudness, setLoudness] = useState<Float32Array | null>(null)
+  const [bands, setBands] = useState<Float32Array | null>(null)
   const [range, setRange] = useState<Range>(INITIAL_RANGE)
   const [loadingName, setLoadingName] = useState<string | null>(null)
   const [view, setView] = useState<ViewMode>('amplitude')
   const [mode, setMode] = useState<EditMode>('none')
   const [markers, setMarkers] = useState<number[]>([])
   const [sections, setSections] = useState<Section[]>([])
-  const [timingOpen, setTimingOpen] = useState(false)
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [anchorId, setAnchorId] = useState<string | null>(null)
   const [ghost, setGhost] = useState<number | null>(null)
   const [curve, setCurve] = useState<Curve>(DEFAULT_CURVE)
-  const [curveOpen, setCurveOpen] = useState(false)
-  const { playing, position, duration, volume, muted, toggle, seek, reset, setVolume, setMuted } =
-    useAudio(file)
+  const [fallSpeed, setFallSpeed] = useState(8.5)
+  const {
+    playing,
+    position,
+    positionRef,
+    duration,
+    volume,
+    muted,
+    rate,
+    toggle,
+    seek,
+    reset,
+    setVolume,
+    setMuted,
+    setRate,
+  } = useAudio(file)
 
   const focus = editingSection
     ? (sectionSpans(sections, duration).find((item) => item.section.id === editingSection) ?? null)
@@ -95,7 +128,12 @@ export default function App() {
       const buffer = await context.decodeAudioData(await next.arrayBuffer())
       const mono = toMono(buffer)
       setSamples(mono)
+      setPyramid(buildPyramid(mono))
+      setEnvelope(computeEnvelope(mono))
       setPeaks(computePeaks(mono))
+      setOnsets(computeOnsets(mono))
+      setLoudness(computeLoudness(mono))
+      setBands(computeBands(mono, buffer.sampleRate))
       setRange(INITIAL_RANGE)
       setMarkers([])
       setSections([])
@@ -112,21 +150,16 @@ export default function App() {
       <TopBar
         view={view}
         mode={mode}
-        curveOpen={curveOpen}
         onOpen={() => inputRef.current?.click()}
         onViewChange={setView}
         onModeChange={(next) => {
           setMode(next)
           setGhost(null)
-          if (next === 'section') setTimingOpen(true)
         }}
         onClearMarkers={() => {
           setMarkers([])
           setAnchorId(null)
         }}
-        timingOpen={timingOpen}
-        onTimingOpenChange={setTimingOpen}
-        onCurveOpenChange={setCurveOpen}
       />
       <Box
         component="main"
@@ -140,60 +173,135 @@ export default function App() {
           py: 1.5,
         }}
       >
-        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <SectionRail
-            sections={sections}
-            range={range}
-            duration={duration}
-            onSectionsChange={setSections}
-          />
-          <MarkerRail
-            markers={markers}
-            range={range}
-            enabled={Boolean(samples)}
-            focus={focus}
-            ghost={mode === 'marker' ? ghost : null}
-            onMarkersChange={changeMarkers}
-          />
-          <PlayheadRail
-            position={position}
-            range={range}
-            enabled={Boolean(samples)}
-            onSeek={seek}
-          />
-          <Box sx={{ flex: 1, minHeight: 0 }}>
-            <Waveform
-              samples={samples}
-              position={position}
-              markers={markers}
-              focus={focus}
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', gap: 1 }}>
+          <Box
+            sx={{
+              width: 260,
+              flex: '0 0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              minHeight: 0,
+            }}
+          >
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              <TimingPanel
+                embedded
+                sections={sections}
+                positionMs={position * duration * 1000}
+                onSectionsChange={setSections}
+                onEditingChange={setEditingSection}
+              />
+            </Box>
+            <Box sx={{ flex: '0 0 auto' }}>
+              <CurvePanel embedded curve={curve} onCurveChange={setCurve} />
+            </Box>
+          </Box>
+          <Box
+            sx={{
+              flex: 4,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <SectionRail
               sections={sections}
-              duration={duration}
-              view={view}
-              curve={curve}
               range={range}
-              placing={mode === 'none' ? null : mode}
-              ghost={mode === 'none' ? null : ghost}
-              onRangeChange={setRange}
-              onGhostChange={setGhost}
-              onPlace={(at) => {
-                if (mode === 'marker') {
-                  const next = [...markers, at]
-                  if (markers.length === 0) anchorSection(at)
-                  else syncTempo(next)
-                  setMarkers(next)
-                  return
-                }
-                if (mode === 'section') {
-                  setSections((current) =>
-                    sortSections([
-                      ...current,
-                      createSection(at * duration * 1000, current[current.length - 1]?.bpm ?? 120),
-                    ]),
-                  )
-                }
-              }}
+              duration={duration}
+              onSectionsChange={setSections}
             />
+            <MarkerRail
+              markers={markers}
+              range={range}
+              enabled={Boolean(samples)}
+              focus={focus}
+              ghost={mode === 'marker' ? ghost : null}
+              onMarkersChange={changeMarkers}
+            />
+            <PlayheadRail
+              positionRef={positionRef}
+              playing={playing}
+              range={range}
+              enabled={Boolean(samples)}
+              onSeek={seek}
+            />
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              <Waveform
+                samples={samples}
+                pyramid={pyramid}
+                positionRef={positionRef}
+                playing={playing}
+                markers={markers}
+                focus={focus}
+                sections={sections}
+                duration={duration}
+                view={view}
+                curve={curve}
+                range={range}
+                placing={mode === 'none' ? null : mode}
+                ghost={mode === 'none' ? null : ghost}
+                onRangeChange={setRange}
+                onGhostChange={setGhost}
+                onPlace={(at) => {
+                  if (mode === 'marker') {
+                    const next = [...markers, at]
+                    if (markers.length === 0) anchorSection(at)
+                    else syncTempo(next)
+                    setMarkers(next)
+                    return
+                  }
+                  if (mode === 'section') {
+                    setSections((current) =>
+                      sortSections([
+                        ...current,
+                        createSection(
+                          at * duration * 1000,
+                          current[current.length - 1]?.bpm ?? 120,
+                        ),
+                      ]),
+                    )
+                  }
+                }}
+              />
+            </Box>
+            <LevelRail values={loudness} range={range} />
+            <Heatmap values={onsets} range={range} />
+            <SpectrumRail bands={bands} range={range} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
+            <VerticalWaveform
+              samples={samples}
+              envelope={envelope}
+              positionRef={positionRef}
+              playing={playing}
+              duration={duration}
+              curve={curve}
+              seconds={FALL_RANGE - fallSpeed}
+            />
+            <Paper
+              elevation={4}
+              sx={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 8,
+                width: '60%',
+                transform: 'translateX(-50%)',
+                borderRadius: 999,
+                overflow: 'hidden',
+              }}
+            >
+              <RulerSlider
+                value={fallSpeed}
+                min={0.5}
+                max={10}
+                step={0.1}
+                pixelsPerStep={6}
+                majorEvery={10}
+                format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
+                onChange={setFallSpeed}
+              />
+            </Paper>
           </Box>
         </Box>
         <Transport
@@ -201,11 +309,12 @@ export default function App() {
           disabled={!file}
           onToggle={toggle}
           onReset={reset}
+          rate={rate}
+          onRateChange={setRate}
           above={
             mode === 'section' ? (
               <SectionBar
                 count={sections.length}
-                onOpenPanel={() => setTimingOpen(true)}
                 onExit={() => {
                   setMode('none')
                   setGhost(null)
@@ -260,11 +369,17 @@ export default function App() {
         />
         <Box sx={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
           <SectionBlocks sections={sections} duration={duration} onRangeChange={setRange} />
-          <PlayheadRail position={position} enabled={Boolean(peaks)} onSeek={seek} />
+          <PlayheadRail
+            positionRef={positionRef}
+            playing={playing}
+            enabled={Boolean(peaks)}
+            onSeek={seek}
+          />
           <Box sx={{ height: 96 }}>
             <Overview
               peaks={peaks}
-              position={position}
+              positionRef={positionRef}
+              playing={playing}
               view={view}
               curve={curve}
               range={range}
@@ -273,21 +388,6 @@ export default function App() {
           </Box>
         </Box>
       </Box>
-      {timingOpen ? (
-        <TimingPanel
-          sections={sections}
-          positionMs={position * duration * 1000}
-          onSectionsChange={setSections}
-          onEditingChange={setEditingSection}
-          onClose={() => {
-            setEditingSection(null)
-            setTimingOpen(false)
-          }}
-        />
-      ) : null}
-      {curveOpen ? (
-        <CurvePanel curve={curve} onCurveChange={setCurve} onClose={() => setCurveOpen(false)} />
-      ) : null}
       <StatusBar fileName={file?.name ?? null} loadingName={loadingName} />
       <input
         ref={inputRef}

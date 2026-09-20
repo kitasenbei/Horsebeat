@@ -1,8 +1,48 @@
 import type { Range } from './range'
 import { applyCurve, type Curve } from './curve'
 import { sectionSpans, type Section } from './timing'
+import { ENVELOPE_HOP, type PeakLevel, type Pyramid } from './audio'
 
 export const WAVE_ALPHA = 0.55
+
+function pickLevel(pyramid: Pyramid | null, perPixel: number): PeakLevel | null {
+  if (!pyramid) return null
+  let chosen: PeakLevel | null = null
+  for (const level of pyramid) {
+    if (level.hop <= perPixel / 2) chosen = level
+  }
+  return chosen
+}
+
+function spanMinMax(
+  samples: Float32Array,
+  level: PeakLevel | null,
+  from: number,
+  to: number,
+): [number, number] {
+  let min = 0
+  let max = 0
+
+  if (level) {
+    const bins = level.data.length / 2
+    const start = Math.max(0, Math.floor(from / level.hop))
+    const end = Math.min(bins, Math.max(start + 1, Math.ceil(to / level.hop)))
+    for (let bin = start; bin < end; bin += 1) {
+      min = Math.min(min, level.data[bin * 2])
+      max = Math.max(max, level.data[bin * 2 + 1])
+    }
+    return [min, max]
+  }
+
+  const start = Math.max(0, Math.floor(from))
+  const end = Math.min(samples.length, Math.max(start + 1, Math.floor(to)))
+  for (let index = start; index < end; index += 1) {
+    const value = samples[index]
+    if (value < min) min = value
+    if (value > max) max = value
+  }
+  return [min, max]
+}
 
 export function drawPeaks(
   context: CanvasRenderingContext2D,
@@ -169,11 +209,13 @@ export function drawSamples(
   height: number,
   color: string,
   outline: boolean,
+  pyramid: Pyramid | null = null,
 ) {
   const middle = height / 2
   const first = range.start * samples.length
   const span = (range.end - range.start) * samples.length
   const perPixel = span / width
+  const level = pickLevel(pyramid, perPixel)
 
   context.strokeStyle = color
   context.fillStyle = color
@@ -199,15 +241,7 @@ export function drawSamples(
   const bottoms: number[] = []
 
   for (let x = 0; x < width; x += 1) {
-    const start = Math.max(0, Math.floor(first + x * perPixel))
-    const end = Math.min(samples.length, Math.max(start + 1, Math.floor(first + (x + 1) * perPixel)))
-    let min = 0
-    let max = 0
-    for (let index = start; index < end; index += 1) {
-      const value = samples[index]
-      if (value < min) min = value
-      if (value > max) max = value
-    }
+    const [min, max] = spanMinMax(samples, level, first + x * perPixel, first + (x + 1) * perPixel)
     tops.push(middle - max * middle)
     bottoms.push(middle - min * middle)
   }
@@ -378,22 +412,20 @@ export function drawSamplesAmplitude(
   height: number,
   color: string,
   curve: Curve,
+  pyramid: Pyramid | null = null,
 ): Float32Array {
   const middle = height / 2
   const first = range.start * samples.length
   const span = (range.end - range.start) * samples.length
   const perPixel = span / width
+  const level = pickLevel(pyramid, perPixel)
   const envelope = new Float32Array(Math.max(0, Math.ceil(width)))
   context.fillStyle = color
   context.globalAlpha = WAVE_ALPHA
 
   for (let x = 0; x < width; x += 1) {
-    const start = Math.max(0, Math.floor(first + x * perPixel))
-    const end = Math.min(samples.length, Math.max(start + 1, Math.floor(first + (x + 1) * perPixel)))
-    let amplitude = 0
-    for (let index = start; index < end; index += 1) {
-      amplitude = Math.max(amplitude, Math.abs(samples[index]))
-    }
+    const [min, max] = spanMinMax(samples, level, first + x * perPixel, first + (x + 1) * perPixel)
+    const amplitude = Math.max(Math.abs(min), Math.abs(max))
     const half = applyCurve(amplitude, curve) * middle
     envelope[x] = half
     context.fillRect(x, middle - half, 1, Math.max(1, half * 2))
@@ -433,6 +465,187 @@ export function drawSectionBlocks(
     if (box > context.measureText(label).width + 8) {
       context.fillStyle = textColor
       context.fillText(label, left + 1 + box / 2, height / 2)
+    }
+  }
+}
+
+export const VERTICAL_LINE_RATIO = 0.75
+
+export function drawSamplesVertical(
+  context: CanvasRenderingContext2D,
+  envelope: Float32Array,
+  position: number,
+  span: number,
+  width: number,
+  height: number,
+  color: string,
+  curve: Curve,
+  total: number,
+) {
+  const center = width / 2
+  const lineY = height * VERTICAL_LINE_RATIO
+  if (height <= 0 || total <= 0 || envelope.length === 0) return
+
+  const rows = Math.ceil(height)
+  const widths = new Float32Array(rows)
+
+  for (let y = 0; y < rows; y += 1) {
+    const at = position + ((lineY - y) / height) * span
+    const index = at * total
+    if (index < 0 || index >= total) continue
+
+    const bin = Math.min(envelope.length - 1, Math.max(0, index / ENVELOPE_HOP - 0.5))
+    const low = Math.floor(bin)
+    const high = Math.min(envelope.length - 1, low + 1)
+    const fraction = bin - low
+    const value = envelope[low] * (1 - fraction) + envelope[high] * fraction
+
+    widths[y] = applyCurve(value, curve) * center
+  }
+
+  context.fillStyle = color
+  context.globalAlpha = WAVE_ALPHA
+  context.beginPath()
+
+  for (let y = 0; y < rows; y += 1) {
+    if (y === 0) context.moveTo(center + widths[y], y)
+    else context.lineTo(center + widths[y], y)
+  }
+
+  for (let y = rows - 1; y >= 0; y -= 1) {
+    context.lineTo(center - widths[y], y)
+  }
+
+  context.closePath()
+  context.fill()
+  context.globalAlpha = 1
+}
+
+export function drawVerticalPlayhead(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  color: string,
+) {
+  const y = Math.round(height * VERTICAL_LINE_RATIO) + 0.5
+  context.strokeStyle = color
+  context.lineWidth = 2
+  context.beginPath()
+  context.moveTo(0, y)
+  context.lineTo(width, y)
+  context.stroke()
+}
+
+const HEAT_STOPS = ['#f5f5f5', '#12897c', '#ffd400', '#d32f2f']
+
+function mix(from: string, to: string, ratio: number): string {
+  const left = Number.parseInt(from.slice(1), 16)
+  const right = Number.parseInt(to.slice(1), 16)
+  const channel = (shift: number) => {
+    const a = (left >> shift) & 0xff
+    const b = (right >> shift) & 0xff
+    return Math.round(a + (b - a) * ratio)
+  }
+  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`
+}
+
+export function heatColor(value: number): string {
+  const clamped = Math.min(1, Math.max(0, value))
+  const scaled = clamped * (HEAT_STOPS.length - 1)
+  const index = Math.min(HEAT_STOPS.length - 2, Math.floor(scaled))
+  return mix(HEAT_STOPS[index], HEAT_STOPS[index + 1], scaled - index)
+}
+
+export function drawHeatmap(
+  context: CanvasRenderingContext2D,
+  values: Float32Array,
+  range: Range,
+  width: number,
+  height: number,
+) {
+  const span = range.end - range.start
+  if (span <= 0 || values.length === 0) return
+
+  const perPixel = (span * values.length) / width
+
+  for (let x = 0; x < width; x += 1) {
+    const start = Math.max(0, Math.floor((range.start + (x / width) * span) * values.length))
+    const end = Math.min(values.length, Math.max(start + 1, Math.floor(start + perPixel)))
+    let value = 0
+    for (let index = start; index < end; index += 1) value = Math.max(value, values[index])
+    context.fillStyle = heatColor(value)
+    context.fillRect(x, 0, 1, height)
+  }
+}
+
+const LEVEL_ZONES = [
+  { limit: 0.7, color: '#12897c' },
+  { limit: 0.85, color: '#9ccc3c' },
+  { limit: 0.93, color: '#ffc107' },
+  { limit: 1, color: '#e53935' },
+]
+
+export function levelColor(value: number): string {
+  const zone = LEVEL_ZONES.find((entry) => value <= entry.limit)
+  return (zone ?? LEVEL_ZONES[LEVEL_ZONES.length - 1]).color
+}
+
+export function drawLevels(
+  context: CanvasRenderingContext2D,
+  values: Float32Array,
+  range: Range,
+  width: number,
+  height: number,
+) {
+  const span = range.end - range.start
+  if (span <= 0 || values.length === 0) return
+
+  const perPixel = (span * values.length) / width
+
+  for (let x = 0; x < width; x += 1) {
+    const start = Math.max(0, Math.floor((range.start + (x / width) * span) * values.length))
+    const end = Math.min(values.length, Math.max(start + 1, Math.floor(start + perPixel)))
+    let value = 0
+    for (let index = start; index < end; index += 1) value = Math.max(value, values[index])
+    const bar = value * height
+    context.fillStyle = levelColor(value)
+    context.fillRect(x, height - bar, 1, Math.max(1, bar))
+  }
+}
+
+export const BAND_COLORS = [
+  { rgb: '230, 74, 25', label: 'Low' },
+  { rgb: '0, 137, 123', label: 'Mid' },
+  { rgb: '30, 136, 229', label: 'High' },
+]
+
+export function drawBands(
+  context: CanvasRenderingContext2D,
+  bands: Float32Array,
+  range: Range,
+  width: number,
+  height: number,
+) {
+  const frames = bands.length / 3
+  const span = range.end - range.start
+  if (span <= 0 || frames === 0) return
+
+  const perPixel = (span * frames) / width
+
+  const row = height / 3
+
+  for (let x = 0; x < width; x += 1) {
+    const start = Math.max(0, Math.floor((range.start + (x / width) * span) * frames))
+    const end = Math.min(frames, Math.max(start + 1, Math.floor(start + perPixel)))
+
+    for (let band = 0; band < 3; band += 1) {
+      let value = 0
+      for (let frame = start; frame < end; frame += 1) {
+        value = Math.max(value, bands[frame * 3 + band])
+      }
+
+      context.fillStyle = `rgba(${BAND_COLORS[2 - band].rgb}, ${Math.min(1, value)})`
+      context.fillRect(x, band * row, 1, row)
     }
   }
 }

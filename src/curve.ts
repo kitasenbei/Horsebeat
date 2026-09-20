@@ -95,3 +95,31 @@ export function applyCurve(value: number, curve: Curve): number {
     h00 * left.y + h10 * run * slopes[index] + h01 * right.y + h11 * run * slopes[index + 1],
   )
 }
+
+export const CURVE_PRESETS = {
+  linear: DEFAULT_CURVE,
+  lift: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 0.25, y: 0.55 },
+      { x: 0.6, y: 0.85 },
+      { x: 1, y: 1 },
+    ],
+  },
+  contrast: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 0.35, y: 0.16 },
+      { x: 0.7, y: 0.86 },
+      { x: 1, y: 1 },
+    ],
+  },
+  tame: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 0.45, y: 0.12 },
+      { x: 0.8, y: 0.5 },
+      { x: 1, y: 0.9 },
+    ],
+  },
+} satisfies Record<string, Curve>

@@ -17,7 +17,8 @@ type TimingPanelProps = {
   positionMs: number
   onSectionsChange: (sections: Section[]) => void
   onEditingChange: (id: string | null) => void
-  onClose: () => void
+  onClose?: () => void
+  embedded?: boolean
 }
 
 type Move = {
@@ -35,6 +36,7 @@ export default function TimingPanel({
   onSectionsChange,
   onEditingChange,
   onClose,
+  embedded = false,
 }: TimingPanelProps) {
   const moveRef = useRef<Move | null>(null)
   const [spot, setSpot] = useState({ left: 320, top: 96 })
@@ -44,6 +46,15 @@ export default function TimingPanel({
       sortSections(
         sections.map((section) => (section.id === id ? { ...section, ...patch } : section)),
       ),
+    )
+  }
+
+  const add = (offsetMs: number) => {
+    onSectionsChange(
+      sortSections([
+        ...sections,
+        createSection(offsetMs, sections[sections.length - 1]?.bpm ?? 120),
+      ]),
     )
   }
 
@@ -73,21 +84,33 @@ export default function TimingPanel({
 
   return (
     <Paper
-      elevation={6}
-      sx={{
-        position: 'fixed',
-        left: spot.left,
-        top: spot.top,
-        width: PANEL_WIDTH,
-        zIndex: (current) => current.zIndex.modal,
-        overflow: 'hidden',
-      }}
+      elevation={embedded ? 0 : 6}
+      sx={
+        embedded
+          ? {
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              border: 1,
+              borderColor: 'divider',
+            }
+          : {
+              position: 'fixed',
+              left: spot.left,
+              top: spot.top,
+              width: PANEL_WIDTH,
+              zIndex: (current) => current.zIndex.modal,
+              overflow: 'hidden',
+            }
+      }
     >
       <Box
-        onPointerDown={startMove}
-        onPointerMove={movePanel}
-        onPointerUp={endMove}
-        onPointerCancel={endMove}
+        onPointerDown={embedded ? undefined : startMove}
+        onPointerMove={embedded ? undefined : movePanel}
+        onPointerUp={embedded ? undefined : endMove}
+        onPointerCancel={embedded ? undefined : endMove}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -95,27 +118,39 @@ export default function TimingPanel({
           px: 1,
           py: 0.5,
           bgcolor: 'action.hover',
-          cursor: 'move',
+          cursor: embedded ? 'default' : 'move',
           touchAction: 'none',
         }}
       >
-        <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+        {embedded ? null : <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
         <Typography variant="caption" sx={{ flex: 1 }}>
           Tempo sections
         </Typography>
-        <IconButton
-          size="small"
-          aria-label="Close tempo sections"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={onClose}
-        >
-          <CloseIcon fontSize="small" />
-        </IconButton>
+        {onClose ? (
+          <IconButton
+            size="small"
+            aria-label="Close tempo sections"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={onClose}
+          >
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        ) : null}
       </Box>
-      <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box
+        sx={{
+          p: 1.5,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+        }}
+      >
         {sections.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
-            No sections yet
+            No sections yet :(
           </Typography>
         ) : null}
         {sections.map((section) => (
@@ -146,21 +181,24 @@ export default function TimingPanel({
             </IconButton>
           </Box>
         ))}
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={() =>
-            onSectionsChange(
-              sortSections([
-                ...sections,
-                createSection(positionMs, sections[sections.length - 1]?.bpm ?? 120),
-              ]),
-            )
-          }
-          sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
-        >
-          Add at playhead
-        </Button>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => add(0)}
+            sx={{ textTransform: 'none' }}
+          >
+            At start
+          </Button>
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => add(positionMs)}
+            sx={{ textTransform: 'none' }}
+          >
+            At playhead
+          </Button>
+        </Box>
       </Box>
     </Paper>
   )

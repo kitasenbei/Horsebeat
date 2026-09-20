@@ -43,8 +43,9 @@ export default function RulerSlider({
     context.lineTo(width, Math.round(baseline) + 0.5)
     context.stroke()
 
-    const firstStep = Math.ceil((value - middle / pixelsPerStep) / step) * step
-    const lastStep = value + middle / pixelsPerStep
+    const reach = (middle / pixelsPerStep) * step
+    const firstStep = Math.ceil((value - reach) / step) * step
+    const lastStep = value + reach
 
     context.textAlign = 'center'
     context.textBaseline = 'top'
@@ -53,7 +54,7 @@ export default function RulerSlider({
     for (let tick = firstStep; tick <= lastStep; tick += step) {
       if (tick < min || tick > max) continue
 
-      const x = Math.round(middle + (tick - value) * pixelsPerStep) + 0.5
+      const x = Math.round(middle + ((tick - value) / step) * pixelsPerStep) + 0.5
       const major = Math.round(tick / step) % majorEvery === 0
       const length = major ? 14 : 7
 
@@ -85,7 +86,7 @@ export default function RulerSlider({
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current
     if (!drag) return
-    const shift = (drag.clientX - event.clientX) / pixelsPerStep
+    const shift = ((drag.clientX - event.clientX) / pixelsPerStep) * step
     const next = Math.round((drag.value + shift) / step) * step
     onChange(Math.min(max, Math.max(min, next)))
   }

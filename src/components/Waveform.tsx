@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import {
@@ -13,10 +13,13 @@ import { clampRange, type Range } from '../range'
 import type { ViewMode } from '../view'
 import type { Section } from '../timing'
 import { DEFAULT_CURVE, type Curve } from '../curve'
+import type { Pyramid } from '../audio'
 
 type WaveformProps = {
   samples: Float32Array | null
-  position: number
+  pyramid: Pyramid | null
+  positionRef: RefObject<number>
+  playing: boolean
   markers: number[]
   focus?: { start: number; end: number } | null
   sections: Section[]
@@ -45,7 +48,9 @@ const CLICK_SLOP = 4
 
 export default function Waveform({
   samples,
-  position,
+  pyramid,
+  positionRef,
+  playing,
   markers,
   focus = null,
   sections,
@@ -61,7 +66,9 @@ export default function Waveform({
 }: WaveformProps) {
   const theme = useTheme()
   const panRef = useRef<Pan | null>(null)
-  const canvasRef = useCanvas((context, width, height) => {
+  const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
+
+  const paintStatic = (context: CanvasRenderingContext2D, width: number, height: number) => {
     if (!samples) return
     let envelope: Float32Array | null = null
     if (view === 'amplitude') {
@@ -73,6 +80,7 @@ export default function Waveform({
         height,
         theme.palette.primary.main,
         curve,
+        pyramid,
       )
     } else {
       drawSamples(
@@ -83,6 +91,7 @@ export default function Waveform({
         height,
         theme.palette.primary.main,
         view === 'outline',
+        pyramid,
       )
     }
     drawGrid(
@@ -112,8 +121,46 @@ export default function Waveform({
       )
       context.globalAlpha = 1
     }
-    drawPlayhead(context, position, range, width, height, theme.palette.error.main, true)
-  })
+  }
+
+  const canvasRef = useCanvas((context, width, height) => {
+    if (!samples) return
+
+    const ratio = window.devicePixelRatio || 1
+    const key = [
+      width,
+      height,
+      ratio,
+      range.start,
+      range.end,
+      view,
+      samples.length,
+      duration,
+      ghost,
+      placing,
+      focus ? `${focus.start}:${focus.end}` : '',
+      markers.join(','),
+      sections.map((section) => `${section.offsetMs}:${section.bpm}`).join(','),
+      curve.points.map((point) => `${point.x}:${point.y}`).join(','),
+    ].join('|')
+
+    let cache = cacheRef.current
+    if (!cache || cache.key !== key) {
+      const layer = cache?.canvas ?? document.createElement('canvas')
+      layer.width = Math.round(width * ratio)
+      layer.height = Math.round(height * ratio)
+      const layerContext = layer.getContext('2d')
+      if (!layerContext) return
+      layerContext.setTransform(ratio, 0, 0, ratio, 0, 0)
+      layerContext.clearRect(0, 0, width, height)
+      paintStatic(layerContext, width, height)
+      cache = { canvas: layer, key }
+      cacheRef.current = cache
+    }
+
+    context.drawImage(cache.canvas, 0, 0, width, height)
+    drawPlayhead(context, positionRef.current, range, width, height, theme.palette.error.main, true)
+  }, playing)
 
   useEffect(() => {
     const canvas = canvasRef.current

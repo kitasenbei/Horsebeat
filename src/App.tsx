@@ -62,6 +62,7 @@ export default function App() {
   const [ghost, setGhost] = useState<number | null>(null)
   const [curve, setCurve] = useState<Curve>(DEFAULT_CURVE)
   const [fallSpeed, setFallSpeed] = useState(8.5)
+  const [framesExpanded, setFramesExpanded] = useState(false)
   const {
     playing,
     position,
@@ -153,6 +154,10 @@ export default function App() {
       <TopBar
         view={view}
         mode={mode}
+        sections={sections}
+        duration={duration}
+        positionRef={positionRef}
+        playing={playing}
         onOpen={() => inputRef.current?.click()}
         onViewChange={setView}
         onModeChange={(next) => {
@@ -187,7 +192,7 @@ export default function App() {
               minHeight: 0,
             }}
           >
-            <Box sx={{ flex: 1, minHeight: 0 }}>
+            <Box sx={{ flex: 1, minHeight: 0, display: framesExpanded ? 'none' : 'block' }}>
               <TimingPanel
                 embedded
                 sections={sections}
@@ -206,7 +211,7 @@ export default function App() {
                 onEditingChange={setEditingSection}
               />
             </Box>
-            <Box sx={{ flex: '0 0 auto' }}>
+            <Box sx={{ flex: framesExpanded ? 1 : '0 0 auto', minHeight: 0 }}>
               <BeatFrames
                 envelope={envelope}
                 loudness={loudness}
@@ -216,10 +221,12 @@ export default function App() {
                 duration={duration}
                 positionRef={positionRef}
                 playing={playing}
+                expanded={framesExpanded}
                 onSectionsChange={setSections}
+                onExpandedChange={setFramesExpanded}
               />
             </Box>
-            <Box sx={{ flex: '0 0 auto' }}>
+            <Box sx={{ flex: '0 0 auto', display: framesExpanded ? 'none' : 'block' }}>
               <CurvePanel embedded curve={curve} onCurveChange={setCurve} />
             </Box>
           </Box>

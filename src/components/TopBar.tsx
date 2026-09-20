@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import Toolbar from '@mui/material/Toolbar'
@@ -19,10 +19,15 @@ import StraightenIcon from '@mui/icons-material/Straighten'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import { VIEW_MODES, type ViewMode } from '../view'
 import type { EditMode } from '../mode'
+import { sectionSpans, type Section } from '../timing'
 
 type TopBarProps = {
   view: ViewMode
   mode: EditMode
+  sections: Section[]
+  duration: number
+  positionRef: RefObject<number>
+  playing: boolean
   onOpen: () => void
   onViewChange: (view: ViewMode) => void
   onModeChange: (mode: EditMode) => void
@@ -33,6 +38,8 @@ const MAX_LABEL = 10
 const BRAND_FONT = "'Outfit', system-ui, sans-serif"
 const BRAND_DARK = '#17161a'
 const BRAND_GREEN = '#2f9e44'
+const PULSE = 0.14
+const DECAY = 7
 
 const VIEW_ICONS: Record<ViewMode, ReactNode> = {
   amplitude: <GraphicEqIcon fontSize="small" />,
@@ -90,11 +97,41 @@ function segment(label: string, icon: ReactNode, iconOnly = false) {
 export default function TopBar({
   view,
   mode,
+  sections,
+  duration,
+  positionRef,
+  playing,
   onOpen,
   onViewChange,
   onModeChange,
   onClearMarkers,
 }: TopBarProps) {
+  const brandRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const node = brandRef.current
+    if (!node) return
+
+    const spans = sectionSpans(sections, duration)
+    if (!playing || spans.length === 0) {
+      node.style.transform = 'scale(1)'
+      return
+    }
+
+    let frame = requestAnimationFrame(function tick() {
+      const at = positionRef.current
+      const item = spans.find((span) => at >= span.start && at <= span.end) ?? spans[0]
+      const phase = item.beat > 0 ? (((at - item.start) / item.beat) % 1 + 1) % 1 : 0
+      node.style.transform = `scale(${1 + PULSE * Math.exp(-phase * DECAY)})`
+      frame = requestAnimationFrame(tick)
+    })
+
+    return () => {
+      cancelAnimationFrame(frame)
+      node.style.transform = 'scale(1)'
+    }
+  }, [playing, sections, duration, positionRef])
+
   return (
     <AppBar position="static" color="default" elevation={0}>
       <Toolbar variant="dense" disableGutters sx={{ px: 1, gap: 1 }}>
@@ -176,7 +213,10 @@ export default function TopBar({
 
         <Typography
           component="span"
+          ref={brandRef}
           sx={{
+            transformOrigin: 'center right',
+            willChange: 'transform',
             fontFamily: BRAND_FONT,
             fontWeight: 800,
             fontSize: 24,

@@ -1,7 +1,11 @@
 import { useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import OpenInFullIcon from '@mui/icons-material/OpenInFull'
+import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import { useTheme } from '@mui/material/styles'
 import { drawBands, drawEnvelopeStrip, drawHeatmap, drawLevels } from '../draw'
 import { useCanvas } from '../useCanvas'
@@ -18,10 +22,11 @@ type BeatFramesProps = {
   duration: number
   positionRef: RefObject<number>
   playing: boolean
+  expanded: boolean
   onSectionsChange: (sections: Section[]) => void
+  onExpandedChange: (expanded: boolean) => void
 }
 
-const FRAMES = 4
 const WAVE_HEIGHT = 20
 const LEVEL_HEIGHT = 8
 const HEAT_HEIGHT = 6
@@ -30,7 +35,7 @@ const LABEL_WIDTH = 0
 const GAP = 6
 
 const FRAME_HEIGHT = WAVE_HEIGHT + LEVEL_HEIGHT + HEAT_HEIGHT + SPECTRUM_HEIGHT
-const PANEL_HEIGHT = FRAMES * FRAME_HEIGHT + (FRAMES - 1) * GAP
+const PANEL_HEIGHT = 4 * FRAME_HEIGHT + 3 * GAP
 
 export default function BeatFrames({
   envelope,
@@ -41,7 +46,9 @@ export default function BeatFrames({
   duration,
   positionRef,
   playing,
+  expanded,
   onSectionsChange,
+  onExpandedChange,
 }: BeatFramesProps) {
   const theme = useTheme()
   const spans = sectionSpans(sections, duration)
@@ -101,8 +108,9 @@ export default function BeatFrames({
     const elapsed = Math.floor((position - active.start) / active.beat)
     const current = active.start + elapsed * active.beat
     const lane = width - LABEL_WIDTH
+    const frames = Math.max(1, Math.floor((height + GAP) / (FRAME_HEIGHT + GAP)))
 
-    for (let frame = 0; frame < FRAMES; frame += 1) {
+    for (let frame = 0; frame < frames; frame += 1) {
       const top = frame * (FRAME_HEIGHT + GAP)
       if (top + FRAME_HEIGHT > height) break
 
@@ -154,12 +162,44 @@ export default function BeatFrames({
   return (
     <Paper
       elevation={0}
-      sx={{ width: '100%', overflow: 'hidden', border: 1, borderColor: 'divider' }}
+      sx={{
+        width: '100%',
+        height: expanded ? '100%' : 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        border: 1,
+        borderColor: 'divider',
+      }}
     >
-      <Box sx={{ px: 1, py: 0.5, bgcolor: 'action.hover' }}>
-        <Typography variant="caption">Beat frames</Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          px: 1,
+          py: 0.25,
+          bgcolor: 'action.hover',
+        }}
+      >
+        <Typography variant="caption" sx={{ flex: 1 }}>
+          Beat frames
+        </Typography>
+        <Tooltip title={expanded ? 'Back to panels' : 'Expand beat frames'}>
+          <IconButton
+            size="small"
+            aria-label={expanded ? 'Collapse beat frames' : 'Expand beat frames'}
+            onClick={() => onExpandedChange(!expanded)}
+          >
+            {expanded ? (
+              <CloseFullscreenIcon sx={{ fontSize: 15 }} />
+            ) : (
+              <OpenInFullIcon sx={{ fontSize: 15 }} />
+            )}
+          </IconButton>
+        </Tooltip>
       </Box>
-      <Box sx={{ p: 1 }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex' }}>
         {spans.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
             No tempo section yet
@@ -175,7 +215,7 @@ export default function BeatFrames({
             sx={{
               display: 'block',
               width: '100%',
-              height: PANEL_HEIGHT,
+              height: expanded ? '100%' : PANEL_HEIGHT,
               touchAction: 'none',
               cursor: 'ew-resize',
             }}

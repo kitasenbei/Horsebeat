@@ -825,6 +825,7 @@ export function drawEnvelopeStrip(
 }
 
 export const BEATS_PER_BAR = 4
+const SLICE_BEATS = [BEATS_PER_BAR, 2, 1]
 
 export type Bar = {
   start: number
@@ -832,10 +833,16 @@ export type Bar = {
 }
 
 export function collectBars(span: SectionSpan, limit = 2000): Bar[] {
-  const bars: Bar[] = []
-  const length = span.beat * BEATS_PER_BAR
-  if (length <= 0) return bars
+  const available = span.end - span.start
+  if (span.beat <= 0 || available <= 0) return []
 
+  const length = SLICE_BEATS.map((beats) => span.beat * beats).find(
+    (candidate) => candidate <= available + 1e-9,
+  )
+
+  if (!length) return [{ start: span.start, end: span.end }]
+
+  const bars: Bar[] = []
   for (let at = span.start; at + length <= span.end + 1e-9 && bars.length < limit; at += length) {
     bars.push({ start: at, end: at + length })
   }

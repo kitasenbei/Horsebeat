@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -11,7 +11,6 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import Tooltip from '@mui/material/Tooltip'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 
@@ -35,6 +34,9 @@ type Move = {
 }
 
 const PANEL_WIDTH = 300
+const CARD_HEIGHT = 74
+const CARD_STEP = CARD_HEIGHT + 8
+const OVERSCAN = 3
 const CARD_IDLE = '#f2f0f7'
 
 const ACTION_COLOR = '#ece7ff'
@@ -75,6 +77,23 @@ export default function TimingPanel({
   const moveRef = useRef<Move | null>(null)
   const [spot, setSpot] = useState({ left: 320, top: 96 })
   const [editingOffset, setEditingOffset] = useState<string | null>(null)
+  const [scroll, setScroll] = useState(0)
+  const [viewport, setViewport] = useState(320)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+
+    const observer = new ResizeObserver(() => setViewport(list.clientHeight))
+    observer.observe(list)
+    setViewport(list.clientHeight)
+    return () => observer.disconnect()
+  }, [])
+
+  const first = Math.max(0, Math.floor(scroll / CARD_STEP) - OVERSCAN)
+  const last = Math.min(sections.length, Math.ceil((scroll + viewport) / CARD_STEP) + OVERSCAN)
+  const visible = sections.slice(first, last)
 
   const update = (id: string, patch: Partial<Section>) => {
     onSectionsChange(
@@ -173,22 +192,18 @@ export default function TimingPanel({
         ) : null}
       </Box>
       <Box
-        sx={{
-          p: 1.5,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1,
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-        }}
+        ref={listRef}
+        onScroll={(event) => setScroll(event.currentTarget.scrollTop)}
+        sx={{ p: 1.5, flex: 1, minHeight: 0, overflowY: 'auto' }}
       >
         {sections.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
             No sections yet :(
           </Typography>
         ) : null}
-        {sections.map((section, index) => {
+        <Box sx={{ position: 'relative', height: sections.length * CARD_STEP }}>
+        {visible.map((section) => {
+          const index = sections.indexOf(section)
           const next = sections[index + 1]
           const endMs = next ? next.offsetMs : durationMs
           const active = positionMs >= section.offsetMs && (!next || positionMs < next.offsetMs)
@@ -198,8 +213,14 @@ export default function TimingPanel({
               key={section.id}
               onClick={() => onJump(section.offsetMs, endMs)}
               sx={{
+                position: 'absolute',
+                top: index * CARD_STEP,
+                left: 0,
+                right: 0,
+                height: CARD_HEIGHT,
                 display: 'flex',
                 flexDirection: 'column',
+                justifyContent: 'center',
                 gap: 1,
                 p: 1,
                 borderRadius: 2,
@@ -296,35 +317,34 @@ export default function TimingPanel({
                     flex: '0 0 auto',
                   }}
                 >
-                  <Tooltip title="Play from here">
-                    <IconButton
-                      size="small"
-                      aria-label="Play from section"
-                      onClick={() => onSeekMs(section.offsetMs)}
-                      sx={actionPill(active)}
-                    >
-                      <PlayArrowIcon sx={{ fontSize: 20 }} />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Remove section">
-                    <IconButton
-                      size="small"
-                      aria-label="Remove section"
-                      onClick={() =>
-                        onSectionsChange(sections.filter((current) => current.id !== section.id))
-                      }
-                      sx={actionPill(active)}
-                    >
-                      <DeleteOutlinedIcon sx={{ fontSize: 20 }} />
-                    </IconButton>
-                  </Tooltip>
+                  <IconButton
+                    size="small"
+                    title="Play from here"
+                    aria-label="Play from section"
+                    onClick={() => onSeekMs(section.offsetMs)}
+                    sx={actionPill(active)}
+                  >
+                    <PlayArrowIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    title="Remove section"
+                    aria-label="Remove section"
+                    onClick={() =>
+                      onSectionsChange(sections.filter((current) => current.id !== section.id))
+                    }
+                    sx={actionPill(active)}
+                  >
+                    <DeleteOutlinedIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
                 </Box>
               </Box>
 
             </Box>
           )
         })}
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 0.5, pt: 1 }}>
           <Button
             size="small"
             startIcon={<AddIcon />}

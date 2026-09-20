@@ -47,6 +47,7 @@ type Doc = {
 
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
+const FOLLOW_GRACE = 2000
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -89,6 +90,12 @@ export default function App() {
   const [barGrid, setBarGrid] = useState(false)
   const [follow, setFollow] = useState(false)
   const [backdrop, setBackdrop] = useState<string | null>(null)
+  const touchedRef = useRef(0)
+
+  const changeRange = (next: Range | ((current: Range) => Range)) => {
+    touchedRef.current = performance.now()
+    setRange(next)
+  }
   const {
     playing,
     position,
@@ -179,6 +186,11 @@ export default function App() {
 
     let frame = requestAnimationFrame(function tick() {
       const at = positionRef.current
+      if (performance.now() - touchedRef.current < FOLLOW_GRACE) {
+        frame = requestAnimationFrame(tick)
+        return
+      }
+
       setRange((current) => {
         const span = current.end - current.start
         const lead = current.start + span * FOLLOW_EDGE
@@ -360,7 +372,7 @@ export default function App() {
                 range={range}
                 placing={mode === 'none' ? null : mode}
                 ghost={mode === 'none' ? null : ghost}
-                onRangeChange={setRange}
+                onRangeChange={changeRange}
                 onGhostChange={setGhost}
                 onPlace={(at) => {
                   if (mode === 'marker') {
@@ -507,7 +519,7 @@ export default function App() {
             duration={duration}
             positionRef={positionRef}
             playing={playing}
-            onRangeChange={setRange}
+            onRangeChange={changeRange}
           />
           <PlayheadRail
             positionRef={positionRef}
@@ -522,7 +534,7 @@ export default function App() {
               playing={playing}
               curve={curve}
               range={range}
-              onRangeChange={setRange}
+              onRangeChange={changeRange}
             />
           </Box>
         </Box>

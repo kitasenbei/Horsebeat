@@ -1,13 +1,7 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
-import {
-  drawGrid,
-  drawMarkers,
-  drawPlayhead,
-  drawSamples,
-  drawSamplesAmplitude,
-} from '../draw'
+import { drawEnvelopeAmplitude, drawGrid, drawMarkers, drawPlayhead, drawSamples } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { clampRange, type Range } from '../range'
 import type { ViewMode } from '../view'
@@ -17,6 +11,7 @@ import type { Pyramid } from '../audio'
 
 type WaveformProps = {
   samples: Float32Array | null
+  envelope: Float32Array | null
   pyramid: Pyramid | null
   positionRef: RefObject<number>
   playing: boolean
@@ -48,6 +43,7 @@ const CLICK_SLOP = 4
 
 export default function Waveform({
   samples,
+  envelope,
   pyramid,
   positionRef,
   playing,
@@ -70,17 +66,16 @@ export default function Waveform({
 
   const paintStatic = (context: CanvasRenderingContext2D, width: number, height: number) => {
     if (!samples) return
-    let envelope: Float32Array | null = null
-    if (view === 'amplitude') {
-      envelope = drawSamplesAmplitude(
+    let halves: Float32Array | null = null
+    if (view === 'amplitude' && envelope) {
+      halves = drawEnvelopeAmplitude(
         context,
-        samples,
+        envelope,
         range,
         width,
         height,
         theme.palette.primary.main,
         curve,
-        pyramid,
       )
     } else {
       drawSamples(
@@ -103,7 +98,7 @@ export default function Waveform({
       height,
       theme.palette.info.dark,
       theme.palette.info.dark,
-      envelope,
+      halves,
     )
     const shown = focus
       ? markers.filter((marker) => marker >= focus.start && marker <= focus.end)
@@ -135,6 +130,7 @@ export default function Waveform({
       range.end,
       view,
       samples.length,
+      envelope?.length ?? 0,
       duration,
       ghost,
       placing,

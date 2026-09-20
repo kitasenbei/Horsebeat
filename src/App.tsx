@@ -254,6 +254,7 @@ export default function App() {
             <Box sx={{ flex: 1, minHeight: 0 }}>
               <Waveform
                 samples={samples}
+                envelope={envelope}
                 pyramid={pyramid}
                 positionRef={positionRef}
                 playing={playing}

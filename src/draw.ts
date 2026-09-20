@@ -404,35 +404,50 @@ export function drawPeaksAmplitude(
   context.globalAlpha = 1
 }
 
-export function drawSamplesAmplitude(
+export function drawEnvelopeAmplitude(
   context: CanvasRenderingContext2D,
-  samples: Float32Array,
+  envelope: Float32Array,
   range: Range,
   width: number,
   height: number,
   color: string,
   curve: Curve,
-  pyramid: Pyramid | null = null,
 ): Float32Array {
   const middle = height / 2
-  const first = range.start * samples.length
-  const span = (range.end - range.start) * samples.length
-  const perPixel = span / width
-  const level = pickLevel(pyramid, perPixel)
-  const envelope = new Float32Array(Math.max(0, Math.ceil(width)))
-  context.fillStyle = color
-  context.globalAlpha = WAVE_ALPHA
+  const span = range.end - range.start
+  const columns = Math.max(0, Math.ceil(width))
+  const halves = new Float32Array(columns)
+  if (span <= 0 || envelope.length === 0) return halves
 
-  for (let x = 0; x < width; x += 1) {
-    const [min, max] = spanMinMax(samples, level, first + x * perPixel, first + (x + 1) * perPixel)
-    const amplitude = Math.max(Math.abs(min), Math.abs(max))
-    const half = applyCurve(amplitude, curve) * middle
-    envelope[x] = half
-    context.fillRect(x, middle - half, 1, Math.max(1, half * 2))
+  for (let x = 0; x < columns; x += 1) {
+    const bin = Math.min(
+      envelope.length - 1,
+      Math.max(0, (range.start + (x / width) * span) * envelope.length),
+    )
+    const low = Math.floor(bin)
+    const high = Math.min(envelope.length - 1, low + 1)
+    const fraction = bin - low
+    const value = envelope[low] * (1 - fraction) + envelope[high] * fraction
+    halves[x] = applyCurve(value, curve) * middle
   }
 
+  context.fillStyle = color
+  context.globalAlpha = WAVE_ALPHA
+  context.beginPath()
+
+  for (let x = 0; x < columns; x += 1) {
+    if (x === 0) context.moveTo(x, middle - halves[x])
+    else context.lineTo(x, middle - halves[x])
+  }
+  for (let x = columns - 1; x >= 0; x -= 1) {
+    context.lineTo(x, middle + halves[x])
+  }
+
+  context.closePath()
+  context.fill()
   context.globalAlpha = 1
-  return envelope
+
+  return halves
 }
 
 export function drawSectionBlocks(

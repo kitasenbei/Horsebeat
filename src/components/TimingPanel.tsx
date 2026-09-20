@@ -9,12 +9,14 @@ import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 
 type TimingPanelProps = {
   sections: Section[]
   positionMs: number
   onSectionsChange: (sections: Section[]) => void
+  onEditingChange: (id: string | null) => void
   onClose: () => void
 }
 
@@ -31,6 +33,7 @@ export default function TimingPanel({
   sections,
   positionMs,
   onSectionsChange,
+  onEditingChange,
   onClose,
 }: TimingPanelProps) {
   const moveRef = useRef<Move | null>(null)
@@ -123,15 +126,14 @@ export default function TimingPanel({
               label="Offset ms"
               value={Math.round(section.offsetMs)}
               onChange={(event) => update(section.id, { offsetMs: Number(event.target.value) })}
+              onFocus={() => onEditingChange(section.id)}
+              onBlur={() => onEditingChange(null)}
               sx={{ flex: 1 }}
             />
-            <TextField
-              size="small"
-              type="number"
-              label="BPM"
-              value={Number(section.bpm.toFixed(2))}
-              onChange={(event) => update(section.id, { bpm: Number(event.target.value) })}
-              sx={{ flex: 1 }}
+            <BpmPicker
+              value={section.bpm}
+              onChange={(bpm) => update(section.id, { bpm })}
+              onEditingChange={(editing) => onEditingChange(editing ? section.id : null)}
             />
             <IconButton
               size="small"

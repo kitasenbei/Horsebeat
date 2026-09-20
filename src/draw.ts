@@ -99,17 +99,19 @@ export function drawPlayheadHandle(
   width: number,
   height: number,
   color: string,
+  scale = 1,
 ) {
   const span = range.end - range.start
   if (span <= 0 || position < range.start || position > range.end) return
 
   const x = Math.round(((position - range.start) / span) * width)
   const top = height - HANDLE_HEIGHT
+  const half = (HANDLE_WIDTH * scale) / 2
 
   context.fillStyle = color
   context.beginPath()
-  context.moveTo(x - HANDLE_WIDTH / 2, top)
-  context.lineTo(x + HANDLE_WIDTH / 2, top)
+  context.moveTo(x - half, top)
+  context.lineTo(x + half, top)
   context.lineTo(x, height)
   context.closePath()
   context.fill()
@@ -254,6 +256,46 @@ export function drawMarkers(
   }
 }
 
+export const BEAT_LINE_WIDTH = 2
+
+export function invertColor(color: string): string {
+  const hex = color.replace('#', '')
+  if (hex.length !== 6) return color
+  const value = Number.parseInt(hex, 16)
+  const inverted = 0xffffff - value
+  return `#${inverted.toString(16).padStart(6, '0')}`
+}
+
+function verticalLine(
+  context: CanvasRenderingContext2D,
+  x: number,
+  height: number,
+  envelope: Float32Array | null,
+  color: string,
+) {
+  const middle = height / 2
+  const half = envelope ? (envelope[Math.floor(x)] ?? 0) : 0
+
+  context.strokeStyle = color
+  context.beginPath()
+  context.moveTo(x, half > 0 ? 0 : 0)
+  context.lineTo(x, half > 0 ? middle - half : height)
+  context.stroke()
+
+  if (half <= 0) return
+
+  context.beginPath()
+  context.moveTo(x, middle + half)
+  context.lineTo(x, height)
+  context.stroke()
+
+  context.strokeStyle = invertColor(color)
+  context.beginPath()
+  context.moveTo(x, middle - half)
+  context.lineTo(x, middle + half)
+  context.stroke()
+}
+
 export function drawGrid(
   context: CanvasRenderingContext2D,
   sections: Section[],
@@ -263,6 +305,7 @@ export function drawGrid(
   height: number,
   color: string,
   accent: string,
+  envelope: Float32Array | null = null,
 ) {
   const span = range.end - range.start
   if (span <= 0 || duration <= 0) return
@@ -278,16 +321,12 @@ export function drawGrid(
       const firstIndex = Math.max(0, Math.ceil((from - item.start) / item.beat))
       const lastIndex = Math.floor((to - item.start) / item.beat)
 
-      context.strokeStyle = color
-      context.lineWidth = 1
+      context.lineWidth = BEAT_LINE_WIDTH
       context.globalAlpha = 0.4
 
       for (let index = firstIndex; index <= lastIndex; index += 1) {
         const x = Math.round(((item.start + index * item.beat - range.start) / span) * width) + 0.5
-        context.beginPath()
-        context.moveTo(x, 0)
-        context.lineTo(x, height)
-        context.stroke()
+        verticalLine(context, x, height, envelope, color)
       }
 
       context.globalAlpha = 1
@@ -295,12 +334,8 @@ export function drawGrid(
 
     if (item.start >= range.start && item.start <= range.end) {
       const x = Math.round(((item.start - range.start) / span) * width) + 0.5
-      context.strokeStyle = accent
-      context.lineWidth = 2
-      context.beginPath()
-      context.moveTo(x, 0)
-      context.lineTo(x, height)
-      context.stroke()
+      context.lineWidth = BEAT_LINE_WIDTH * 2
+      verticalLine(context, x, height, envelope, accent)
     }
   }
 }
@@ -343,11 +378,12 @@ export function drawSamplesAmplitude(
   height: number,
   color: string,
   curve: Curve,
-) {
+): Float32Array {
   const middle = height / 2
   const first = range.start * samples.length
   const span = (range.end - range.start) * samples.length
   const perPixel = span / width
+  const envelope = new Float32Array(Math.max(0, Math.ceil(width)))
   context.fillStyle = color
   context.globalAlpha = WAVE_ALPHA
 
@@ -359,8 +395,44 @@ export function drawSamplesAmplitude(
       amplitude = Math.max(amplitude, Math.abs(samples[index]))
     }
     const half = applyCurve(amplitude, curve) * middle
+    envelope[x] = half
     context.fillRect(x, middle - half, 1, Math.max(1, half * 2))
   }
 
   context.globalAlpha = 1
+  return envelope
+}
+
+export function drawSectionBlocks(
+  context: CanvasRenderingContext2D,
+  sections: Section[],
+  duration: number,
+  width: number,
+  height: number,
+  color: string,
+  textColor: string,
+  hovered: string | null,
+  font: string,
+) {
+  const spans = sectionSpans(sections, duration)
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.font = font
+
+  for (const item of spans) {
+    const left = item.start * width
+    const right = item.end * width
+    const box = Math.max(2, right - left - 2)
+
+    context.fillStyle = color
+    context.globalAlpha = hovered === item.section.id ? 0.85 : 0.5
+    context.fillRect(left + 1, 1, box, height - 2)
+    context.globalAlpha = 1
+
+    const label = `${item.section.bpm.toFixed(1)}`
+    if (box > context.measureText(label).width + 8) {
+      context.fillStyle = textColor
+      context.fillText(label, left + 1 + box / 2, height / 2)
+    }
+  }
 }

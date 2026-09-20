@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import Box from '@mui/material/Box'
-import { useTheme } from '@mui/material/styles'
+import { alpha, useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle } from '../draw'
 import { useCanvas } from '../useCanvas'
 import type { Range } from '../range'
@@ -69,6 +69,8 @@ export default function PlayheadRail({
         height: RAIL_HEIGHT,
         flex: '0 0 auto',
         touchAction: 'none',
+        bgcolor: alpha(theme.palette.error.main, 0.1),
+        borderRadius: 0.5,
         cursor: enabled ? 'ew-resize' : 'default',
       }}
     />

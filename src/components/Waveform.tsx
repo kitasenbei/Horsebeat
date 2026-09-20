@@ -18,6 +18,7 @@ type WaveformProps = {
   samples: Float32Array | null
   position: number
   markers: number[]
+  focus?: { start: number; end: number } | null
   sections: Section[]
   duration: number
   view?: ViewMode
@@ -46,6 +47,7 @@ export default function Waveform({
   samples,
   position,
   markers,
+  focus = null,
   sections,
   duration,
   view = 'amplitude',
@@ -61,8 +63,17 @@ export default function Waveform({
   const panRef = useRef<Pan | null>(null)
   const canvasRef = useCanvas((context, width, height) => {
     if (!samples) return
+    let envelope: Float32Array | null = null
     if (view === 'amplitude') {
-      drawSamplesAmplitude(context, samples, range, width, height, theme.palette.primary.main, curve)
+      envelope = drawSamplesAmplitude(
+        context,
+        samples,
+        range,
+        width,
+        height,
+        theme.palette.primary.main,
+        curve,
+      )
     } else {
       drawSamples(
         context,
@@ -81,10 +92,14 @@ export default function Waveform({
       range,
       width,
       height,
-      theme.palette.secondary.main,
-      theme.palette.primary.dark,
+      theme.palette.info.dark,
+      theme.palette.info.dark,
+      envelope,
     )
-    drawMarkers(context, markers, range, width, height, theme.palette.secondary.main)
+    const shown = focus
+      ? markers.filter((marker) => marker >= focus.start && marker <= focus.end)
+      : markers
+    drawMarkers(context, shown, range, width, height, theme.palette.secondary.main)
     if (ghost !== null) {
       context.globalAlpha = 0.4
       drawMarkers(
@@ -93,7 +108,7 @@ export default function Waveform({
         range,
         width,
         height,
-        placing === 'section' ? theme.palette.primary.dark : theme.palette.secondary.main,
+        placing === 'section' ? theme.palette.info.main : theme.palette.secondary.main,
       )
       context.globalAlpha = 1
     }

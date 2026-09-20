@@ -76,14 +76,9 @@ export default function Overview({
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (!peaks) return
     const at = positionAt(event.clientX)
-    const edge = edgeSpan()
     const span = range.end - range.start
 
-    if (Math.abs(at - range.start) <= edge) {
-      startDrag(event, { mode: 'start' })
-    } else if (Math.abs(at - range.end) <= edge) {
-      startDrag(event, { mode: 'end' })
-    } else if (at > range.start && at < range.end) {
+    if (at >= range.start && at <= range.end) {
       startDrag(event, { mode: 'move', grab: at - range.start })
     } else {
       startDrag(event, { mode: 'move', grab: span / 2 })

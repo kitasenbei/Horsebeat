@@ -14,6 +14,7 @@ type MarkerRailProps = {
   markers: number[]
   range: Range
   enabled: boolean
+  focus: { start: number; end: number } | null
   ghost: number | null
   onMarkersChange: (markers: number[]) => void
 }
@@ -24,6 +25,7 @@ export default function MarkerRail({
   markers,
   range,
   enabled,
+  focus,
   ghost,
   onMarkersChange,
 }: MarkerRailProps) {
@@ -35,8 +37,11 @@ export default function MarkerRail({
   const color = theme.palette.secondary.main
   const hoverColor = theme.palette.secondary.light
 
+  const inFocus = (marker: number) => !focus || (marker >= focus.start && marker <= focus.end)
+
   const canvasRef = useCanvas((context, width, height) => {
     markers.forEach((marker, index) => {
+      if (!inFocus(marker)) return
       const active = selected === index || hovered === index
       context.globalAlpha = active ? 1 : 0.85
       drawPlayheadHandle(
@@ -72,6 +77,7 @@ export default function MarkerRail({
     let found = -1
     let best = grab
     markers.forEach((marker, index) => {
+      if (!inFocus(marker)) return
       const distance = Math.abs(marker - at)
       if (distance <= best) {
         best = distance

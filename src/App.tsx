@@ -37,9 +37,16 @@ import { readOsz } from './osu'
 import { createSection, sectionSpans, sortSections, type Section } from './timing'
 import type { EditMode } from './mode'
 import { DEFAULT_CURVE, type Curve } from './curve'
+import { useHistory } from './useHistory'
 
 const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
 const FALL_RANGE = 10.5
+type Doc = {
+  markers: number[]
+  sections: Section[]
+  curve: Curve
+}
+
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 
@@ -57,12 +64,30 @@ export default function App() {
   const [loadingName, setLoadingName] = useState<string | null>(null)
   const [view, setView] = useState<ViewMode>('amplitude')
   const [mode, setMode] = useState<EditMode>('none')
-  const [markers, setMarkers] = useState<number[]>([])
-  const [sections, setSections] = useState<Section[]>([])
+  const [doc, setDoc, history] = useHistory<Doc>({
+    markers: [],
+    sections: [],
+    curve: DEFAULT_CURVE,
+  })
+  const { markers, sections, curve } = doc
+
+  const setMarkers = (next: number[] | ((current: number[]) => number[])) =>
+    setDoc((current) => ({
+      ...current,
+      markers: typeof next === 'function' ? next(current.markers) : next,
+    }))
+
+  const setSections = (next: Section[] | ((current: Section[]) => Section[])) =>
+    setDoc((current) => ({
+      ...current,
+      sections: typeof next === 'function' ? next(current.sections) : next,
+    }))
+
+  const setCurve = (next: Curve) => setDoc((current) => ({ ...current, curve: next }))
+
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [anchorId, setAnchorId] = useState<string | null>(null)
   const [ghost, setGhost] = useState<number | null>(null)
-  const [curve, setCurve] = useState<Curve>(DEFAULT_CURVE)
   const [fallSpeed, setFallSpeed] = useState(8.5)
   const [framesExpanded, setFramesExpanded] = useState(false)
   const [follow, setFollow] = useState(false)
@@ -129,13 +154,20 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat) return
-
       const target = event.target
       if (target instanceof HTMLElement) {
         const tag = target.tagName
         if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
       }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        if (event.shiftKey) history.redo()
+        else history.undo()
+        return
+      }
+
+      if (event.code !== 'Space' || event.repeat) return
 
       event.preventDefault()
       toggle()
@@ -143,7 +175,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [toggle])
+  }, [toggle, history])
 
   useEffect(() => {
     if (!follow || !playing) return
@@ -184,8 +216,12 @@ export default function App() {
         if (current) URL.revokeObjectURL(current)
         return beatmap?.background ? URL.createObjectURL(beatmap.background) : null
       })
-      setMarkers([])
-      setSections(beatmap ? beatmap.sections : [])
+      setDoc((current) => ({
+        markers: [],
+        sections: beatmap ? beatmap.sections : [],
+        curve: current.curve,
+      }))
+      history.reset()
       setAnchorId(null)
       setFile(next)
     } finally {
@@ -213,6 +249,10 @@ export default function App() {
           setMarkers([])
           setAnchorId(null)
         }}
+        canUndo={history.canUndo}
+        canRedo={history.canRedo}
+        onUndo={history.undo}
+        onRedo={history.redo}
         follow={follow}
         onFollowChange={setFollow}
       />

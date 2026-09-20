@@ -35,6 +35,10 @@ type TopBarProps = {
   onClearMarkers: () => void
   follow: boolean
   onFollowChange: (follow: boolean) => void
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
 }
 
 const MAX_LABEL = 10
@@ -110,6 +114,10 @@ export default function TopBar({
   onClearMarkers,
   follow,
   onFollowChange,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: TopBarProps) {
   const brandRef = useRef<HTMLSpanElement>(null)
 
@@ -153,10 +161,18 @@ export default function TopBar({
 
         <ButtonGroup size="small" variant="text" color="inherit" sx={PILL}>
           <Tooltip title="Undo">
-            <Button aria-label="Undo">{segment('Undo', <UndoIcon fontSize="small" />, true)}</Button>
+            <span>
+              <Button aria-label="Undo" disabled={!canUndo} onClick={onUndo}>
+                {segment('Undo', <UndoIcon fontSize="small" />, true)}
+              </Button>
+            </span>
           </Tooltip>
           <Tooltip title="Redo">
-            <Button aria-label="Redo">{segment('Redo', <RedoIcon fontSize="small" />, true)}</Button>
+            <span>
+              <Button aria-label="Redo" disabled={!canRedo} onClick={onRedo}>
+                {segment('Redo', <RedoIcon fontSize="small" />, true)}
+              </Button>
+            </span>
           </Tooltip>
         </ButtonGroup>
 

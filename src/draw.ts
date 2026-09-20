@@ -901,6 +901,7 @@ export function renderBarColumns(
   bars: Bar[],
   width: number,
   height: number,
+  curve: Curve,
 ): ImageData {
   const image = context.createImageData(Math.max(1, width), Math.max(1, height))
   const pixels = image.data
@@ -933,10 +934,10 @@ export function renderBarColumns(
         const at = bar.start + (row / blockHeight) * span
 
         if (block === 0 && sources.loudness) {
-          const rgb = levelRgb(sampleAt(sources.loudness, at))
+          const rgb = levelRgb(applyCurve(sampleAt(sources.loudness, at), curve))
           for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
         } else if (block === 1 && sources.onsets) {
-          const rgb = heatRgb(sampleAt(sources.onsets, at))
+          const rgb = heatRgb(applyCurve(sampleAt(sources.onsets, at), curve))
           for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
         } else if (block === 2 && sources.bands) {
           const frames = sources.bands.length / 3
@@ -944,7 +945,7 @@ export function renderBarColumns(
           const stripe = (right - left) / 3
 
           for (let band = 0; band < 3; band += 1) {
-            const value = Math.min(1, sources.bands[frame * 3 + band])
+            const value = applyCurve(Math.min(1, sources.bands[frame * 3 + band]), curve)
             const rgb = BAND_RGB[2 - band]
             const mixed: [number, number, number] = [
               255 + (rgb[0] - 255) * value,

@@ -4,6 +4,7 @@ import { useTheme } from '@mui/material/styles'
 import { BLOCK_GAP, blockHeights, collectBars, drawColumnCursor, renderBarColumns } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
+import type { Curve } from '../curve'
 
 type BarGridProps = {
   loudness: Float32Array | null
@@ -14,6 +15,7 @@ type BarGridProps = {
   duration: number
   positionRef: RefObject<number>
   playing: boolean
+  curve: Curve
 }
 
 export default function BarGrid({
@@ -25,6 +27,7 @@ export default function BarGrid({
   duration,
   positionRef,
   playing,
+  curve,
 }: BarGridProps) {
   const theme = useTheme()
   const spans = sectionSpans(sections, duration)
@@ -47,6 +50,7 @@ export default function BarGrid({
       loudness?.length ?? 0,
       onsets?.length ?? 0,
       bands?.length ?? 0,
+      curve.points.map((point) => `${point.x}:${point.y}`).join(','),
     ].join('|')
 
     let cache = cacheRef.current
@@ -57,7 +61,7 @@ export default function BarGrid({
       const layerContext = layer.getContext('2d')
       if (!layerContext) return
       layerContext.putImageData(
-        renderBarColumns(layerContext, sources, bars, layer.width, layer.height),
+        renderBarColumns(layerContext, sources, bars, layer.width, layer.height, curve),
         0,
         0,
       )

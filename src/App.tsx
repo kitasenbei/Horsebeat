@@ -21,18 +21,15 @@ import TimingPanel from './components/TimingPanel'
 import BeatFrames from './components/BeatFrames'
 import BarGrid from './components/BarGrid'
 import {
-  buildPyramid,
   computeBands,
   computeLoudness,
   computeEnvelope,
   computeOnsets,
   computePeaks,
   toMono,
-  type Pyramid,
 } from './audio'
 import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
-import type { ViewMode } from './view'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
 import { createSection, sectionSpans, sortSections, type Section } from './timing'
@@ -56,14 +53,12 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [samples, setSamples] = useState<Float32Array | null>(null)
-  const [pyramid, setPyramid] = useState<Pyramid | null>(null)
   const [envelope, setEnvelope] = useState<Float32Array | null>(null)
   const [onsets, setOnsets] = useState<Float32Array | null>(null)
   const [loudness, setLoudness] = useState<Float32Array | null>(null)
   const [bands, setBands] = useState<Float32Array | null>(null)
   const [range, setRange] = useState<Range>(INITIAL_RANGE)
   const [loadingName, setLoadingName] = useState<string | null>(null)
-  const [view, setView] = useState<ViewMode>('amplitude')
   const [mode, setMode] = useState<EditMode>('none')
   const [doc, setDoc, history] = useHistory<Doc>({
     markers: [],
@@ -207,7 +202,6 @@ export default function App() {
       const buffer = await context.decodeAudioData(await next.arrayBuffer())
       const mono = toMono(buffer)
       setSamples(mono)
-      setPyramid(buildPyramid(mono))
       setEnvelope(computeEnvelope(mono))
       setPeaks(computePeaks(mono))
       setOnsets(computeOnsets(mono))
@@ -235,14 +229,12 @@ export default function App() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <TopBar
-        view={view}
         mode={mode}
         sections={sections}
         duration={duration}
         positionRef={positionRef}
         playing={playing}
         onOpen={() => inputRef.current?.click()}
-        onViewChange={setView}
         onModeChange={(next) => {
           setMode(next)
           setGhost(null)
@@ -358,14 +350,12 @@ export default function App() {
                 samples={samples}
                 envelope={envelope}
                 backdrop={backdrop}
-                pyramid={pyramid}
                 positionRef={positionRef}
                 playing={playing}
                 markers={markers}
                 focus={focus}
                 sections={sections}
                 duration={duration}
-                view={view}
                 curve={curve}
                 range={range}
                 placing={mode === 'none' ? null : mode}
@@ -405,6 +395,7 @@ export default function App() {
                   duration={duration}
                   positionRef={positionRef}
                   playing={playing}
+                  curve={curve}
                 />
               </Box>
             ) : null}
@@ -528,7 +519,6 @@ export default function App() {
               peaks={peaks}
               positionRef={positionRef}
               playing={playing}
-              view={view}
               curve={curve}
               range={range}
               onRangeChange={setRange}

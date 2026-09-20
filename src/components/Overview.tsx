@@ -5,24 +5,16 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import { yellow } from '@mui/material/colors'
 import { useTheme } from '@mui/material/styles'
-import {
-  drawPeaks,
-  drawPeaksAmplitude,
-  drawPeaksOutline,
-  drawPlayhead,
-  drawWindow,
-} from '../draw'
+import { drawPeaksAmplitude, drawPlayhead, drawWindow } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { clampRange, MIN_SPAN, type Range } from '../range'
-import type { ViewMode } from '../view'
 import type { Curve } from '../curve'
 
 type OverviewProps = {
   peaks: Float32Array | null
   positionRef: RefObject<number>
   playing: boolean
-  view: ViewMode
   curve: Curve
   range: Range
   onRangeChange: (range: Range) => void
@@ -41,7 +33,6 @@ export default function Overview({
   peaks,
   positionRef,
   playing,
-  view,
   curve,
   range,
   onRangeChange,
@@ -53,12 +44,7 @@ export default function Overview({
 
   const canvasRef = useCanvas((context, width, height) => {
     if (!peaks) return
-    if (view === 'amplitude') {
-      drawPeaksAmplitude(context, peaks, FULL, width, height, theme.palette.primary.main, curve)
-    } else {
-      const render = view === 'outline' ? drawPeaksOutline : drawPeaks
-      render(context, peaks, FULL, width, height, theme.palette.primary.main)
-    }
+    drawPeaksAmplitude(context, peaks, FULL, width, height, theme.palette.primary.main, curve)
     drawPlayhead(context, positionRef.current, FULL, width, height, theme.palette.error.main)
     drawWindow(context, range, width, height, yellow[700])
   }, playing)

@@ -7,28 +7,23 @@ import {
   drawGrid,
   drawMarkers,
   drawPlayhead,
-  drawSamples,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { clampRange, type Range } from '../range'
-import type { ViewMode } from '../view'
 import type { Section } from '../timing'
 import { DEFAULT_CURVE, type Curve } from '../curve'
-import type { Pyramid } from '../audio'
 
 type WaveformProps = {
   samples: Float32Array | null
   envelope: Float32Array | null
   backdrop?: string | null
-  pyramid: Pyramid | null
   positionRef: RefObject<number>
   playing: boolean
   markers: number[]
   focus?: { start: number; end: number } | null
   sections: Section[]
   duration: number
-  view?: ViewMode
   curve?: Curve
   range?: Range
   placing?: Placing
@@ -54,14 +49,12 @@ export default function Waveform({
   samples,
   envelope,
   backdrop = null,
-  pyramid,
   positionRef,
   playing,
   markers,
   focus = null,
   sections,
   duration,
-  view = 'amplitude',
   curve = DEFAULT_CURVE,
   range = FULL,
   placing = null,
@@ -100,29 +93,17 @@ export default function Waveform({
     if (!samples) return
     if (imageRef.current) drawBackdrop(context, imageRef.current, width, height)
 
-    let halves: Float32Array | null = null
-    if (view === 'amplitude' && envelope) {
-      halves = drawEnvelopeAmplitude(
-        context,
-        envelope,
-        range,
-        width,
-        height,
-        theme.palette.primary.main,
-        curve,
-      )
-    } else {
-      drawSamples(
-        context,
-        samples,
-        range,
-        width,
-        height,
-        theme.palette.primary.main,
-        view === 'outline',
-        pyramid,
-      )
-    }
+    const halves = envelope
+      ? drawEnvelopeAmplitude(
+          context,
+          envelope,
+          range,
+          width,
+          height,
+          theme.palette.primary.main,
+          curve,
+        )
+      : null
     drawGrid(
       context,
       sections,
@@ -162,7 +143,6 @@ export default function Waveform({
       ratio,
       range.start,
       range.end,
-      view,
       samples.length,
       envelope?.length ?? 0,
       duration,

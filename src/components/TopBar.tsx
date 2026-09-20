@@ -11,26 +11,20 @@ import Typography from '@mui/material/Typography'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import UndoIcon from '@mui/icons-material/Undo'
 import RedoIcon from '@mui/icons-material/Redo'
-import GraphicEqIcon from '@mui/icons-material/GraphicEq'
-import BarChartIcon from '@mui/icons-material/BarChart'
-import ShowChartIcon from '@mui/icons-material/ShowChart'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import StraightenIcon from '@mui/icons-material/Straighten'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import GpsFixedIcon from '@mui/icons-material/GpsFixed'
-import { VIEW_MODES, type ViewMode } from '../view'
 import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
 
 type TopBarProps = {
-  view: ViewMode
   mode: EditMode
   sections: Section[]
   duration: number
   positionRef: RefObject<number>
   playing: boolean
   onOpen: () => void
-  onViewChange: (view: ViewMode) => void
   onModeChange: (mode: EditMode) => void
   onClearMarkers: () => void
   follow: boolean
@@ -47,12 +41,6 @@ const BRAND_DARK = '#17161a'
 const BRAND_GREEN = '#2f9e44'
 const PULSE = 0.14
 const DECAY = 7
-
-const VIEW_ICONS: Record<ViewMode, ReactNode> = {
-  amplitude: <GraphicEqIcon fontSize="small" />,
-  bars: <BarChartIcon fontSize="small" />,
-  outline: <ShowChartIcon fontSize="small" />,
-}
 
 const MODE_ICONS: Record<'marker' | 'section', ReactNode> = {
   marker: <BookmarkIcon fontSize="small" />,
@@ -102,14 +90,12 @@ function segment(label: string, icon: ReactNode, iconOnly = false) {
 }
 
 export default function TopBar({
-  view,
   mode,
   sections,
   duration,
   positionRef,
   playing,
   onOpen,
-  onViewChange,
   onModeChange,
   onClearMarkers,
   follow,
@@ -175,29 +161,6 @@ export default function TopBar({
             </span>
           </Tooltip>
         </ButtonGroup>
-
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={view}
-          onChange={(_, next) => {
-            if (next !== null) onViewChange(next as ViewMode)
-          }}
-          sx={PILL}
-        >
-          {VIEW_MODES.map((entry) => (
-            <ToggleButton
-              key={entry.mode}
-              value={entry.mode}
-              aria-label={entry.label}
-              sx={selected('primary')}
-            >
-              <Tooltip title={entry.label}>
-                <span>{segment(entry.label, VIEW_ICONS[entry.mode])}</span>
-              </Tooltip>
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
 
         <ToggleButtonGroup
           size="small"

@@ -5,10 +5,12 @@ export type Beatmap = {
   audio: File
   sections: Section[]
   title: string
+  background: Blob | null
 }
 
 type Header = {
   audioFilename: string
+  background: string
   title: string
 }
 
@@ -17,8 +19,11 @@ function readHeader(text: string): Header {
   const title = text.match(/^Title:\s*(.+)$/m)
   const artist = text.match(/^Artist:\s*(.+)$/m)
 
+  const background = text.match(/^0,0,"([^"]+)"/m)
+
   return {
     audioFilename: audio ? audio[1].trim() : '',
+    background: background ? background[1].trim() : '',
     title: [artist?.[1].trim(), title?.[1].trim()].filter(Boolean).join(' - '),
   }
 }
@@ -57,6 +62,13 @@ export function readTimingPoints(text: string): Section[] {
   return sortSections(sections)
 }
 
+function imageType(name: string) {
+  const extension = name.split('.').pop()?.toLowerCase()
+  if (extension === 'png') return 'image/png'
+  if (extension === 'gif') return 'image/gif'
+  return 'image/jpeg'
+}
+
 export async function readOsz(file: File): Promise<Beatmap> {
   const archive = new Uint8Array(await file.arrayBuffer())
   const charts = unzipSync(archive, { filter: (entry) => entry.name.toLowerCase().endsWith('.osu') })
@@ -74,9 +86,20 @@ export async function readOsz(file: File): Promise<Beatmap> {
   const data = audio[Object.keys(audio)[0]]
   if (!data) throw new Error(`The archive is missing ${header.audioFilename}`)
 
+  let background: Blob | null = null
+  if (header.background) {
+    const wantedImage = header.background.toLowerCase()
+    const images = unzipSync(archive, {
+      filter: (entry) => entry.name.toLowerCase() === wantedImage,
+    })
+    const image = images[Object.keys(images)[0]]
+    if (image) background = new Blob([image as BlobPart], { type: imageType(header.background) })
+  }
+
   return {
     audio: new File([data as BlobPart], header.audioFilename),
     sections: readTimingPoints(text),
     title: header.title || file.name,
+    background,
   }
 }

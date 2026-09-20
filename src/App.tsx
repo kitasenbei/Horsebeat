@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import TopBar from './components/TopBar'
@@ -40,6 +40,8 @@ import { DEFAULT_CURVE, type Curve } from './curve'
 
 const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
 const FALL_RANGE = 10.5
+const FOLLOW_EDGE = 0.8
+const FOLLOW_LEAD = 0.2
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -63,6 +65,8 @@ export default function App() {
   const [curve, setCurve] = useState<Curve>(DEFAULT_CURVE)
   const [fallSpeed, setFallSpeed] = useState(8.5)
   const [framesExpanded, setFramesExpanded] = useState(false)
+  const [follow, setFollow] = useState(false)
+  const [backdrop, setBackdrop] = useState<string | null>(null)
   const {
     playing,
     position,
@@ -123,6 +127,43 @@ export default function App() {
     syncTempo(next)
   }
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat) return
+
+      const target = event.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+      }
+
+      event.preventDefault()
+      toggle()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [toggle])
+
+  useEffect(() => {
+    if (!follow || !playing) return
+
+    let frame = requestAnimationFrame(function tick() {
+      const at = positionRef.current
+      setRange((current) => {
+        const span = current.end - current.start
+        const lead = current.start + span * FOLLOW_EDGE
+        if (at < current.start || at > lead) {
+          return clampRange({ start: at - span * FOLLOW_LEAD, end: at + span * (1 - FOLLOW_LEAD) })
+        }
+        return current
+      })
+      frame = requestAnimationFrame(tick)
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [follow, playing, positionRef])
+
   const load = async (source: File) => {
     setLoadingName(source.name)
     const context = new AudioContext()
@@ -139,6 +180,10 @@ export default function App() {
       setLoudness(computeLoudness(mono))
       setBands(computeBands(mono, buffer.sampleRate))
       setRange(INITIAL_RANGE)
+      setBackdrop((current) => {
+        if (current) URL.revokeObjectURL(current)
+        return beatmap?.background ? URL.createObjectURL(beatmap.background) : null
+      })
       setMarkers([])
       setSections(beatmap ? beatmap.sections : [])
       setAnchorId(null)
@@ -168,6 +213,8 @@ export default function App() {
           setMarkers([])
           setAnchorId(null)
         }}
+        follow={follow}
+        onFollowChange={setFollow}
       />
       <Box
         component="main"
@@ -263,6 +310,7 @@ export default function App() {
               <Waveform
                 samples={samples}
                 envelope={envelope}
+                backdrop={backdrop}
                 pyramid={pyramid}
                 positionRef={positionRef}
                 playing={playing}
@@ -401,7 +449,13 @@ export default function App() {
           }
         />
         <Box sx={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
-          <SectionBlocks sections={sections} duration={duration} onRangeChange={setRange} />
+          <SectionBlocks
+            sections={sections}
+            duration={duration}
+            positionRef={positionRef}
+            playing={playing}
+            onRangeChange={setRange}
+          />
           <PlayheadRail
             positionRef={positionRef}
             playing={playing}

@@ -3,7 +3,25 @@ import { applyCurve, type Curve } from './curve'
 import { sectionSpans, type Section } from './timing'
 import { ENVELOPE_HOP, type PeakLevel, type Pyramid } from './audio'
 
-export const WAVE_ALPHA = 0.55
+export const WAVE_ALPHA = 1
+export const BACKDROP_ALPHA = 0.2
+
+export function drawBackdrop(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+) {
+  if (!image.naturalWidth || !image.naturalHeight) return
+
+  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight)
+  const drawWidth = image.naturalWidth * scale
+  const drawHeight = image.naturalHeight * scale
+
+  context.globalAlpha = BACKDROP_ALPHA
+  context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+  context.globalAlpha = 1
+}
 
 function pickLevel(pyramid: Pyramid | null, perPixel: number): PeakLevel | null {
   if (!pyramid) return null
@@ -450,14 +468,22 @@ export function drawEnvelopeAmplitude(
   return halves
 }
 
+export type BlockPalette = {
+  idle: string
+  alt: string
+  live: string
+  hover: string
+  text: string
+}
+
 export function drawSectionBlocks(
   context: CanvasRenderingContext2D,
   sections: Section[],
   duration: number,
+  position: number,
   width: number,
   height: number,
-  color: string,
-  textColor: string,
+  palette: BlockPalette,
   hovered: string | null,
   font: string,
 ) {
@@ -466,22 +492,31 @@ export function drawSectionBlocks(
   context.textBaseline = 'middle'
   context.font = font
 
-  for (const item of spans) {
+  spans.forEach((item, index) => {
     const left = item.start * width
     const right = item.end * width
     const box = Math.max(2, right - left - 2)
+    const live = position >= item.start && position <= item.end
 
-    context.fillStyle = color
-    context.globalAlpha = hovered === item.section.id ? 0.85 : 0.5
-    context.fillRect(left + 1, 1, box, height - 2)
-    context.globalAlpha = 1
+    context.fillStyle = hovered === item.section.id
+      ? palette.hover
+      : live
+        ? palette.live
+        : index % 2 === 0
+          ? palette.idle
+          : palette.alt
+
+    context.beginPath()
+    if (context.roundRect) context.roundRect(left + 1, 1, box, height - 2, 3)
+    else context.rect(left + 1, 1, box, height - 2)
+    context.fill()
 
     const label = `${item.section.bpm.toFixed(1)}`
-    if (box > context.measureText(label).width + 8) {
-      context.fillStyle = textColor
-      context.fillText(label, left + 1 + box / 2, height / 2)
+    if (box > context.measureText(label).width + 10) {
+      context.fillStyle = palette.text
+      context.fillText(label, left + 1 + box / 2, height / 2 + 0.5)
     }
-  }
+  })
 }
 
 export const VERTICAL_LINE_RATIO = 0.75

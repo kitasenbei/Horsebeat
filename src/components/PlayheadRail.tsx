@@ -89,7 +89,7 @@ export default function PlayheadRail({
         height: RAIL_HEIGHT,
         flex: '0 0 auto',
         touchAction: 'none',
-        bgcolor: alpha(theme.palette.error.main, 0.1),
+        bgcolor: alpha(theme.palette.text.primary, 0.07),
         borderRadius: 0.5,
         cursor: enabled ? 'ew-resize' : 'default',
       }}

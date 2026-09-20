@@ -27,10 +27,11 @@ type BeatFramesProps = {
   onExpandedChange: (expanded: boolean) => void
 }
 
-const WAVE_HEIGHT = 20
-const LEVEL_HEIGHT = 8
-const HEAT_HEIGHT = 6
-const SPECTRUM_HEIGHT = 12
+const LANE_HEIGHT = 20
+const WAVE_HEIGHT = LANE_HEIGHT
+const LEVEL_HEIGHT = LANE_HEIGHT
+const HEAT_HEIGHT = LANE_HEIGHT
+const SPECTRUM_HEIGHT = LANE_HEIGHT
 const LABEL_WIDTH = 0
 const GAP = 6
 

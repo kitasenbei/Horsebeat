@@ -17,6 +17,7 @@ import ShowChartIcon from '@mui/icons-material/ShowChart'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import StraightenIcon from '@mui/icons-material/Straighten'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import GpsFixedIcon from '@mui/icons-material/GpsFixed'
 import { VIEW_MODES, type ViewMode } from '../view'
 import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
@@ -32,6 +33,8 @@ type TopBarProps = {
   onViewChange: (view: ViewMode) => void
   onModeChange: (mode: EditMode) => void
   onClearMarkers: () => void
+  follow: boolean
+  onFollowChange: (follow: boolean) => void
 }
 
 const MAX_LABEL = 10
@@ -105,6 +108,8 @@ export default function TopBar({
   onViewChange,
   onModeChange,
   onClearMarkers,
+  follow,
+  onFollowChange,
 }: TopBarProps) {
   const brandRef = useRef<HTMLSpanElement>(null)
 
@@ -208,6 +213,20 @@ export default function TopBar({
             </Button>
           </Tooltip>
         </ButtonGroup>
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={follow ? 'follow' : null}
+          onChange={() => onFollowChange(!follow)}
+          sx={PILL}
+        >
+          <ToggleButton value="follow" aria-label="Follow playhead" sx={selected('primary')}>
+            <Tooltip title="Follow playhead">
+              <span>{segment('Follow', <GpsFixedIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
 
         <Box sx={{ flex: 1 }} />
 

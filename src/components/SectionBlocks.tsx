@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { drawSectionBlocks } from '../draw'
@@ -9,14 +9,19 @@ import { clampRange, type Range } from '../range'
 type SectionBlocksProps = {
   sections: Section[]
   duration: number
+  positionRef: RefObject<number>
+  playing: boolean
   onRangeChange: (range: Range) => void
 }
 
 export const BLOCK_HEIGHT = 18
+const LIVE_COLOR = '#e07c0a'
 
 export default function SectionBlocks({
   sections,
   duration,
+  positionRef,
+  playing,
   onRangeChange,
 }: SectionBlocksProps) {
   const [hovered, setHovered] = useState<string | null>(null)
@@ -27,14 +32,20 @@ export default function SectionBlocks({
       context,
       sections,
       duration,
+      positionRef.current,
       width,
       height,
-      theme.palette.info.dark,
-      theme.palette.common.white,
+      {
+        idle: theme.palette.info.main,
+        alt: theme.palette.info.dark,
+        live: LIVE_COLOR,
+        hover: theme.palette.info.light,
+        text: theme.palette.common.white,
+      },
       hovered,
-      `10px ${theme.typography.fontFamily}`,
+      `600 10px ${theme.typography.fontFamily}`,
     )
-  })
+  }, playing)
 
   const spanAt = (clientX: number) => {
     const canvas = canvasRef.current

@@ -174,25 +174,34 @@ export default function Waveform({
     drawPlayhead(context, positionRef.current, range, width, height, theme.palette.error.main, true)
   }, playing)
 
+  const zoomRef = useRef({ range, onRangeChange, enabled: Boolean(samples) })
+  useEffect(() => {
+    zoomRef.current = { range, onRangeChange, enabled: Boolean(samples) }
+  })
+
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !onRangeChange || !samples) return
+    if (!canvas) return
 
     const onWheel = (event: WheelEvent) => {
-      event.preventDefault()
+      const { range: current, onRangeChange: apply, enabled } = zoomRef.current
+      if (!apply || !enabled) return
 
       const bounds = canvas.getBoundingClientRect()
+      if (bounds.width === 0) return
+      event.preventDefault()
+
       const ratio = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
-      const span = range.end - range.start
-      const anchor = range.start + ratio * span
+      const span = current.end - current.start
+      const anchor = current.start + ratio * span
       const nextSpan = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
 
-      onRangeChange(clampRange({ start: anchor - ratio * nextSpan, end: anchor + (1 - ratio) * nextSpan }))
+      apply(clampRange({ start: anchor - ratio * nextSpan, end: anchor + (1 - ratio) * nextSpan }))
     }
 
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
-  }, [canvasRef, onRangeChange, samples, range.start, range.end])
+  }, [canvasRef])
 
   const interactive = Boolean(samples && onRangeChange)
 

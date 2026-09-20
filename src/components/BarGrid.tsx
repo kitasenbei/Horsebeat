@@ -1,7 +1,18 @@
-import { useRef, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
-import { BLOCK_GAP, blockHeights, collectBars, drawColumnCursor, renderBarColumns } from '../draw'
+import Paper from '@mui/material/Paper'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import {
+  autoSliceBeats,
+  BLOCK_GAP,
+  blockHeights,
+  collectBars,
+  drawColumnCursor,
+  renderBarColumns,
+  SLICE_STEPS,
+} from '../draw'
 import { useCanvas } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
 import type { Curve } from '../curve'
@@ -17,6 +28,8 @@ type BarGridProps = {
   positionRef: RefObject<number>
   playing: boolean
   curve: Curve
+  slice: number | 'auto'
+  onSliceChange: (slice: number | 'auto') => void
 }
 
 export default function BarGrid({
@@ -30,12 +43,32 @@ export default function BarGrid({
   positionRef,
   playing,
   curve,
+  slice,
+  onSliceChange,
 }: BarGridProps) {
   const theme = useTheme()
   const spans = sectionSpans(sections, duration)
   const active =
     spans.find((span) => position >= span.start && position <= span.end) ?? spans[0] ?? null
-  const bars = active ? collectBars(active) : []
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+
+  useEffect(() => {
+    const wrap = wrapRef.current
+    if (!wrap) return
+
+    const observer = new ResizeObserver(() => setWidth(wrap.clientWidth))
+    observer.observe(wrap)
+    setWidth(wrap.clientWidth)
+    return () => observer.disconnect()
+  }, [])
+
+  const beats = active
+    ? slice === 'auto'
+      ? autoSliceBeats(active, width)
+      : slice
+    : 4
+  const bars = active ? collectBars(active, beats) : []
 
   const sources = { envelope, loudness, onsets, bands }
   const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
@@ -47,6 +80,7 @@ export default function BarGrid({
       Math.round(width),
       Math.round(height),
       bars.length,
+      beats,
       bars[0]?.start ?? 0,
       bars[0]?.end ?? 0,
       envelope?.length ?? 0,
@@ -93,10 +127,41 @@ export default function BarGrid({
   }, playing)
 
   return (
-    <Box
-      component="canvas"
+    <Box ref={wrapRef} sx={{ position: 'relative', height: '100%' }}>
+      <Box
+        component="canvas"
       ref={canvasRef}
-      sx={{ display: 'block', width: '100%', height: '100%', pointerEvents: 'none' }}
-    />
+        sx={{ display: 'block', width: '100%', height: '100%', pointerEvents: 'none' }}
+      />
+      <Paper
+        elevation={3}
+        sx={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          borderRadius: 999,
+          overflow: 'hidden',
+        }}
+      >
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={slice}
+          onChange={(_, next) => {
+            if (next !== null) onSliceChange(next as number | 'auto')
+          }}
+          sx={{ '& .MuiToggleButton-root': { px: 0.75, py: 0.25, border: 0, fontSize: 11 } }}
+        >
+          <ToggleButton value="auto" aria-label="Automatic slice length">
+            auto
+          </ToggleButton>
+          {SLICE_STEPS.map((entry) => (
+            <ToggleButton key={entry} value={entry} aria-label={`${entry} beats per column`}>
+              {entry}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Paper>
+    </Box>
   )
 }

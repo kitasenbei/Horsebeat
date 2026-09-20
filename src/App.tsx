@@ -88,6 +88,7 @@ export default function App() {
   const [fallSpeed, setFallSpeed] = useState(8.5)
   const [framesExpanded, setFramesExpanded] = useState(false)
   const [barGrid, setBarGrid] = useState(false)
+  const [slice, setSlice] = useState<number | 'auto'>('auto')
   const [follow, setFollow] = useState(false)
   const [backdrop, setBackdrop] = useState<string | null>(null)
   const touchedRef = useRef(0)
@@ -409,6 +410,8 @@ export default function App() {
                   positionRef={positionRef}
                   playing={playing}
                   curve={curve}
+                  slice={slice}
+                  onSliceChange={setSlice}
                 />
               </Box>
             ) : null}

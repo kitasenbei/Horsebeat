@@ -825,26 +825,35 @@ export function drawEnvelopeStrip(
 }
 
 export const BEATS_PER_BAR = 4
-const SLICE_BEATS = [BEATS_PER_BAR, 2, 1]
+export const SLICE_STEPS = [1, 2, 4, 8, 16]
+export const MIN_COLUMN = 4
+export const SLICE_SPAN = 1
+
+export function autoSliceBeats(span: SectionSpan, width: number): number {
+  const available = span.end - span.start
+  if (span.beat <= 0 || available <= 0 || width <= 0) return BEATS_PER_BAR
+
+  return (
+    SLICE_STEPS.find((beats) => (available / (span.beat * beats)) * MIN_COLUMN <= width) ??
+    SLICE_STEPS[SLICE_STEPS.length - 1]
+  )
+}
 
 export type Bar = {
   start: number
   end: number
 }
 
-export function collectBars(span: SectionSpan, limit = 2000): Bar[] {
+export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar[] {
   const available = span.end - span.start
   if (span.beat <= 0 || available <= 0) return []
 
-  const length = SLICE_BEATS.map((beats) => span.beat * beats).find(
-    (candidate) => candidate <= available + 1e-9,
-  )
-
-  if (!length) return [{ start: span.start, end: span.end }]
+  const length = span.beat * beats
+  if (length > available + 1e-9) return [{ start: span.start, end: span.end }]
 
   const bars: Bar[] = []
   for (let at = span.start; at + length <= span.end + 1e-9 && bars.length < limit; at += length) {
-    bars.push({ start: at, end: at + length })
+    bars.push({ start: at, end: Math.min(1, at + length * SLICE_SPAN) })
   }
 
   return bars

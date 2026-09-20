@@ -3,18 +3,24 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
-import TextField from '@mui/material/TextField'
+import Chip from '@mui/material/Chip'
+import InputBase from '@mui/material/InputBase'
 import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import Tooltip from '@mui/material/Tooltip'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 
 type TimingPanelProps = {
   sections: Section[]
   positionMs: number
+  durationMs: number
+  onJump: (fromMs: number, toMs: number) => void
+  onSeekMs: (ms: number) => void
   onSectionsChange: (sections: Section[]) => void
   onEditingChange: (id: string | null) => void
   onClose?: () => void
@@ -29,10 +35,28 @@ type Move = {
 }
 
 const PANEL_WIDTH = 300
+const CARD_IDLE = '#f2f0f7'
+const CARD_ACTIVE = '#e4dcfb'
+
+const ACTION_COLOR = '#ece7ff'
+const ACTION_HOVER = '#dbd1ff'
+const ACTION_INK = '#3a1d92'
+
+const ACTION_PILL = {
+  width: 34,
+  height: 34,
+  borderRadius: 999,
+  bgcolor: ACTION_COLOR,
+  color: ACTION_INK,
+  '&:hover': { bgcolor: ACTION_HOVER, color: ACTION_INK },
+}
 
 export default function TimingPanel({
   sections,
   positionMs,
+  durationMs,
+  onJump,
+  onSeekMs,
   onSectionsChange,
   onEditingChange,
   onClose,
@@ -40,6 +64,7 @@ export default function TimingPanel({
 }: TimingPanelProps) {
   const moveRef = useRef<Move | null>(null)
   const [spot, setSpot] = useState({ left: 320, top: 96 })
+  const [editingOffset, setEditingOffset] = useState<string | null>(null)
 
   const update = (id: string, patch: Partial<Section>) => {
     onSectionsChange(
@@ -153,34 +178,142 @@ export default function TimingPanel({
             No sections yet :(
           </Typography>
         ) : null}
-        {sections.map((section) => (
-          <Box key={section.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TextField
-              size="small"
-              type="number"
-              label="Offset ms"
-              value={Math.round(section.offsetMs)}
-              onChange={(event) => update(section.id, { offsetMs: Number(event.target.value) })}
-              onFocus={() => onEditingChange(section.id)}
-              onBlur={() => onEditingChange(null)}
-              sx={{ flex: 1 }}
-            />
-            <BpmPicker
-              value={section.bpm}
-              onChange={(bpm) => update(section.id, { bpm })}
-              onEditingChange={(editing) => onEditingChange(editing ? section.id : null)}
-            />
-            <IconButton
-              size="small"
-              aria-label="Remove section"
-              onClick={() =>
-                onSectionsChange(sections.filter((current) => current.id !== section.id))
-              }
+        {sections.map((section, index) => {
+          const next = sections[index + 1]
+          const endMs = next ? next.offsetMs : durationMs
+          const active = positionMs >= section.offsetMs && (!next || positionMs < next.offsetMs)
+
+          return (
+            <Box
+              key={section.id}
+              onClick={() => onJump(section.offsetMs, endMs)}
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                p: 1,
+                borderRadius: 2,
+                border: 1,
+                borderColor: active ? CARD_ACTIVE : CARD_IDLE,
+                bgcolor: 'info.main',
+                color: active ? 'info.contrastText' : 'text.primary',
+                cursor: 'pointer',
+                '&:hover': { borderColor: 'info.light' },
+              }}
             >
-              <DeleteOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        ))}
+              <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 1 }}>
+                <Box
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    gap: 1,
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <Box onClick={(event) => event.stopPropagation()}>
+                    <BpmPicker
+                      value={section.bpm}
+                      active={active}
+                      onChange={(bpm) => update(section.id, { bpm })}
+                      onEditingChange={(editing) => onEditingChange(editing ? section.id : null)}
+                    />
+                  </Box>
+
+                  <Box
+                    onClick={(event) => event.stopPropagation()}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}
+                  >
+                    {editingOffset === section.id ? (
+                      <InputBase
+                        autoFocus
+                        value={Math.round(section.offsetMs)}
+                        inputProps={{
+                          inputMode: 'numeric',
+                          'aria-label': 'Section offset in milliseconds',
+                        }}
+                        onChange={(event) =>
+                          update(section.id, { offsetMs: Number(event.target.value) })
+                        }
+                        onFocus={() => onEditingChange(section.id)}
+                        onBlur={() => {
+                          setEditingOffset(null)
+                          onEditingChange(null)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === 'Escape') setEditingOffset(null)
+                        }}
+                        sx={{
+                          width: 72,
+                          px: 1,
+                          borderRadius: 999,
+                          border: 1,
+                          bgcolor: 'background.paper',
+                          borderColor: ACTION_COLOR,
+                          color: ACTION_INK,
+                          fontSize: (current) => current.typography.caption.fontSize,
+                          '& input': { p: 0, textAlign: 'center' },
+                        }}
+                      />
+                    ) : (
+                      <Chip
+                        size="small"
+                        label={`${Math.round(section.offsetMs)} ms`}
+                        onClick={() => {
+                          setEditingOffset(section.id)
+                          onEditingChange(section.id)
+                        }}
+                        sx={{
+                          bgcolor: ACTION_COLOR,
+                          color: ACTION_INK,
+                          fontWeight: 600,
+                          '&:hover': { bgcolor: ACTION_HOVER },
+                        }}
+                      />
+                    )}
+                  </Box>
+                </Box>
+
+                <Box
+                  onClick={(event) => event.stopPropagation()}
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    gap: 0.5,
+                    flex: '0 0 auto',
+                  }}
+                >
+                  <Tooltip title="Play from here">
+                    <IconButton
+                      size="small"
+                      aria-label="Play from section"
+                      onClick={() => onSeekMs(section.offsetMs)}
+                      sx={ACTION_PILL}
+                    >
+                      <PlayArrowIcon sx={{ fontSize: 20 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Remove section">
+                    <IconButton
+                      size="small"
+                      aria-label="Remove section"
+                      onClick={() =>
+                        onSectionsChange(sections.filter((current) => current.id !== section.id))
+                      }
+                      sx={ACTION_PILL}
+                    >
+                      <DeleteOutlinedIcon sx={{ fontSize: 20 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
+
+            </Box>
+          )
+        })}
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Button
             size="small"

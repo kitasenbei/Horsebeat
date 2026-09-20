@@ -1,13 +1,16 @@
 import type { RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
-import { drawSamplesVertical, drawVerticalPlayhead } from '../draw'
+import { drawGridVertical, drawSamplesVertical, drawVerticalPlayhead } from '../draw'
 import { useCanvas } from '../useCanvas'
 import type { Curve } from '../curve'
+import type { Section } from '../timing'
+import { GRID_PURPLE } from '../theme'
 
 type VerticalWaveformProps = {
   samples: Float32Array | null
   envelope: Float32Array | null
+  sections: Section[]
   positionRef: RefObject<number>
   playing: boolean
   duration: number
@@ -18,6 +21,7 @@ type VerticalWaveformProps = {
 export default function VerticalWaveform({
   samples,
   envelope,
+  sections,
   positionRef,
   playing,
   duration,
@@ -39,6 +43,17 @@ export default function VerticalWaveform({
       theme.palette.primary.main,
       curve,
       samples.length,
+    )
+    drawGridVertical(
+      context,
+      sections,
+      duration,
+      positionRef.current,
+      span,
+      width,
+      height,
+      GRID_PURPLE,
+      GRID_PURPLE,
     )
     drawVerticalPlayhead(context, width, height, theme.palette.error.main)
   }, playing)

@@ -11,9 +11,14 @@ import { MAX_BPM, MIN_BPM } from '../timing'
 
 type BpmPickerProps = {
   value: number
+  active?: boolean
   onChange: (value: number) => void
   onEditingChange?: (editing: boolean) => void
 }
+
+const BPM_COLOR = '#ece7ff'
+const BPM_HOVER = '#dbd1ff'
+const BPM_INK = '#3a1d92'
 
 const MULTIPLIERS = [
   { factor: 0.2, label: '1/5' },
@@ -24,7 +29,12 @@ const MULTIPLIERS = [
   { factor: 5, label: 'x5' },
 ]
 
-export default function BpmPicker({ value, onChange, onEditingChange }: BpmPickerProps) {
+export default function BpmPicker({
+  value,
+  active = false,
+  onChange,
+  onEditingChange,
+}: BpmPickerProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
 
   const whole = Math.floor(value)
@@ -42,15 +52,18 @@ export default function BpmPicker({ value, onChange, onEditingChange }: BpmPicke
           onEditingChange?.(true)
         }}
         sx={{
-          px: 1,
-          py: 0.5,
+          px: 1.75,
+          py: 0.75,
           borderRadius: 999,
-          border: 1,
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
+          border: 0,
+          bgcolor: active ? BPM_HOVER : BPM_COLOR,
+          color: BPM_INK,
+          '&:hover': { bgcolor: BPM_HOVER },
         }}
       >
-        <Typography variant="body2">{value.toFixed(2)} BPM</Typography>
+        <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
+          {value.toFixed(2)} BPM
+        </Typography>
       </ButtonBase>
       <Popover
         open={anchor !== null}

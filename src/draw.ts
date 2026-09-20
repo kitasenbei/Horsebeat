@@ -470,6 +470,7 @@ export function drawSectionBlocks(
 }
 
 export const VERTICAL_LINE_RATIO = 0.75
+export const VERTICAL_LINE_WIDTH = 2
 
 export function drawSamplesVertical(
   context: CanvasRenderingContext2D,
@@ -529,7 +530,7 @@ export function drawVerticalPlayhead(
 ) {
   const y = Math.round(height * VERTICAL_LINE_RATIO) + 0.5
   context.strokeStyle = color
-  context.lineWidth = 2
+  context.lineWidth = VERTICAL_LINE_WIDTH
   context.beginPath()
   context.moveTo(0, y)
   context.lineTo(width, y)
@@ -648,4 +649,98 @@ export function drawBands(
       context.fillRect(x, band * row, 1, row)
     }
   }
+}
+
+export function drawGridVertical(
+  context: CanvasRenderingContext2D,
+  sections: Section[],
+  duration: number,
+  position: number,
+  span: number,
+  width: number,
+  height: number,
+  color: string,
+  accent: string,
+) {
+  if (span <= 0 || duration <= 0 || height <= 0) return
+
+  const lineY = height * VERTICAL_LINE_RATIO
+  const top = position + (lineY / height) * span
+  const bottom = position - ((height - lineY) / height) * span
+  const yOf = (at: number) => Math.round(lineY - ((at - position) / span) * height) + 0.5
+
+  for (const item of sectionSpans(sections, duration)) {
+    if (item.beat <= 0 || item.end < bottom || item.start > top) continue
+
+    if (span / item.beat <= height / 4) {
+      const from = Math.max(bottom, item.start)
+      const to = Math.min(top, item.end)
+      const firstIndex = Math.max(0, Math.ceil((from - item.start) / item.beat))
+      const lastIndex = Math.floor((to - item.start) / item.beat)
+
+      context.strokeStyle = color
+      context.lineWidth = VERTICAL_LINE_WIDTH
+      context.globalAlpha = 0.55
+
+      for (let index = firstIndex; index <= lastIndex; index += 1) {
+        const y = yOf(item.start + index * item.beat)
+        context.beginPath()
+        context.moveTo(0, y)
+        context.lineTo(width, y)
+        context.stroke()
+      }
+
+      context.globalAlpha = 1
+    }
+
+    if (item.start >= bottom && item.start <= top) {
+      const y = yOf(item.start)
+      context.strokeStyle = accent
+      context.lineWidth = VERTICAL_LINE_WIDTH
+      context.beginPath()
+      context.moveTo(0, y)
+      context.lineTo(width, y)
+      context.stroke()
+    }
+  }
+}
+
+export function drawEnvelopeStrip(
+  context: CanvasRenderingContext2D,
+  envelope: Float32Array,
+  range: Range,
+  width: number,
+  height: number,
+  color: string,
+) {
+  const span = range.end - range.start
+  if (span <= 0 || envelope.length === 0) return
+
+  const middle = height / 2
+  context.fillStyle = color
+  context.globalAlpha = WAVE_ALPHA
+  context.beginPath()
+
+  const at = (x: number) => {
+    const bin = Math.min(
+      envelope.length - 1,
+      Math.max(0, (range.start + (x / width) * span) * envelope.length),
+    )
+    const low = Math.floor(bin)
+    const high = Math.min(envelope.length - 1, low + 1)
+    return envelope[low] * (1 - (bin - low)) + envelope[high] * (bin - low)
+  }
+
+  for (let x = 0; x <= width; x += 1) {
+    const half = at(x) * middle
+    if (x === 0) context.moveTo(x, middle - half)
+    else context.lineTo(x, middle - half)
+  }
+  for (let x = Math.floor(width); x >= 0; x -= 1) {
+    context.lineTo(x, middle + at(x) * middle)
+  }
+
+  context.closePath()
+  context.fill()
+  context.globalAlpha = 1
 }

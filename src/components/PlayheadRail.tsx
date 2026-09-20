@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { alpha, useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle } from '../draw'
@@ -14,6 +14,7 @@ type PlayheadRailProps = {
 }
 
 export const RAIL_HEIGHT = 14
+const WHEEL_STEP = 0.02
 
 const FULL: Range = { start: 0, end: 1 }
 
@@ -39,6 +40,21 @@ export default function PlayheadRail({
     const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
     return range.start + ratio * (range.end - range.start)
   }
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !enabled) return
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const span = range.end - range.start
+      const delta = event.deltaX !== 0 ? event.deltaX : event.deltaY
+      onSeek(positionRef.current + (delta / 100) * span * WHEEL_STEP)
+    }
+
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+  }, [canvasRef, enabled, onSeek, positionRef, range.start, range.end])
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (!enabled) return

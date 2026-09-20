@@ -114,6 +114,16 @@ export function useAudio(file: File | null) {
     setPosition(clamped)
   }, [])
 
+  const playFrom = useCallback((next: number) => {
+    const audio = audioRef.current
+    if (!audio || !(audio.duration > 0)) return
+    const clamped = Math.min(1, Math.max(0, next))
+    audio.currentTime = clamped * audio.duration
+    positionRef.current = clamped
+    setPosition(clamped)
+    void audio.play()
+  }, [])
+
   const reset = useCallback(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -140,6 +150,7 @@ export function useAudio(file: File | null) {
     rate,
     toggle,
     seek,
+    playFrom,
     reset,
     setVolume,
     setMuted,

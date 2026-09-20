@@ -20,6 +20,7 @@ import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
 import TimingPanel from './components/TimingPanel'
+import BeatFrames from './components/BeatFrames'
 import {
   buildPyramid,
   computeBands,
@@ -31,7 +32,7 @@ import {
   type Pyramid,
 } from './audio'
 import { useAudio } from './useAudio'
-import type { Range } from './range'
+import { clampRange, type Range } from './range'
 import type { ViewMode } from './view'
 import { resolveTempo } from './bpm'
 import { createSection, sectionSpans, sortSections, type Section } from './timing'
@@ -72,6 +73,7 @@ export default function App() {
     rate,
     toggle,
     seek,
+    playFrom,
     reset,
     setVolume,
     setMuted,
@@ -189,8 +191,31 @@ export default function App() {
                 embedded
                 sections={sections}
                 positionMs={position * duration * 1000}
+                durationMs={duration * 1000}
+                onJump={(fromMs, toMs) => {
+                  if (duration <= 0) return
+                  setRange(
+                    clampRange({ start: fromMs / 1000 / duration, end: toMs / 1000 / duration }),
+                  )
+                }}
+                onSeekMs={(ms) => {
+                  if (duration > 0) playFrom(ms / 1000 / duration)
+                }}
                 onSectionsChange={setSections}
                 onEditingChange={setEditingSection}
+              />
+            </Box>
+            <Box sx={{ flex: '0 0 auto' }}>
+              <BeatFrames
+                envelope={envelope}
+                loudness={loudness}
+                onsets={onsets}
+                bands={bands}
+                sections={sections}
+                duration={duration}
+                positionRef={positionRef}
+                playing={playing}
+                onSectionsChange={setSections}
               />
             </Box>
             <Box sx={{ flex: '0 0 auto' }}>
@@ -273,6 +298,7 @@ export default function App() {
             <VerticalWaveform
               samples={samples}
               envelope={envelope}
+              sections={sections}
               positionRef={positionRef}
               playing={playing}
               duration={duration}

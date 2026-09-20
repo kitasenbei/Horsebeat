@@ -1,5 +1,7 @@
 import { createTheme } from '@mui/material/styles'
 
+export const GRID_PURPLE = '#7b00ff'
+
 export const theme = createTheme({
   palette: {
     primary: {

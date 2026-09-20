@@ -844,7 +844,8 @@ export function collectBars(span: SectionSpan, limit = 2000): Bar[] {
 }
 
 export const BLOCK_GAP = 8
-const BLOCK_WEIGHTS = [0.3, 0.2, 0.18, 0.32]
+const BLOCK_WEIGHTS = [0.3, 0.16, 0.16, 0.38]
+const BAND_ORDER = [0, 1, 2]
 
 export type BarSources = {
   envelope: Float32Array | null
@@ -866,6 +867,10 @@ function sampleAt(values: Float32Array, at: number, stride = 1): number {
 export function blockHeights(height: number): number[] {
   const usable = Math.max(0, height - BLOCK_GAP * (BLOCK_WEIGHTS.length - 1))
   return BLOCK_WEIGHTS.map((weight) => Math.floor(usable * weight))
+}
+
+export function blockPanels(block: number): number {
+  return block === 3 ? 3 : 1
 }
 
 function parseHex(color: string): [number, number, number] {
@@ -920,7 +925,6 @@ export function renderBarColumns(
   if (bars.length === 0) return image
 
   const heights = blockHeights(height)
-  const column = width / bars.length
   const put = (x: number, y: number, rgb: [number, number, number]) => {
     const offset = (y * width + x) * 4
     pixels[offset] = rgb[0]
@@ -932,11 +936,18 @@ export function renderBarColumns(
   for (let block = 0; block < heights.length; block += 1) {
     const blockHeight = heights[block]
 
-    for (let index = 0; index < bars.length; index += 1) {
+    const panels = blockPanels(block)
+    const panelWidth = width / panels
+    const panelColumn = panelWidth / bars.length
+
+    for (let cell = 0; cell < bars.length * panels; cell += 1) {
+      const panel = Math.floor(cell / bars.length)
+      const index = cell % bars.length
       const bar = bars[index]
       const span = bar.end - bar.start
-      const left = Math.round(index * column)
-      const right = Math.max(left + 1, Math.round((index + 1) * column))
+      const offset = panel * panelWidth
+      const left = Math.round(offset + index * panelColumn)
+      const right = Math.max(left + 1, Math.round(offset + (index + 1) * panelColumn))
 
       for (let row = 0; row < blockHeight; row += 1) {
         const y = top + row
@@ -953,22 +964,17 @@ export function renderBarColumns(
           const rgb = heatRgb(applyCurve(sampleAt(sources.onsets, at), curve))
           for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
         } else if (block === 3 && sources.bands) {
+          const band = BAND_ORDER[panel]
           const frames = sources.bands.length / 3
           const frame = Math.min(frames - 1, Math.max(0, Math.floor(at * frames)))
-          const stripe = (right - left) / 3
-
-          for (let band = 0; band < 3; band += 1) {
-            const value = applyCurve(Math.min(1, sources.bands[frame * 3 + band]), curve)
-            const rgb = BAND_RGB[2 - band]
-            const mixed: [number, number, number] = [
-              255 + (rgb[0] - 255) * value,
-              255 + (rgb[1] - 255) * value,
-              255 + (rgb[2] - 255) * value,
-            ]
-            const from = Math.round(left + band * stripe)
-            const to = Math.round(left + (band + 1) * stripe)
-            for (let x = from; x < to && x < width; x += 1) put(x, y, mixed)
-          }
+          const value = applyCurve(Math.min(1, sources.bands[frame * 3 + band]), curve)
+          const rgb = BAND_RGB[band]
+          const mixed: [number, number, number] = [
+            255 + (rgb[0] - 255) * value,
+            255 + (rgb[1] - 255) * value,
+            255 + (rgb[2] - 255) * value,
+          ]
+          for (let x = left; x < right && x < width; x += 1) put(x, y, mixed)
         }
       }
     }
@@ -994,17 +1000,22 @@ export function drawColumnCursor(
   if (index < 0) return
 
   const bar = bars[index]
-  const column = width / bars.length
-  const left = index * column
   const ratio = (position - bar.start) / (bar.end - bar.start)
 
   context.strokeStyle = color
   context.fillStyle = color
+  context.lineWidth = 1
 
   tops.forEach((top, block) => {
+    const panels = blockPanels(block)
+    const panelWidth = width / panels
+    const column = panelWidth / bars.length
     const y = Math.round(top + ratio * heights[block])
-    context.lineWidth = 1
-    context.strokeRect(left + 0.5, top + 0.5, column - 1, heights[block] - 1)
-    context.fillRect(left, y - CURSOR_WIDTH / 2, column, CURSOR_WIDTH)
+
+    for (let panel = 0; panel < panels; panel += 1) {
+      const left = panel * panelWidth + index * column
+      context.strokeRect(left + 0.5, top + 0.5, column - 1, heights[block] - 1)
+      context.fillRect(left, y - CURSOR_WIDTH / 2, column, CURSOR_WIDTH)
+    }
   })
 }

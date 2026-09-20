@@ -10,6 +10,10 @@ import ShowChartIcon from '@mui/icons-material/ShowChart'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import SsidChartIcon from '@mui/icons-material/SsidChart'
 import CompressIcon from '@mui/icons-material/Compress'
+import FilterAltIcon from '@mui/icons-material/FilterAlt'
+import BoltIcon from '@mui/icons-material/Bolt'
+import TonalityIcon from '@mui/icons-material/Tonality'
+import ContrastIcon from '@mui/icons-material/Contrast'
 import Tooltip from '@mui/material/Tooltip'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
@@ -43,6 +47,10 @@ const PRESETS = [
   { curve: CURVE_PRESETS.lift, title: 'Lift quiet detail', icon: <TrendingUpIcon fontSize="small" /> },
   { curve: CURVE_PRESETS.contrast, title: 'Contrast', icon: <SsidChartIcon fontSize="small" /> },
   { curve: CURVE_PRESETS.tame, title: 'Tame loud parts', icon: <CompressIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.gate, title: 'Gate the floor', icon: <FilterAltIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.peaks, title: 'Peaks only', icon: <BoltIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.flatten, title: 'Flatten', icon: <TonalityIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.hard, title: 'Hard threshold', icon: <ContrastIcon fontSize="small" /> },
 ]
 
 const CHART_HEIGHT = 170
@@ -272,8 +280,8 @@ export default function CurvePanel({
             cursor: 'crosshair',
           }}
         />
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', gap: 0.25 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
             {PRESETS.map((preset) => (
               <Tooltip key={preset.title} title={preset.title}>
                 <IconButton size="small" onClick={() => onCurveChange(preset.curve)}>

@@ -122,4 +122,36 @@ export const CURVE_PRESETS = {
       { x: 1, y: 0.9 },
     ],
   },
+  gate: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 0.35, y: 0.02 },
+      { x: 0.55, y: 0.5 },
+      { x: 1, y: 1 },
+    ],
+  },
+  peaks: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 0.6, y: 0.04 },
+      { x: 0.85, y: 0.55 },
+      { x: 1, y: 1 },
+    ],
+  },
+  flatten: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 0.15, y: 0.45 },
+      { x: 0.5, y: 0.78 },
+      { x: 1, y: 1 },
+    ],
+  },
+  hard: {
+    points: [
+      { x: 0, y: 0 },
+      { x: 0.45, y: 0.04 },
+      { x: 0.55, y: 0.96 },
+      { x: 1, y: 1 },
+    ],
+  },
 } satisfies Record<string, Curve>

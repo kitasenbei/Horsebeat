@@ -67,20 +67,30 @@ export function computeLoudness(samples: Float32Array): Float32Array {
   return loudness
 }
 
+const ONSET_PERCENTILE = 0.98
+
+function percentile(values: Float32Array, ratio: number): number {
+  const positive = Array.from(values).filter((value) => value > 0)
+  if (positive.length === 0) return 0
+  positive.sort((left, right) => left - right)
+  const index = Math.min(positive.length - 1, Math.floor(positive.length * ratio))
+  return positive[index]
+}
+
 export function computeOnsets(samples: Float32Array): Float32Array {
   const energy = computeRms(samples)
   const frames = energy.length
 
   const onsets = new Float32Array(frames)
-  let peak = 0
   for (let frame = 1; frame < frames; frame += 1) {
-    const rise = Math.max(0, energy[frame] - energy[frame - 1])
-    onsets[frame] = rise
-    if (rise > peak) peak = rise
+    onsets[frame] = Math.max(0, energy[frame] - energy[frame - 1])
   }
 
-  if (peak > 0) {
-    for (let frame = 0; frame < frames; frame += 1) onsets[frame] /= peak
+  const reference = percentile(onsets, ONSET_PERCENTILE)
+  if (reference > 0) {
+    for (let frame = 0; frame < frames; frame += 1) {
+      onsets[frame] = Math.min(1, onsets[frame] / reference)
+    }
   }
 
   return onsets

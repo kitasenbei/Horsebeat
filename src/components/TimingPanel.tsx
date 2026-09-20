@@ -10,6 +10,9 @@ import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import CheckIcon from '@mui/icons-material/Check'
+import { writeTimingPoints } from '../osu'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
@@ -77,6 +80,7 @@ export default function TimingPanel({
   const moveRef = useRef<Move | null>(null)
   const [spot, setSpot] = useState({ left: 320, top: 96 })
   const [editingOffset, setEditingOffset] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   const [scroll, setScroll] = useState(0)
   const [viewport, setViewport] = useState(320)
   const listRef = useRef<HTMLDivElement>(null)
@@ -180,6 +184,25 @@ export default function TimingPanel({
         <Typography variant="caption" sx={{ flex: 1 }}>
           Tempo sections
         </Typography>
+        <IconButton
+          size="small"
+          title="Copy timing points"
+          aria-label="Copy timing points"
+          disabled={sections.length === 0}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => {
+            void navigator.clipboard.writeText(writeTimingPoints(sections)).then(() => {
+              setCopied(true)
+              window.setTimeout(() => setCopied(false), 1500)
+            })
+          }}
+        >
+          {copied ? (
+            <CheckIcon fontSize="small" color="success" />
+          ) : (
+            <ContentCopyIcon fontSize="small" />
+          )}
+        </IconButton>
         {onClose ? (
           <IconButton
             size="small"

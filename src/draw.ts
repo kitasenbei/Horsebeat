@@ -1003,6 +1003,29 @@ export function renderBarColumns(
 
 export const CURSOR_WIDTH = 3
 
+export function drawSliceGuides(
+  context: CanvasRenderingContext2D,
+  top: number,
+  height: number,
+  width: number,
+  color: string,
+  divisions = 4,
+) {
+  context.strokeStyle = color
+  context.lineWidth = 1
+  context.globalAlpha = 0.45
+
+  for (let step = 1; step < divisions; step += 1) {
+    const y = Math.round(top + (step / divisions) * height) + 0.5
+    context.beginPath()
+    context.moveTo(0, y)
+    context.lineTo(width, y)
+    context.stroke()
+  }
+
+  context.globalAlpha = 1
+}
+
 export function drawColumnCursor(
   context: CanvasRenderingContext2D,
   bars: Bar[],

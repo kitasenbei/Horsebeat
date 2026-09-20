@@ -10,6 +10,7 @@ import {
   blockHeights,
   collectBars,
   drawColumnCursor,
+  drawSliceGuides,
   renderBarColumns,
   SLICE_STEPS,
 } from '../draw'
@@ -115,11 +116,14 @@ export default function BarGrid({
       top += blockHeight + BLOCK_GAP
     }
 
+    const heights = blockHeights(height)
+    drawSliceGuides(context, tops[0], heights[0], width, theme.palette.info.dark)
+
     drawColumnCursor(
       context,
       bars,
       tops,
-      blockHeights(height),
+      heights,
       positionRef.current,
       width,
       theme.palette.error.main,

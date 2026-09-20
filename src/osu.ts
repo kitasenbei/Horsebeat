@@ -103,3 +103,12 @@ export async function readOsz(file: File): Promise<Beatmap> {
     background,
   }
 }
+
+export function writeTimingPoints(sections: Section[]): string {
+  return sortSections(sections)
+    .map((section) => {
+      const beatLength = 60000 / section.bpm
+      return `${Math.round(section.offsetMs)},${beatLength},4,2,0,60,1,0`
+    })
+    .join('\n')
+}

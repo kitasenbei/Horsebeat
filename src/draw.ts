@@ -844,9 +844,10 @@ export function collectBars(span: SectionSpan, limit = 2000): Bar[] {
 }
 
 export const BLOCK_GAP = 8
-const BLOCK_WEIGHTS = [0.4, 0.2, 0.4]
+const BLOCK_WEIGHTS = [0.3, 0.2, 0.18, 0.32]
 
 export type BarSources = {
+  envelope: Float32Array | null
   loudness: Float32Array | null
   onsets: Float32Array | null
   bands: Float32Array | null
@@ -874,6 +875,7 @@ function parseHex(color: string): [number, number, number] {
 
 const LEVEL_RGB = LEVEL_ZONES.map((zone) => ({ limit: zone.limit, rgb: parseHex(zone.color) }))
 const HEAT_RGB = HEAT_STOPS.map(parseHex)
+const WAVE_RGB = ['#123a8f', '#2a9df4', '#f7c948', '#d7263d'].map(parseHex)
 const BAND_RGB = BAND_COLORS.map((band) => band.rgb.split(',').map(Number) as [number, number, number])
 
 function levelRgb(value: number) {
@@ -881,18 +883,26 @@ function levelRgb(value: number) {
   return (zone ?? LEVEL_RGB[LEVEL_RGB.length - 1]).rgb
 }
 
-function heatRgb(value: number): [number, number, number] {
+function rampRgb(stops: [number, number, number][], value: number): [number, number, number] {
   const clamped = Math.min(1, Math.max(0, value))
-  const scaled = clamped * (HEAT_RGB.length - 1)
-  const index = Math.min(HEAT_RGB.length - 2, Math.floor(scaled))
+  const scaled = clamped * (stops.length - 1)
+  const index = Math.min(stops.length - 2, Math.floor(scaled))
   const ratio = scaled - index
-  const from = HEAT_RGB[index]
-  const to = HEAT_RGB[index + 1]
+  const from = stops[index]
+  const to = stops[index + 1]
   return [
     from[0] + (to[0] - from[0]) * ratio,
     from[1] + (to[1] - from[1]) * ratio,
     from[2] + (to[2] - from[2]) * ratio,
   ]
+}
+
+function heatRgb(value: number) {
+  return rampRgb(HEAT_RGB, value)
+}
+
+function waveRgb(value: number) {
+  return rampRgb(WAVE_RGB, value)
 }
 
 export function renderBarColumns(
@@ -933,13 +943,16 @@ export function renderBarColumns(
         if (y >= height) break
         const at = bar.start + (row / blockHeight) * span
 
-        if (block === 0 && sources.loudness) {
+        if (block === 0 && sources.envelope) {
+          const rgb = waveRgb(applyCurve(sampleAt(sources.envelope, at), curve))
+          for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
+        } else if (block === 1 && sources.loudness) {
           const rgb = levelRgb(applyCurve(sampleAt(sources.loudness, at), curve))
           for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
-        } else if (block === 1 && sources.onsets) {
+        } else if (block === 2 && sources.onsets) {
           const rgb = heatRgb(applyCurve(sampleAt(sources.onsets, at), curve))
           for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
-        } else if (block === 2 && sources.bands) {
+        } else if (block === 3 && sources.bands) {
           const frames = sources.bands.length / 3
           const frame = Math.min(frames - 1, Math.max(0, Math.floor(at * frames)))
           const stripe = (right - left) / 3

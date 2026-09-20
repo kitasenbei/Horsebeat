@@ -7,6 +7,7 @@ import { sectionSpans, type Section } from '../timing'
 import type { Curve } from '../curve'
 
 type BarGridProps = {
+  envelope: Float32Array | null
   loudness: Float32Array | null
   onsets: Float32Array | null
   bands: Float32Array | null
@@ -19,6 +20,7 @@ type BarGridProps = {
 }
 
 export default function BarGrid({
+  envelope,
   loudness,
   onsets,
   bands,
@@ -35,7 +37,7 @@ export default function BarGrid({
     spans.find((span) => position >= span.start && position <= span.end) ?? spans[0] ?? null
   const bars = active ? collectBars(active) : []
 
-  const sources = { loudness, onsets, bands }
+  const sources = { envelope, loudness, onsets, bands }
   const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
 
   const canvasRef = useCanvas((context, width, height) => {
@@ -47,6 +49,7 @@ export default function BarGrid({
       bars.length,
       bars[0]?.start ?? 0,
       bars[0]?.end ?? 0,
+      envelope?.length ?? 0,
       loudness?.length ?? 0,
       onsets?.length ?? 0,
       bands?.length ?? 0,

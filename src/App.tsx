@@ -387,6 +387,7 @@ export default function App() {
             {barGrid ? (
               <Box sx={{ flex: 1, minHeight: 0 }}>
                 <BarGrid
+                  envelope={envelope}
                   loudness={loudness}
                   onsets={onsets}
                   bands={bands}

@@ -36,19 +36,29 @@ type Move = {
 
 const PANEL_WIDTH = 300
 const CARD_IDLE = '#f2f0f7'
-const CARD_ACTIVE = '#e4dcfb'
 
 const ACTION_COLOR = '#ece7ff'
 const ACTION_HOVER = '#dbd1ff'
 const ACTION_INK = '#3a1d92'
 
-const ACTION_PILL = {
-  width: 34,
-  height: 34,
-  borderRadius: 999,
-  bgcolor: ACTION_COLOR,
-  color: ACTION_INK,
-  '&:hover': { bgcolor: ACTION_HOVER, color: ACTION_INK },
+const CARD_LIVE = '#e07c0a'
+const CARD_LIVE_BORDER = '#ffdfb4'
+const LIVE_PILL = '#fff3e2'
+const LIVE_PILL_HOVER = '#ffe6c7'
+const LIVE_INK = '#8a4b02'
+
+function actionPill(live: boolean) {
+  return {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    bgcolor: live ? LIVE_PILL : ACTION_COLOR,
+    color: live ? LIVE_INK : ACTION_INK,
+    '&:hover': {
+      bgcolor: live ? LIVE_PILL_HOVER : ACTION_HOVER,
+      color: live ? LIVE_INK : ACTION_INK,
+    },
+  }
 }
 
 export default function TimingPanel({
@@ -194,8 +204,8 @@ export default function TimingPanel({
                 p: 1,
                 borderRadius: 2,
                 border: 1,
-                borderColor: active ? CARD_ACTIVE : CARD_IDLE,
-                bgcolor: 'info.main',
+                borderColor: active ? CARD_LIVE_BORDER : CARD_IDLE,
+                bgcolor: active ? CARD_LIVE : 'info.main',
                 color: active ? 'info.contrastText' : 'text.primary',
                 cursor: 'pointer',
                 '&:hover': { borderColor: 'info.light' },
@@ -251,8 +261,8 @@ export default function TimingPanel({
                           borderRadius: 999,
                           border: 1,
                           bgcolor: 'background.paper',
-                          borderColor: ACTION_COLOR,
-                          color: ACTION_INK,
+                          borderColor: active ? CARD_LIVE : ACTION_COLOR,
+                          color: active ? LIVE_INK : ACTION_INK,
                           fontSize: (current) => current.typography.caption.fontSize,
                           '& input': { p: 0, textAlign: 'center' },
                         }}
@@ -266,10 +276,10 @@ export default function TimingPanel({
                           onEditingChange(section.id)
                         }}
                         sx={{
-                          bgcolor: ACTION_COLOR,
-                          color: ACTION_INK,
+                          bgcolor: active ? LIVE_PILL : ACTION_COLOR,
+                          color: active ? LIVE_INK : ACTION_INK,
                           fontWeight: 600,
-                          '&:hover': { bgcolor: ACTION_HOVER },
+                          '&:hover': { bgcolor: active ? LIVE_PILL_HOVER : ACTION_HOVER },
                         }}
                       />
                     )}
@@ -291,7 +301,7 @@ export default function TimingPanel({
                       size="small"
                       aria-label="Play from section"
                       onClick={() => onSeekMs(section.offsetMs)}
-                      sx={ACTION_PILL}
+                      sx={actionPill(active)}
                     >
                       <PlayArrowIcon sx={{ fontSize: 20 }} />
                     </IconButton>
@@ -303,7 +313,7 @@ export default function TimingPanel({
                       onClick={() =>
                         onSectionsChange(sections.filter((current) => current.id !== section.id))
                       }
-                      sx={ACTION_PILL}
+                      sx={actionPill(active)}
                     >
                       <DeleteOutlinedIcon sx={{ fontSize: 20 }} />
                     </IconButton>

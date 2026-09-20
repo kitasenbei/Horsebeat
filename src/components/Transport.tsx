@@ -7,7 +7,7 @@ import PauseIcon from '@mui/icons-material/Pause'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import StopIcon from '@mui/icons-material/Stop'
 
-const RATES = [0.25, 0.5, 0.75, 1]
+const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
 
 type TransportProps = {
   playing: boolean
@@ -63,7 +63,7 @@ export default function Transport({
         sx={{ ml: 0.5 }}
       >
         {RATES.map((entry) => (
-          <ToggleButton key={entry} value={entry} sx={{ px: 0.75, py: 0.25, textTransform: 'none' }}>
+          <ToggleButton key={entry} value={entry} sx={{ px: 0.5, py: 0.25, textTransform: 'none' }}>
             {entry}x
           </ToggleButton>
         ))}

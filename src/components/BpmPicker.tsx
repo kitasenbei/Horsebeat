@@ -19,6 +19,9 @@ type BpmPickerProps = {
 const BPM_COLOR = '#ece7ff'
 const BPM_HOVER = '#dbd1ff'
 const BPM_INK = '#3a1d92'
+const BPM_LIVE = '#fff3e2'
+const BPM_LIVE_HOVER = '#ffe6c7'
+const BPM_LIVE_INK = '#8a4b02'
 
 const MULTIPLIERS = [
   { factor: 0.2, label: '1/5' },
@@ -56,9 +59,9 @@ export default function BpmPicker({
           py: 0.75,
           borderRadius: 999,
           border: 0,
-          bgcolor: active ? BPM_HOVER : BPM_COLOR,
-          color: BPM_INK,
-          '&:hover': { bgcolor: BPM_HOVER },
+          bgcolor: active ? BPM_LIVE : BPM_COLOR,
+          color: active ? BPM_LIVE_INK : BPM_INK,
+          '&:hover': { bgcolor: active ? BPM_LIVE_HOVER : BPM_HOVER },
         }}
       >
         <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>

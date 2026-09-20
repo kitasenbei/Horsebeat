@@ -7,6 +7,7 @@ import ButtonGroup from '@mui/material/ButtonGroup'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
+import Typography from '@mui/material/Typography'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import UndoIcon from '@mui/icons-material/Undo'
 import RedoIcon from '@mui/icons-material/Redo'
@@ -29,6 +30,9 @@ type TopBarProps = {
 }
 
 const MAX_LABEL = 10
+const BRAND_FONT = "'Outfit', system-ui, sans-serif"
+const BRAND_DARK = '#17161a'
+const BRAND_GREEN = '#2f9e44'
 
 const VIEW_ICONS: Record<ViewMode, ReactNode> = {
   amplitude: <GraphicEqIcon fontSize="small" />,
@@ -167,6 +171,26 @@ export default function TopBar({
             </Button>
           </Tooltip>
         </ButtonGroup>
+
+        <Box sx={{ flex: 1 }} />
+
+        <Typography
+          component="span"
+          sx={{
+            fontFamily: BRAND_FONT,
+            fontWeight: 800,
+            fontSize: 24,
+            lineHeight: 1,
+            letterSpacing: 0.2,
+            pr: 1,
+            color: BRAND_DARK,
+          }}
+        >
+          Horse
+          <Box component="span" sx={{ color: BRAND_GREEN, fontWeight: 800 }}>
+            Beat
+          </Box>
+        </Typography>
       </Toolbar>
     </AppBar>
   )

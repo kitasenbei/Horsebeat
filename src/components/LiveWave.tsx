@@ -32,6 +32,13 @@ const SAMPLED = 4096
 
 const EDGE = 3
 
+// How many of the frames just gone are left on the strip behind the live one,
+// and how solid the freshest of them is drawn. Each older one is fainter than
+// the last, so a value that is climbing leaves a fan opening behind it and one
+// that is steady leaves nothing to see.
+const GHOSTS = 5
+const GHOST_ALPHA = 0.45
+
 function ceilingOf(envelope: Float32Array | null): number {
   if (!envelope || envelope.length === 0) return 1
   const stride = Math.max(1, Math.floor(envelope.length / SAMPLED))
@@ -57,6 +64,7 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
   const theme = useTheme()
   const sourceRef = useRef<Float32Array | null>(null)
   const ceilingRef = useRef(1)
+  const pastRef = useRef<number[]>([])
 
   const canvasRef = useCanvas(
     (context, width, height) => {
@@ -64,27 +72,45 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
       if (sourceRef.current !== envelope) {
         sourceRef.current = envelope
         ceilingRef.current = ceilingOf(envelope)
+        pastRef.current = []
+      }
+
+      const middle = height / 2
+
+      const wave = (share: number) => {
+        const reach = (middle - EDGE) * share
+        const halves = Math.round(HALVES_QUIET + (HALVES_LOUD - HALVES_QUIET) * share)
+
+        context.beginPath()
+        for (let x = 0; x <= width; x += 1) {
+          const turn = (x / width) * halves * Math.PI
+          const y = middle - Math.sin(turn) * reach
+          if (x === 0) context.moveTo(x, y)
+          else context.lineTo(x, y)
+        }
+        context.stroke()
       }
 
       const value = readAt(envelope, positionRef.current)
       const share = Math.min(1, value / ceilingRef.current)
-      const middle = height / 2
-      const reach = (middle - EDGE) * share
-      const halves = Math.round(HALVES_QUIET + (HALVES_LOUD - HALVES_QUIET) * share)
+      const past = pastRef.current
 
       context.strokeStyle = theme.palette.primary.main
       context.lineWidth = 1.5
       context.lineJoin = 'round'
-      context.beginPath()
 
-      for (let x = 0; x <= width; x += 1) {
-        const turn = (x / width) * halves * Math.PI
-        const y = middle - Math.sin(turn) * reach
-        if (x === 0) context.moveTo(x, y)
-        else context.lineTo(x, y)
+      // oldest first, so the live wave is drawn over its own trail rather than
+      // under it
+      for (let index = 0; index < past.length; index += 1) {
+        context.globalAlpha = (GHOST_ALPHA * (index + 1)) / (past.length + 1)
+        wave(past[index])
       }
 
-      context.stroke()
+      context.globalAlpha = 1
+      wave(share)
+
+      past.push(share)
+      if (past.length > GHOSTS) past.shift()
     },
     playing,
     `${position}|${envelope?.length}`,

@@ -28,7 +28,7 @@ const SCALES = [
   { bpm: 0.002, ms: 0.1 },
 ]
 
-export const FIT_STEPS = SCALES.length
+const FIT_STEPS = SCALES.length
 
 // The score a grid earns on this audio: the average envelope height at the
 // beats it predicts, against the average everywhere. One means the beats are
@@ -74,7 +74,7 @@ function runningTotal(envelope: Float32Array): Float64Array {
   return sums
 }
 
-export function scoreFit(
+function scoreFit(
   levels: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -132,7 +132,7 @@ export function scoreFit(
 // milliseconds either way score the same. This measures instead of nudging —
 // it finds the peak nearest each predicted beat and fits a line through them,
 // which recovers the offset and the tempo together.
-export function polishFit(
+function polishFit(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -199,7 +199,7 @@ export function polishFit(
 
 // One rung of the ladder: try the neighbours at this scale and keep the best.
 // Called a step at a time so the tuning can be watched rather than waited for.
-export function refineFit(
+function refineFit(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -235,7 +235,7 @@ export function refineFit(
 // Fit a window from a seed, running the whole ladder and polish at once. Used
 // by the scan, where a window is a frame's worth of work rather than a gesture
 // to watch.
-export function fitWindow(
+function fitWindow(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -271,7 +271,7 @@ export function fitWindow(
 // The beat of a grid nearest a moment, never negative: where a section that
 // takes over there should be anchored. Nearest rather than next, so refitting
 // a section cannot walk its start forward a beat at a time.
-export function beatNear(fit: Fit, atMs: number): number {
+function beatNear(fit: Fit, atMs: number): number {
   const beatMs = 60000 / fit.bpm
   let beats = Math.round((atMs - fit.offsetMs) / beatMs)
   let anchor = fit.offsetMs + beats * beatMs
@@ -293,7 +293,6 @@ export function beatNear(fit: Fit, atMs: number): number {
 // are compared against the same picture.
 // divisible by every count a bar is likely to be cut into
 const BAR_ROWS = 240
-const PHASE_ROWS = 960
 const BAR_PARTS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]
 // too few bars and the average is one bar, which agrees with itself
 const MIN_BARS = 4
@@ -308,7 +307,7 @@ const MIN_BARS = 4
 // beats alone, so unlike a comb it cannot be won by a slow grid that samples
 // little and samples it well. It is also unchanged by where the bar starts,
 // which leaves it free to answer about tempo alone.
-export function patternScore(
+function patternScore(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -422,32 +421,9 @@ export function beatWithin(
   return kept.filter((part) => part.share >= best * DENSER_KEEPS).pop()!.bpm
 }
 
-// Where the bar starts, read off the bars laid on top of one another. Averaging
-// every bar of a section puts far more evidence behind the answer than any one
-// of them carries, and the loudest place in that average is the downbeat.
-export function phaseOf(
-  envelope: Float32Array,
-  sampleRate: number,
-  fromMs: number,
-  toMs: number,
-  bpm: number,
-  meter: number,
-): number {
-  const perMs = sampleRate / 1000 / ENVELOPE_HOP
-  const barMs = (60000 / bpm) * Math.max(1, meter)
-  const rows = barProfile(envelope, sampleRate, fromMs, toMs, barMs, PHASE_ROWS)
-  if (!rows) return fromMs
-
-  let peak = 0
-  for (let row = 0; row < PHASE_ROWS; row += 1) if (rows[row] > rows[peak]) peak = row
-
-  // the averaged bar is built from the envelope, which climbs a radius before
-  // the hit that made it
-  return fromMs + (peak / PHASE_ROWS) * barMs + ENVELOPE_RADIUS / perMs
-}
 
 // The best this tempo can do on this stretch, over every phase of one beat.
-export function bestPhase(
+function bestPhase(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -500,7 +476,7 @@ function runsAlready(bpm: number, against: number): boolean {
 // How long a stretch each vote is cast over. Long enough that a bar or two of
 // something else does not decide it, short enough that a song with two tempos
 // still votes for both.
-export const VOTE_WINDOW_MS = 60000
+const VOTE_WINDOW_MS = 60000
 
 export type Vote = {
   fromMs: number
@@ -562,7 +538,7 @@ export function voteStep(
 // A single window's best is not enough to open a section on: where the music
 // thins out, one loose slow grid wins one window and the next window picks
 // something else again, while a vote asks several and keeps what they agree on.
-export function voteTempo(
+function voteTempo(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -581,7 +557,7 @@ export function voteTempo(
 // How well a tempo polled, counted its own way or as any of the counts it
 // shares a pulse with. A stretch that plays every other beat polls for half the
 // tempo, and that is a vote for the same pulse, not against it.
-export function polledAs(vote: Vote, bpm: number): number {
+function polledAs(vote: Vote, bpm: number): number {
   let best = voteFor(vote, bpm)
   for (const times of [2, 3, 4]) {
     best = Math.max(best, voteFor(vote, bpm / times), voteFor(vote, bpm * times))
@@ -589,13 +565,13 @@ export function polledAs(vote: Vote, bpm: number): number {
   return best
 }
 
-export function topVote(vote: Vote): number {
+function topVote(vote: Vote): number {
   let top = 0
   for (const total of vote.totals) if (total > top) top = total
   return top
 }
 
-export function voteFor(vote: Vote, bpm: number): number {
+function voteFor(vote: Vote, bpm: number): number {
   const index = Math.round((bpm - MIN_BPM_SEARCH) / COARSE_BPM_STEP)
   return index >= 0 && index < vote.totals.length ? vote.totals[index] : 0
 }
@@ -626,7 +602,6 @@ export function pickTempo(vote: Vote): number | null {
 // the block that happened to notice it.
 const SETTLE_ROWS = 256
 const SETTLE_BARS = 8
-const SETTLE_ROUNDS = 3
 
 function centred(rows: Float64Array): Float64Array {
   let mean = 0
@@ -663,7 +638,7 @@ function shiftRows(one: Float64Array, other: Float64Array, meter: number): numbe
 // between a stretch's bar and the section's bar. Zero is the picture banding
 // horizontally; anything else is the streak sliding, which is the drift you can
 // see in it.
-export function flatnessOf(
+function flatnessOf(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -697,55 +672,6 @@ export function flatnessOf(
   return slides[slides.length >> 1]
 }
 
-// The tempo that stops the picture sliding, solved rather than searched. The
-// first half of a span and the second half are each averaged into one bar; how
-// far those two sit apart is how far the grid slid between them, and dividing
-// that by the time between them gives the error in the tempo directly. One
-// round of it takes a tempo a fifth of a beat per minute out to within a
-// two-hundredth.
-//
-// A correction is only kept if the picture really did come out flatter, because
-// on a stretch with little to say the two bars can sit apart for reasons that
-// have nothing to do with tempo.
-export function settleFit(
-  envelope: Float32Array,
-  sampleRate: number,
-  fromMs: number,
-  toMs: number,
-  fit: Fit,
-  meter: number,
-): Fit {
-  let best = fit
-  let bestFlat = flatnessOf(envelope, sampleRate, fromMs, toMs, fit, meter)
-
-  for (let round = 0; round < SETTLE_ROUNDS; round += 1) {
-    const barMs = (60000 / best.bpm) * Math.max(1, meter)
-    const bars = Math.floor((toMs - fromMs) / barMs)
-    if (bars < SETTLE_BARS) break
-
-    // both halves start a whole number of bars from the same place, or the
-    // second is read half a bar out and that is what the shift measures
-    const middle = fromMs + Math.floor(bars / 2) * barMs
-    const first = barProfile(envelope, sampleRate, fromMs, middle, barMs, SETTLE_ROWS)
-    const second = barProfile(envelope, sampleRate, middle, fromMs + bars * barMs, barMs, SETTLE_ROWS)
-    if (!first || !second) break
-
-    const slid = (shiftRows(centred(first), centred(second), meter) / SETTLE_ROWS) * barMs
-    const apart = middle - fromMs
-    if (apart <= 0 || slid === 0) break
-
-    const candidate = { bpm: best.bpm * (1 - slid / apart), offsetMs: best.offsetMs }
-    if (candidate.bpm < MIN_BPM_SEARCH / 2 || candidate.bpm > MAX_BPM_SEARCH * 2) break
-
-    const flat = flatnessOf(envelope, sampleRate, fromMs, toMs, candidate, meter)
-    if (flat >= bestFlat) break
-
-    best = candidate
-    bestFlat = flat
-  }
-
-  return best
-}
 
 
 
@@ -811,7 +737,7 @@ const CLIMB_SHARE = 0.55
 // marks, is the climb onto the note rather than the top of it. So every beat of
 // the section is averaged into one, the strongest climb in it is found, and the
 // offset is moved to partway up that climb.
-export function anchorBeat(
+function anchorBeat(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -850,7 +776,7 @@ export function anchorBeat(
   return { bpm: fit.bpm, offsetMs: Math.max(0, fit.offsetMs + shift) }
 }
 
-export type Part = {
+type Part = {
   fromMs: number
   toMs: number
   fit: Fit
@@ -869,8 +795,7 @@ function settleSpan(
   const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
   const phased = bestPhase(envelope, sampleRate, fromMs, toMs, bpm)
   const polished = fitWindow(envelope, sampleRate, fromMs, toMs, phased.fit)
-  const settled = settleFit(envelope, sampleRate, fromMs, toMs, polished, meter)
-  const anchored = { bpm: settled.bpm, offsetMs: beatNear(settled, fromMs) }
+  const anchored = { bpm: polished.bpm, offsetMs: beatNear(polished, fromMs) }
   const barred = alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
   const fit = anchorBeat(envelope, sampleRate, fromMs, toMs, barred)
   return { fromMs, toMs, fit, flat: flatnessOf(envelope, sampleRate, fromMs, toMs, fit, meter) }
@@ -966,7 +891,7 @@ export function splitStep(
 // wants to start a bar: with the offset on a downbeat, a column of four beats
 // is a bar, and the compiled view at that density shows bars rather than an
 // arbitrary window of four.
-export function alignDownbeat(
+function alignDownbeat(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,

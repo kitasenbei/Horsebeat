@@ -64,11 +64,11 @@ const FINE_BPM = 0.01
 // block, which is the resolution the columns are drawn at
 const OFFSET_GAIN = 2
 
-// The panel on the right holds the projection, so the bars are drawn into what
-// is left. Every reading of a pointer position goes through this too, or the
+// A panel either side holds the projections, so the bars are drawn into what is
+// left between them. Every reading of a pointer position goes through this too, or the
 // column under the cursor stops being the column under the cursor.
 function plotWidth(full: number): number {
-  return Math.max(1, full - PROJECTION_WIDTH)
+  return Math.max(1, full - PROJECTION_WIDTH * 2)
 }
 
 export default function BarGrid({
@@ -130,7 +130,13 @@ export default function BarGrid({
 
   const sources = { envelope, loudness, onsets, bands }
   const cacheRef = useRef<{
-    canvases: { canvas: HTMLCanvasElement; top: number; height: number; profile: Float32Array }[]
+    canvases: {
+      canvas: HTMLCanvasElement
+      top: number
+      height: number
+      profile: Float32Array
+      steady: Float32Array
+    }[]
     key: string
   } | null>(null)
 
@@ -195,11 +201,23 @@ export default function BarGrid({
           canvas.width = layer.image.width
           canvas.height = layer.image.height
           canvas.getContext('2d')?.putImageData(layer.image, 0, 0)
-          return { canvas, top: layer.top, height: layer.height, profile: layer.profile }
+          return {
+            canvas,
+            top: layer.top,
+            height: layer.height,
+            profile: layer.profile,
+            steady: layer.steady,
+          }
         }),
       }
       cacheRef.current = cache
     }
+
+    // everything about the bars is drawn in the space between the panels, so
+    // the whole of it moves across together rather than each piece carrying the
+    // offset itself
+    context.save()
+    context.translate(PROJECTION_WIDTH, 0)
 
     context.imageSmoothingEnabled = false
     for (const layer of cache.canvases) {
@@ -220,7 +238,7 @@ export default function BarGrid({
     const column = width / bars.length
     const under =
       hover && bars.length > 0
-        ? (bars[Math.min(bars.length - 1, Math.max(0, Math.floor(hover.x / column)))]?.section ??
+        ? (bars[Math.min(bars.length - 1, Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH) / column)))]?.section ??
           null)
         : null
 
@@ -237,7 +255,7 @@ export default function BarGrid({
     // only across the column under the pointer, so it reads as a position in
     // that slice rather than as a rule over the whole picture
     if (hover && bars.length > 0) {
-      const index = Math.min(bars.length - 1, Math.max(0, Math.floor(hover.x / column)))
+      const index = Math.min(bars.length - 1, Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH) / column)))
       context.fillStyle = HOVER_COLOR
       context.fillRect(index * column, hover.y - HOVER_WIDTH / 2, column, HOVER_WIDTH)
     }
@@ -252,13 +270,27 @@ export default function BarGrid({
       theme.palette.error.main,
     )
 
+    context.restore()
+
     for (const layer of cache.canvases) {
+      // how alike the bars are at each row on the left, how much they add up to
+      // on the right
+      drawProjection(
+        context,
+        layer.steady,
+        0,
+        layer.top,
+        PROJECTION_WIDTH,
+        layer.height,
+        theme.palette.success.main,
+        true,
+      )
       drawProjection(
         context,
         layer.profile,
-        width,
+        PROJECTION_WIDTH + width,
         layer.top,
-        full - width,
+        PROJECTION_WIDTH,
         layer.height,
         theme.palette.text.primary,
       )
@@ -276,7 +308,10 @@ export default function BarGrid({
       event.preventDefault()
 
       const { range: current, applyRange: apply } = zoomRef.current
-      const ratio = Math.min(1, Math.max(0, (event.clientX - bounds.left) / plotWidth(bounds.width)))
+      const ratio = Math.min(
+        1,
+        Math.max(0, (event.clientX - bounds.left - PROJECTION_WIDTH) / plotWidth(bounds.width)),
+      )
       const span = current.end - current.start
       const anchor = current.start + ratio * span
       const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
@@ -297,7 +332,10 @@ export default function BarGrid({
     const bounds = event.currentTarget.getBoundingClientRect()
     if (bounds.width === 0 || bars.length === 0) return null
 
-    const ratio = Math.min(0.999, Math.max(0, (event.clientX - bounds.left) / plotWidth(bounds.width)))
+    const ratio = Math.min(
+      0.999,
+      Math.max(0, (event.clientX - bounds.left - PROJECTION_WIDTH) / plotWidth(bounds.width)),
+    )
     const bar = bars[Math.floor(ratio * bars.length)]
     const span = spans.find((item) => item.section.id === bar.section)
     return span ? { span, bar } : null

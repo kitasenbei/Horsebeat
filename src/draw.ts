@@ -964,6 +964,7 @@ function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
 // a grid off it smears them into one another.
 export type BlockLayer = {
   profile: Float32Array
+  steady: Float32Array
   image: ImageData
   top: number
   height: number
@@ -1011,6 +1012,8 @@ export function renderBarLayers(
     const rows = Math.max(1, Math.min(blockHeight, Math.ceil(slice * frames)))
 
     const profile = new Float64Array(rows)
+    const squares = new Float64Array(rows)
+    let counted = 0
     const image = context.createImageData(columns, rows)
     const pixels = new Uint32Array(image.data.buffer)
     pixels.fill(0xffffffff)
@@ -1021,6 +1024,7 @@ export function renderBarLayers(
       const last = frames - 1
       const top255 = LUT_SIZE - 1
 
+      counted += bars.length
       for (let index = 0; index < bars.length; index += 1) {
         const bar = bars[index]
         const span = bar.end - bar.start
@@ -1032,6 +1036,7 @@ export function renderBarLayers(
           const frame = Math.min(last, Math.max(0, (base + row * step) | 0))
           const value = source[frame * stride + band]
           profile[row] += value
+          squares[row] += value * value
           pixels[row * columns + column] = lut[((value < 1 ? value : 1) * top255 + 0.5) | 0]
         }
       }
@@ -1054,7 +1059,37 @@ export function renderBarLayers(
       for (let row = 0; row < rows; row += 1) shape[row] = (profile[row] - least) / (most - least)
     }
 
-    layers.push({ image, top, height: blockHeight, profile: shape })
+    // How alike the bars are at each row, rather than how much they add up to.
+    // A row where every bar does the same thing is the grid holding; a row
+    // where they differ is the grid landing somewhere new each time. Measured
+    // against the row's own average, because a loud row varies by more than a
+    // quiet one without being any less steady.
+    let summed = 0
+    for (const value of profile) summed += value
+    const floor = (summed / Math.max(1, rows * counted)) * STEADY_FLOOR
+    const spread = new Float64Array(rows)
+    for (let row = 0; row < rows; row += 1) {
+      const mean = profile[row] / Math.max(1, counted)
+      const variance = Math.max(0, squares[row] / Math.max(1, counted) - mean * mean)
+      spread[row] = Math.sqrt(variance) / Math.max(mean, floor)
+    }
+
+    let calmest = Infinity
+    let wildest = -Infinity
+    for (const value of spread) {
+      if (value < calmest) calmest = value
+      if (value > wildest) wildest = value
+    }
+
+    // inverted: the steadiest row reads highest
+    const steady = new Float32Array(rows)
+    if (wildest > calmest) {
+      for (let row = 0; row < rows; row += 1) {
+        steady[row] = (wildest - spread[row]) / (wildest - calmest)
+      }
+    }
+
+    layers.push({ image, top, height: blockHeight, profile: shape, steady })
     top += blockHeight + BLOCK_GAP
   }
 
@@ -1062,6 +1097,11 @@ export function renderBarLayers(
 }
 
 // How wide the projection panel is, and how far off its own edge it sits.
+// How quiet a row has to be before its spread is read against the track's own
+// level rather than against the row: division by something near nothing turns
+// a silence into the wildest row there is.
+const STEADY_FLOOR = 0.2
+
 export const PROJECTION_WIDTH = 74
 const PROJECTION_PAD = 6
 
@@ -1076,11 +1116,14 @@ export function drawProjection(
   width: number,
   height: number,
   color: string,
+  // which edge the graph stands on, so a pair of them lean away from the bars
+  mirrored = false,
 ) {
   if (profile.length === 0 || height <= 0) return
 
-  const from = left + PROJECTION_PAD
   const room = Math.max(1, width - PROJECTION_PAD * 2)
+  const from = mirrored ? left + width - PROJECTION_PAD : left + PROJECTION_PAD
+  const reach = mirrored ? -room : room
 
   context.save()
   context.beginPath()
@@ -1092,7 +1135,7 @@ export function drawProjection(
   for (let row = 0; row < profile.length; row += 1) {
     // the middle of the row's band, so the graph sits where the colour does
     const y = top + ((row + 0.5) / profile.length) * height
-    context.lineTo(from + profile[row] * room, y)
+    context.lineTo(from + profile[row] * reach, y)
   }
   context.lineTo(from, top + height)
   context.closePath()

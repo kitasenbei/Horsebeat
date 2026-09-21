@@ -3,10 +3,8 @@ import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import {
+  ALL_BLOCKS,
   autoSliceBeats,
   curveSignature,
   collectBars,
@@ -14,7 +12,7 @@ import {
   drawSectionBounds,
   drawSliceGuides,
   renderBarLayers,
-  SLICE_STEPS,
+  sectionSignature,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
 import {
@@ -26,6 +24,7 @@ import {
   type Section,
 } from '../timing'
 import { clampRange } from '../range'
+import { useLiveEdit } from '../useLiveEdit'
 import { useRafCallback } from '../useRafCallback'
 import type { Curve } from '../curve'
 import type { Range } from '../range'
@@ -46,7 +45,7 @@ type BarGridProps = {
   onSectionsChange: (sections: Section[]) => void
   onSeek: (position: number) => void
   slice: number | 'auto'
-  onSliceChange: (slice: number | 'auto') => void
+  lane: number | 'all'
 }
 
 const GUIDE_COLOR = '#ffffff'
@@ -58,7 +57,7 @@ const COARSE_BPM = 0.1
 const FINE_BPM = 0.01
 // plain drag covers several slices per screen; ctrl drops to one slice per
 // block, which is the resolution the columns are drawn at
-const OFFSET_GAIN = 4
+const OFFSET_GAIN = 2
 
 export default function BarGrid({
   envelope,
@@ -76,10 +75,13 @@ export default function BarGrid({
   onSectionsChange,
   onSeek,
   slice,
-  onSliceChange,
+  lane,
 }: BarGridProps) {
   const theme = useTheme()
-  const spans = sectionSpans(sections, duration)
+
+  const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
+  const blocks = lane === 'all' ? ALL_BLOCKS : [lane]
+  const spans = sectionSpans(live, duration)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
 
@@ -115,7 +117,6 @@ export default function BarGrid({
   } | null>(null)
 
   const applyRange = useRafCallback(onRangeChange)
-  const applySections = useRafCallback(onSectionsChange)
   const sliceHeightRef = useRef(1)
   const [menu, setMenu] = useState<{ x: number; y: number; at: number; id: string } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
@@ -146,18 +147,22 @@ export default function BarGrid({
       Math.round(width),
       Math.round(height),
       bars.length,
+      // every bar, not just the ends: dragging a section in the middle leaves
+      // the first and last exactly where they were
+      sectionSignature(live),
       bars[0]?.start ?? 0,
       bars[bars.length - 1]?.end ?? 0,
       envelope?.length ?? 0,
       loudness?.length ?? 0,
       onsets?.length ?? 0,
       bands?.length ?? 0,
+      blocks.join(','),
       curve.points.map((point) => `${point.x}:${point.y}`).join(','),
     ].join('|')
 
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
-      const layers = renderBarLayers(context, sources, bars, height, curve)
+      const layers = renderBarLayers(context, sources, bars, height, curve, blocks)
 
       cache = {
         key,
@@ -182,15 +187,30 @@ export default function BarGrid({
     sliceHeightRef.current = Math.max(1, heights[0] ?? 1)
     layoutRef.current = { tops, heights }
 
-    if (tops.length > 0) drawSliceGuides(context, tops[0], heights[0], width, GUIDE_COLOR)
-    if (tops.length > 3) drawSliceGuides(context, tops[3], heights[3], width, GUIDE_COLOR)
+    tops.forEach((top, index) => drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR))
 
-    drawSectionBounds(context, bars, width, height, theme.palette.info.dark)
+    // the section under the pointer is the one a drag would edit, so it is
+    // tinted: the hover position already says which column
+    const column = width / bars.length
+    const under =
+      hover && bars.length > 0
+        ? (bars[Math.min(bars.length - 1, Math.max(0, Math.floor(hover.x / column)))]?.section ??
+          null)
+        : null
+
+    drawSectionBounds(
+      context,
+      bars,
+      width,
+      height,
+      theme.palette.info.dark,
+      under,
+      theme.palette.info.main,
+    )
 
     // only across the column under the pointer, so it reads as a position in
     // that slice rather than as a rule over the whole picture
     if (hover && bars.length > 0) {
-      const column = width / bars.length
       const index = Math.min(bars.length - 1, Math.max(0, Math.floor(hover.x / column)))
       context.fillStyle = HOVER_COLOR
       context.fillRect(index * column, hover.y - HOVER_WIDTH / 2, column, HOVER_WIDTH)
@@ -205,7 +225,8 @@ export default function BarGrid({
       width,
       theme.palette.error.main,
     )
-  }, playing, `${bars.length}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${curveSignature(curve)}`)
+
+  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -267,10 +288,9 @@ export default function BarGrid({
     const spot = timeAt(event)
     if (!spot) return
 
-    // held modifiers skip the menu and move the playhead straight to the
-    // moment under the pointer
-    if (event.ctrlKey && event.shiftKey) {
-      onSeek(spot.at)
+    // right click places a section; ctrl brings up the menu for the rarer edits
+    if (!event.ctrlKey && !event.metaKey) {
+      addAt(spot.at, spot.id)
       return
     }
 
@@ -279,16 +299,18 @@ export default function BarGrid({
 
   const addSection = () => {
     if (!menu) return
-    const inherited = sections.find((section) => section.id === menu.id)?.bpm ?? 120
-    onSectionsChange(
-      sortSections([...sections, createSection(menu.at * duration * 1000, inherited)]),
-    )
+    addAt(menu.at, menu.id)
     setMenu(null)
+  }
+
+  const addAt = (at: number, id: string) => {
+    const inherited = live.find((section) => section.id === id)?.bpm ?? 120
+    onSectionsChange(sortSections([...live, createSection(at * duration * 1000, inherited)]))
   }
 
   const removeSection = () => {
     if (!menu) return
-    onSectionsChange(sections.filter((section) => section.id !== menu.id))
+    onSectionsChange(live.filter((section) => section.id !== menu.id))
     setMenu(null)
   }
 
@@ -355,13 +377,13 @@ export default function BarGrid({
       return
     }
 
-    // up raises the tempo, and dragging down pulls the audio down the column,
-    // which is an earlier offset
+    // dragging down raises the tempo, matching the offset gesture: the hand
+    // pushes the grid the way the audio moves in the column
     const patch: Partial<Section> = drag.tempo
       ? {
           bpm: Math.min(
             MAX_BPM,
-            Math.max(MIN_BPM, drag.bpm - dy * (drag.fine ? FINE_BPM : COARSE_BPM)),
+            Math.max(MIN_BPM, drag.bpm + dy * (drag.fine ? FINE_BPM : COARSE_BPM)),
           ),
         }
       : {
@@ -371,17 +393,24 @@ export default function BarGrid({
           ),
         }
 
-    applySections(
-      sortSections(
-        sections.map((section) => (section.id === drag.id ? { ...section, ...patch } : section)),
-      ),
+    const next = sortSections(
+      live.map((section) => (section.id === drag.id ? { ...section, ...patch } : section)),
     )
+    editSections(next)
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current
     dragRef.current = null
     setDragging(false)
     event.currentTarget.releasePointerCapture(event.pointerId)
+    settleSections()
+
+    // a press that never moved far enough to pick an axis was a click, and a
+    // click moves the playhead to the moment under the pointer
+    if (!drag || drag.axis !== 'none' || drag.tempo) return
+    const spot = timeAt(event)
+    if (spot) onSeek(spot.at)
   }
 
   return (
@@ -403,11 +432,12 @@ export default function BarGrid({
           cursor: dragging ? 'move' : 'default',
         }}
       />
+      {menu ? (
       <Menu
-        open={menu !== null}
+        open
         onClose={() => setMenu(null)}
         anchorReference="anchorPosition"
-        anchorPosition={menu ? { top: menu.y, left: menu.x } : undefined}
+        anchorPosition={{ top: menu.y, left: menu.x }}
       >
         <MenuItem
           dense
@@ -425,35 +455,7 @@ export default function BarGrid({
           Remove this section
         </MenuItem>
       </Menu>
-      <Paper
-        elevation={3}
-        sx={{
-          position: 'absolute',
-          top: 6,
-          right: 6,
-          borderRadius: 999,
-          overflow: 'hidden',
-        }}
-      >
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={slice}
-          onChange={(_, next) => {
-            if (next !== null) onSliceChange(next as number | 'auto')
-          }}
-          sx={{ '& .MuiToggleButton-root': { px: 0.75, py: 0.25, border: 0, fontSize: 11 } }}
-        >
-          <ToggleButton value="auto" aria-label="Automatic slice length">
-            auto
-          </ToggleButton>
-          {SLICE_STEPS.map((entry) => (
-            <ToggleButton key={entry} value={entry} aria-label={`${entry} beats per column`}>
-              {entry}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      </Paper>
+      ) : null}
     </Box>
   )
 }

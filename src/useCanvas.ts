@@ -19,6 +19,10 @@ export function useCanvas(draw: Draw, animate = false, signature?: string | numb
     const ratio = window.devicePixelRatio || 1
     const width = canvas.clientWidth
     const height = canvas.clientHeight
+
+    // a hidden canvas measures zero, and drawing into it throws: one throw
+    // inside the animation loop stops every canvas on the page
+    if (width === 0 || height === 0) return
     const backingWidth = Math.round(width * ratio)
     const backingHeight = Math.round(height * ratio)
 
@@ -69,8 +73,12 @@ export function useCanvas(draw: Draw, animate = false, signature?: string | numb
     if (!animate) return
 
     let frame = requestAnimationFrame(function tick() {
-      render()
-      paintedRef.current = signatureRef.current
+      try {
+        render()
+        paintedRef.current = signatureRef.current
+      } catch {
+        // a failed frame must not take the loop down with it
+      }
       frame = requestAnimationFrame(tick)
     })
 

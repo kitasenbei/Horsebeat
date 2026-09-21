@@ -3,7 +3,7 @@ import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle, HANDLE_WIDTH, sectionSignature } from '../draw'
 import { useCanvas } from '../useCanvas'
-import { useRafCallback } from '../useRafCallback'
+import { useLiveEdit } from '../useLiveEdit'
 import { RAIL_HEIGHT } from './PlayheadRail'
 import { sortSections, type Section } from '../timing'
 import type { Range } from '../range'
@@ -22,7 +22,7 @@ export default function SectionRail({
   onSectionsChange,
 }: SectionRailProps) {
   const dragRef = useRef<string | null>(null)
-  const applySections = useRafCallback(onSectionsChange)
+  const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
   const [hovered, setHovered] = useState<string | null>(null)
   const theme = useTheme()
   const color = theme.palette.info.main
@@ -32,7 +32,7 @@ export default function SectionRail({
 
   const canvasRef = useCanvas((context, width, height) => {
     if (duration <= 0) return
-    for (const section of sections) {
+    for (const section of live) {
       drawPlayheadHandle(
         context,
         offsetOf(section),
@@ -42,7 +42,7 @@ export default function SectionRail({
         hovered === section.id ? hoverColor : color,
       )
     }
-  }, false, `${range.start}|${range.end}|${duration}|${hovered}|${sectionSignature(sections)}`)
+  }, false, `${range.start}|${range.end}|${duration}|${hovered}|${sectionSignature(live)}`)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current
@@ -58,7 +58,7 @@ export default function SectionRail({
     const grab = (HANDLE_WIDTH / canvas.clientWidth) * (range.end - range.start)
     let found: string | null = null
     let best = grab
-    for (const section of sections) {
+    for (const section of live) {
       const distance = Math.abs(offsetOf(section) - at)
       if (distance <= best) {
         best = distance
@@ -86,9 +86,9 @@ export default function SectionRail({
       return
     }
 
-    applySections(
+    editSections(
       sortSections(
-        sections.map((section) =>
+        live.map((section) =>
           section.id === id ? { ...section, offsetMs: Math.max(0, at * duration * 1000) } : section,
         ),
       ),
@@ -97,6 +97,7 @@ export default function SectionRail({
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
     dragRef.current = null
+    settleSections()
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
 

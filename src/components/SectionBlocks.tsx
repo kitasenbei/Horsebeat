@@ -9,10 +9,12 @@ import { clampRange, type Range } from '../range'
 type SectionBlocksProps = {
   sections: Section[]
   duration: number
+  range: Range
   position: number
   positionRef: RefObject<number>
   playing: boolean
   onRangeChange: (range: Range) => void
+  onSeek: (position: number) => void
 }
 
 export const BLOCK_HEIGHT = 18
@@ -21,10 +23,12 @@ const LIVE_COLOR = '#e07c0a'
 export default function SectionBlocks({
   sections,
   duration,
+  range,
   position,
   positionRef,
   playing,
   onRangeChange,
+  onSeek,
 }: SectionBlocksProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const theme = useTheme()
@@ -46,14 +50,16 @@ export default function SectionBlocks({
       },
       hovered,
       `600 10px ${theme.typography.fontFamily}`,
+      range,
     )
-  }, playing, `${duration}|${hovered}|${position}|${sectionSignature(sections)}`)
+  }, playing, `${duration}|${hovered}|${position}|${range.start}|${range.end}|${sectionSignature(sections)}`)
 
   const spanAt = (clientX: number) => {
     const canvas = canvasRef.current
     if (!canvas) return null
     const bounds = canvas.getBoundingClientRect()
-    const at = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
+    const ratio = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width))
+    const at = range.start + ratio * (range.end - range.start)
     return sectionSpans(sections, duration).find((item) => at >= item.start && at <= item.end) ?? null
   }
 
@@ -69,7 +75,13 @@ export default function SectionBlocks({
       onPointerLeave={() => setHovered(null)}
       onClick={(event) => {
         const item = spanAt(event.clientX)
-        if (item) onRangeChange(clampRange({ start: item.start, end: item.end }))
+        if (!item) return
+
+        // the window keeps the size it had and travels to the section, so the
+        // scale you were reading at does not change under you
+        const span = range.end - range.start
+        onRangeChange(clampRange({ start: item.start, end: item.start + span }))
+        onSeek(item.start)
       }}
       sx={{
         display: 'block',

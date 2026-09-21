@@ -26,11 +26,18 @@ export type SectionSpan = {
   beat: number
 }
 
+// Every canvas and every draw asks for these, so they are cached against the
+// array they came from: the list only changes when an edit replaces it.
+const spanCache = new WeakMap<Section[], { duration: number; spans: SectionSpan[] }>()
+
 export function sectionSpans(sections: Section[], duration: number): SectionSpan[] {
   if (duration <= 0) return []
 
+  const cached = spanCache.get(sections)
+  if (cached && cached.duration === duration) return cached.spans
+
   const sorted = sortSections(sections)
-  return sorted.map((section, index) => {
+  const spans = sorted.map((section, index) => {
     const next = sorted[index + 1]
     return {
       section,
@@ -39,4 +46,7 @@ export function sectionSpans(sections: Section[], duration: number): SectionSpan
       beat: 60 / section.bpm / duration,
     }
   })
+
+  spanCache.set(sections, { duration, spans })
+  return spans
 }

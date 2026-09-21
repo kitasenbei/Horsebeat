@@ -11,6 +11,7 @@ import PlayheadRail from './components/PlayheadRail'
 import MarkerRail from './components/MarkerRail'
 import SectionRail from './components/SectionRail'
 import SectionBlocks from './components/SectionBlocks'
+import RangeStrip from './components/RangeStrip'
 import VerticalWaveform from './components/VerticalWaveform'
 import RulerSlider from './components/RulerSlider'
 import AnalysisLanes from './components/AnalysisLanes'
@@ -20,6 +21,7 @@ import CurvePanel from './components/CurvePanel'
 import TimingPanel from './components/TimingPanel'
 import BeatFrames from './components/BeatFrames'
 import BarGrid from './components/BarGrid'
+import BarGridControls from './components/BarGridControls'
 import {
   computeBands,
   computeLoudness,
@@ -90,6 +92,7 @@ export default function App() {
   const [framesExpanded, setFramesExpanded] = useState(false)
   const [barGrid, setBarGrid] = useState(true)
   const [slice, setSlice] = useState<number | 'auto'>('auto')
+  const [lane, setLane] = useState<number | 'all'>(0)
   const [follow, setFollow] = useState(false)
   const touchedRef = useRef(0)
 
@@ -425,7 +428,7 @@ export default function App() {
               />
             </Box>
             {barGrid ? (
-              <Box sx={{ flex: 1, minHeight: 0 }}>
+              <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
                 <BarGrid
                   envelope={envelope}
                   loudness={loudness}
@@ -442,6 +445,12 @@ export default function App() {
                   onSectionsChange={setSections}
                   onSeek={seek}
                   slice={slice}
+                  lane={lane}
+                />
+                <BarGridControls
+                  lane={lane}
+                  slice={slice}
+                  onLaneChange={setLane}
                   onSliceChange={setSlice}
                 />
               </Box>
@@ -631,10 +640,31 @@ export default function App() {
           <SectionBlocks
             sections={sections}
             duration={duration}
+            range={range}
             position={position}
             positionRef={positionRef}
             playing={playing}
             onRangeChange={changeRange}
+            onSeek={seek}
+          />
+          <PlayheadRail
+            position={position}
+            positionRef={positionRef}
+            playing={playing}
+            range={range}
+            enabled={Boolean(samples)}
+            onSeek={seek}
+          />
+          <RangeStrip
+            envelope={envelope}
+            sections={sections}
+            duration={duration}
+            curve={curve}
+            range={range}
+            position={position}
+            positionRef={positionRef}
+            playing={playing}
+            onSeek={seek}
           />
           <PlayheadRail
             position={position}
@@ -643,7 +673,7 @@ export default function App() {
             enabled={Boolean(peaks)}
             onSeek={seek}
           />
-          <Box sx={{ height: 96 }}>
+          <Box sx={{ height: 64 }}>
             <Overview
               peaks={peaks}
               position={position}

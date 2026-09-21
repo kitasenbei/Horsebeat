@@ -468,15 +468,20 @@ export function drawSectionBlocks(
   palette: BlockPalette,
   hovered: string | null,
   font: string,
+  range: Range = { start: 0, end: 1 },
 ) {
   const spans = sectionSpans(sections, duration)
+  const span = Math.max(1e-9, range.end - range.start)
+  const project = (at: number) => ((at - range.start) / span) * width
   context.textAlign = 'center'
   context.textBaseline = 'middle'
   context.font = font
 
   spans.forEach((item, index) => {
-    const left = item.start * width
-    const right = item.end * width
+    if (item.end < range.start || item.start > range.end) return
+
+    const left = Math.max(-4, project(item.start))
+    const right = Math.min(width + 4, project(item.end))
     const box = Math.max(2, right - left - 2)
     const live = position >= item.start && position <= item.end
 
@@ -855,9 +860,16 @@ export type BarSources = {
   bands: Float32Array | null
 }
 
-export function blockHeights(height: number): number[] {
-  const usable = Math.max(0, height - BLOCK_GAP * (BLOCK_WEIGHTS.length - 1))
-  return BLOCK_WEIGHTS.map((weight) => Math.floor(usable * weight))
+export const BLOCK_LABELS = ['Wave', 'Loud', 'Hits', 'Band']
+export const ALL_BLOCKS = [0, 1, 2, 3]
+
+// the chosen blocks share the height in proportion to their weights, so one
+// block on its own fills the view
+export function blockHeights(height: number, blocks: number[] = ALL_BLOCKS): number[] {
+  const weights = blocks.map((block) => BLOCK_WEIGHTS[block])
+  const total = weights.reduce((sum, weight) => sum + weight, 0) || 1
+  const usable = Math.max(0, height - BLOCK_GAP * (blocks.length - 1))
+  return weights.map((weight) => Math.floor((usable * weight) / total))
 }
 
 export function blockPanels(block: number): number {
@@ -934,10 +946,11 @@ export function renderBarLayers(
   bars: Bar[],
   height: number,
   curve: Curve,
+  blocks: number[] = ALL_BLOCKS,
 ): BlockLayer[] {
   if (bars.length === 0) return []
 
-  const heights = blockHeights(height)
+  const heights = blockHeights(height, blocks)
   const luts = [
     buildLut(curve, waveRgb),
     buildLut(curve, levelRgb),
@@ -948,8 +961,9 @@ export function renderBarLayers(
   const layers: BlockLayer[] = []
 
   let top = 0
-  for (let block = 0; block < heights.length; block += 1) {
-    const blockHeight = Math.max(1, heights[block])
+  for (let slot = 0; slot < blocks.length; slot += 1) {
+    const block = blocks[slot]
+    const blockHeight = Math.max(1, heights[slot])
     const panels = blockPanels(block)
     const columns = bars.length * panels
     const source = block === 3 ? sources.bands : values[block]
@@ -1008,6 +1022,8 @@ export function drawSectionBounds(
   width: number,
   height: number,
   color: string,
+  highlight: string | null = null,
+  hue = color,
 ) {
   if (bars.length === 0) return
 
@@ -1025,6 +1041,21 @@ export function drawSectionBounds(
     context.stroke()
   }
   context.globalAlpha = 1
+
+  if (!highlight) return
+
+  const first = bars.findIndex((bar) => bar.section === highlight)
+  if (first < 0) return
+  let last = first
+  while (last + 1 < bars.length && bars[last + 1].section === highlight) last += 1
+
+  // the hue blend takes the fill's hue and keeps the luminance underneath, so
+  // the section reads as marked without losing the shape it is showing
+  context.save()
+  context.globalCompositeOperation = 'hue'
+  context.fillStyle = hue
+  context.fillRect(first * column, 0, (last - first + 1) * column, height)
+  context.restore()
 }
 
 export function drawSliceGuides(
@@ -1089,6 +1120,13 @@ export function curveSignature(curve: Curve): string {
   return curve.points.map((point) => `${point.x}:${point.y}`).join(',')
 }
 
+const signatureCache = new WeakMap<Section[], string>()
+
 export function sectionSignature(sections: Section[]): string {
-  return sections.map((section) => `${section.offsetMs}:${section.bpm}`).join(',')
+  const cached = signatureCache.get(sections)
+  if (cached !== undefined) return cached
+
+  const signature = sections.map((section) => `${section.offsetMs}:${section.bpm}`).join(',')
+  signatureCache.set(sections, signature)
+  return signature
 }

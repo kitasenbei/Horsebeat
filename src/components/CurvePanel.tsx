@@ -14,7 +14,6 @@ import FilterAltIcon from '@mui/icons-material/FilterAlt'
 import BoltIcon from '@mui/icons-material/Bolt'
 import TonalityIcon from '@mui/icons-material/Tonality'
 import ContrastIcon from '@mui/icons-material/Contrast'
-import Tooltip from '@mui/material/Tooltip'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
@@ -283,11 +282,15 @@ export default function CurvePanel({
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
             {PRESETS.map((preset) => (
-              <Tooltip key={preset.title} title={preset.title}>
-                <IconButton size="small" onClick={() => onCurveChange(preset.curve)}>
-                  {preset.icon}
-                </IconButton>
-              </Tooltip>
+              <IconButton
+                key={preset.title}
+                size="small"
+                title={preset.title}
+                aria-label={preset.title}
+                onClick={() => onCurveChange(preset.curve)}
+              >
+                {preset.icon}
+              </IconButton>
             ))}
           </Box>
           <Button

@@ -1,0 +1,26 @@
+# One static site added to the compose project that already runs on the host.
+#
+# The project name has to match that one, so the container joins its default
+# network and the shared Caddy can resolve `horsebeat-web` by name. It comes
+# from COMPOSE_PROJECT, set in the deploy environment, so this file names no
+# host of its own.
+#
+# HorseBeat has no API, no database and no server-side state, so there is no
+# image to build: stock nginx serves a directory that CI keeps in sync. The
+# bundle is a bind mount rather than a baked image, which is why a deploy is a
+# file copy and needs no container restart.
+#
+# Caddy is deliberately not declared here. It already mounts the site block
+# directory, and declaring the same mount again makes a full-stack recreate
+# fail on a duplicate mount point.
+
+name: ${COMPOSE_PROJECT}
+
+services:
+    horsebeat-web:
+        image: nginx:alpine
+        volumes:
+            - /opt/horsebeat/dist:/usr/share/nginx/html:ro
+        expose:
+            - "80"
+        restart: unless-stopped

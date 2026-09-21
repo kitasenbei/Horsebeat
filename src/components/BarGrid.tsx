@@ -6,12 +6,10 @@ import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import {
   autoSliceBeats,
-  BLOCK_GAP,
-  blockHeights,
   collectBars,
   drawColumnCursor,
   drawSliceGuides,
-  renderBarColumns,
+  renderBarLayers,
   SLICE_STEPS,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
@@ -74,7 +72,10 @@ export default function BarGrid({
   const bars = active ? collectBars(active, beats) : []
 
   const sources = { envelope, loudness, onsets, bands }
-  const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
+  const cacheRef = useRef<{
+    canvases: { canvas: HTMLCanvasElement; top: number; height: number }[]
+    key: string
+  } | null>(null)
 
   const canvasRef = useCanvas((context, width, height) => {
     if (bars.length === 0) return
@@ -95,31 +96,30 @@ export default function BarGrid({
 
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
-      const layer = cache?.canvas ?? document.createElement('canvas')
-      layer.width = Math.max(1, Math.round(width))
-      layer.height = Math.max(1, Math.round(height))
-      const layerContext = layer.getContext('2d')
-      if (!layerContext) return
-      layerContext.putImageData(
-        renderBarColumns(layerContext, sources, bars, layer.width, layer.height, curve),
-        0,
-        0,
-      )
-      cache = { canvas: layer, key }
+      const layers = renderBarLayers(context, sources, bars, height, curve)
+
+      cache = {
+        key,
+        canvases: layers.map((layer) => {
+          const canvas = document.createElement('canvas')
+          canvas.width = layer.image.width
+          canvas.height = layer.image.height
+          canvas.getContext('2d')?.putImageData(layer.image, 0, 0)
+          return { canvas, top: layer.top, height: layer.height }
+        }),
+      }
       cacheRef.current = cache
     }
 
-    context.drawImage(cache.canvas, 0, 0, width, height)
-
-    const tops: number[] = []
-    let top = 0
-    for (const blockHeight of blockHeights(height)) {
-      tops.push(top)
-      top += blockHeight + BLOCK_GAP
+    context.imageSmoothingEnabled = false
+    for (const layer of cache.canvases) {
+      context.drawImage(layer.canvas, 0, layer.top, width, layer.height)
     }
 
-    const heights = blockHeights(height)
-    drawSliceGuides(context, tops[0], heights[0], width, GUIDE_COLOR)
+    const heights = cache.canvases.map((layer) => layer.height)
+    const tops = cache.canvases.map((layer) => layer.top)
+
+    if (tops.length > 0) drawSliceGuides(context, tops[0], heights[0], width, GUIDE_COLOR)
     if (tops.length > 3) drawSliceGuides(context, tops[3], heights[3], width, GUIDE_COLOR)
 
     drawColumnCursor(

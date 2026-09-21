@@ -17,6 +17,7 @@ type TransportProps = {
   rate: number
   onRateChange: (rate: number) => void
   above?: ReactNode
+  left?: ReactNode
   right?: ReactNode
 }
 
@@ -28,6 +29,7 @@ export default function Transport({
   rate,
   onRateChange,
   above,
+  left,
   right,
 }: TransportProps) {
   return (
@@ -38,7 +40,7 @@ export default function Transport({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 0.5,
-        minHeight: 34,
+        minHeight: left ? 60 : 34,
       }}
     >
       <IconButton
@@ -68,6 +70,18 @@ export default function Transport({
           </ToggleButton>
         ))}
       </ToggleButtonGroup>
+      {left ? (
+        <Box
+          sx={{
+            position: 'absolute',
+            left: 0,
+            top: '50%',
+            transform: 'translateY(-50%)',
+          }}
+        >
+          {left}
+        </Box>
+      ) : null}
       {above ? (
         <Box
           sx={{

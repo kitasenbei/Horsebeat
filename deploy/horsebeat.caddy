@@ -1,0 +1,25 @@
+# Site block for horsebeat.studio.
+#
+# The host already runs a Caddy container that terminates TLS for everything on
+# it, and its Caddyfile imports every site block dropped into a directory. The
+# deploy copies this file there and reloads Caddy.
+#
+# The domain is written here rather than read from the host environment file,
+# because that file is not deployed by CI and adding a key to it would mean
+# editing the host by hand before this could ever serve a request.
+#
+# Caddy obtains the certificate for this name on its own, so horsebeat.studio
+# has to resolve to that host and port 80 has to stay reachable: the ACME
+# challenge arrives there.
+
+horsebeat.studio {
+    encode gzip
+
+    # A container of our own serves the bundle. Caddy only terminates TLS and
+    # hands the request over.
+    reverse_proxy horsebeat-web:80
+}
+
+www.horsebeat.studio {
+    redir https://horsebeat.studio{uri} permanent
+}

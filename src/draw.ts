@@ -852,16 +852,6 @@ export type BarSources = {
   bands: Float32Array | null
 }
 
-function sampleAt(values: Float32Array, at: number, stride = 1): number {
-  const frames = values.length / stride
-  const index = Math.min(frames - 1, Math.max(0, Math.floor(at * frames)))
-  let value = 0
-  for (let offset = 0; offset < stride; offset += 1) {
-    value = Math.max(value, values[index * stride + offset])
-  }
-  return Math.min(1, value)
-}
-
 export function blockHeights(height: number): number[] {
   const usable = Math.max(0, height - BLOCK_GAP * (BLOCK_WEIGHTS.length - 1))
   return BLOCK_WEIGHTS.map((weight) => Math.floor(usable * weight))
@@ -908,79 +898,101 @@ function waveRgb(value: number) {
   return rampRgb(WAVE_RGB, value)
 }
 
-export function renderBarColumns(
+const LUT_SIZE = 256
+
+function buildLut(curve: Curve, color: (value: number) => [number, number, number]): Uint32Array {
+  const lut = new Uint32Array(LUT_SIZE)
+
+  for (let step = 0; step < LUT_SIZE; step += 1) {
+    const [red, green, blue] = color(applyCurve(step / (LUT_SIZE - 1), curve))
+    lut[step] = (255 << 24) | (Math.round(blue) << 16) | (Math.round(green) << 8) | Math.round(red)
+  }
+
+  return lut
+}
+
+function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
+  return buildLut(curve, (value) => [
+    255 + (rgb[0] - 255) * value,
+    255 + (rgb[1] - 255) * value,
+    255 + (rgb[2] - 255) * value,
+  ])
+}
+
+export type BlockLayer = {
+  image: ImageData
+  top: number
+  height: number
+}
+
+export function renderBarLayers(
   context: CanvasRenderingContext2D,
   sources: BarSources,
   bars: Bar[],
-  width: number,
   height: number,
   curve: Curve,
-): ImageData {
-  const image = context.createImageData(Math.max(1, width), Math.max(1, height))
-  const pixels = image.data
-  pixels.fill(255)
-
-  if (bars.length === 0) return image
+): BlockLayer[] {
+  if (bars.length === 0) return []
 
   const heights = blockHeights(height)
-  const put = (x: number, y: number, rgb: [number, number, number]) => {
-    const offset = (y * width + x) * 4
-    pixels[offset] = rgb[0]
-    pixels[offset + 1] = rgb[1]
-    pixels[offset + 2] = rgb[2]
-  }
+  const luts = [
+    buildLut(curve, waveRgb),
+    buildLut(curve, levelRgb),
+    buildLut(curve, heatRgb),
+    ...BAND_ORDER.map((band) => bandLut(curve, BAND_RGB[band])),
+  ]
+  const values = [sources.envelope, sources.loudness, sources.onsets]
+  const layers: BlockLayer[] = []
 
   let top = 0
   for (let block = 0; block < heights.length; block += 1) {
-    const blockHeight = heights[block]
-
+    const blockHeight = Math.max(1, heights[block])
     const panels = blockPanels(block)
-    const panelWidth = width / panels
-    const panelColumn = panelWidth / bars.length
+    const columns = bars.length * panels
+    const source = block === 3 ? sources.bands : values[block]
 
-    for (let cell = 0; cell < bars.length * panels; cell += 1) {
-      const panel = Math.floor(cell / bars.length)
-      const index = cell % bars.length
-      const bar = bars[index]
-      const span = bar.end - bar.start
-      const offset = panel * panelWidth
-      const left = Math.round(offset + index * panelColumn)
-      const right = Math.max(left + 1, Math.round(offset + (index + 1) * panelColumn))
+    if (!source) {
+      top += blockHeight + BLOCK_GAP
+      continue
+    }
 
-      for (let row = 0; row < blockHeight; row += 1) {
-        const y = top + row
-        if (y >= height) break
-        const at = bar.start + (row / blockHeight) * span
+    // a slice usually spans fewer source frames than the block has pixel rows,
+    // so render one row per frame and let the canvas scale it up
+    const stride = block === 3 ? 3 : 1
+    const frames = source.length / stride
+    const slice = bars[0].end - bars[0].start
+    const rows = Math.max(1, Math.min(blockHeight, Math.ceil(slice * frames)))
 
-        if (block === 0 && sources.envelope) {
-          const rgb = waveRgb(applyCurve(sampleAt(sources.envelope, at), curve))
-          for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
-        } else if (block === 1 && sources.loudness) {
-          const rgb = levelRgb(applyCurve(sampleAt(sources.loudness, at), curve))
-          for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
-        } else if (block === 2 && sources.onsets) {
-          const rgb = heatRgb(applyCurve(sampleAt(sources.onsets, at), curve))
-          for (let x = left; x < right && x < width; x += 1) put(x, y, rgb)
-        } else if (block === 3 && sources.bands) {
-          const band = BAND_ORDER[panel]
-          const frames = sources.bands.length / 3
-          const frame = Math.min(frames - 1, Math.max(0, Math.floor(at * frames)))
-          const value = applyCurve(Math.min(1, sources.bands[frame * 3 + band]), curve)
-          const rgb = BAND_RGB[band]
-          const mixed: [number, number, number] = [
-            255 + (rgb[0] - 255) * value,
-            255 + (rgb[1] - 255) * value,
-            255 + (rgb[2] - 255) * value,
-          ]
-          for (let x = left; x < right && x < width; x += 1) put(x, y, mixed)
+    const image = context.createImageData(columns, rows)
+    const pixels = new Uint32Array(image.data.buffer)
+    pixels.fill(0xffffffff)
+
+    for (let panel = 0; panel < panels; panel += 1) {
+      const lut = block === 3 ? luts[3 + panel] : luts[block]
+      const band = block === 3 ? BAND_ORDER[panel] : 0
+      const last = frames - 1
+      const top255 = LUT_SIZE - 1
+
+      for (let index = 0; index < bars.length; index += 1) {
+        const bar = bars[index]
+        const span = bar.end - bar.start
+        const column = panel * bars.length + index
+        const base = bar.start * frames
+        const step = (span * frames) / rows
+
+        for (let row = 0; row < rows; row += 1) {
+          const frame = Math.min(last, Math.max(0, (base + row * step) | 0))
+          const value = source[frame * stride + band]
+          pixels[row * columns + column] = lut[((value < 1 ? value : 1) * top255 + 0.5) | 0]
         }
       }
     }
 
+    layers.push({ image, top, height: blockHeight })
     top += blockHeight + BLOCK_GAP
   }
 
-  return image
+  return layers
 }
 
 export const CURSOR_WIDTH = 3

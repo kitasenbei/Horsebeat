@@ -13,6 +13,7 @@ type RulerSliderProps = {
   pixelsPerStep?: number
   majorEvery?: number
   unit?: string
+  disabled?: boolean
   format?: (value: number) => string
   onChange: (value: number) => void
 }
@@ -27,6 +28,7 @@ export default function RulerSlider({
   pixelsPerStep = 8,
   majorEvery = 5,
   unit,
+  disabled = false,
   format,
   onChange,
 }: RulerSliderProps) {
@@ -60,19 +62,25 @@ export default function RulerSlider({
       const major = Math.round(tick / step) % majorEvery === 0
       const length = major ? 14 : 7
 
-      context.strokeStyle = major ? theme.palette.text.secondary : theme.palette.text.disabled
+      context.strokeStyle = disabled
+        ? theme.palette.action.disabled
+        : major
+          ? theme.palette.text.secondary
+          : theme.palette.text.disabled
       context.beginPath()
       context.moveTo(x, baseline - length)
       context.lineTo(x, baseline)
       context.stroke()
 
       if (major) {
-        context.fillStyle = theme.palette.text.secondary
+        context.fillStyle = disabled
+          ? theme.palette.action.disabled
+          : theme.palette.text.secondary
         context.fillText(String(Math.round(tick)), x, baseline + 2)
       }
     }
 
-    context.strokeStyle = theme.palette.error.main
+    context.strokeStyle = disabled ? theme.palette.action.disabled : theme.palette.error.main
     context.lineWidth = 2
     context.beginPath()
     context.moveTo(Math.round(middle) + 0.5, 0)
@@ -81,6 +89,7 @@ export default function RulerSlider({
   })
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (disabled) return
     dragRef.current = { clientX: event.clientX, value }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -112,7 +121,7 @@ export default function RulerSlider({
           width: '100%',
           height: HEIGHT,
           touchAction: 'none',
-          cursor: 'ew-resize',
+          cursor: disabled ? 'default' : 'ew-resize',
         }}
       />
       <Typography
@@ -124,7 +133,7 @@ export default function RulerSlider({
           transform: 'translateX(-50%)',
           px: 0.5,
           bgcolor: 'background.paper',
-          color: 'text.primary',
+          color: disabled ? 'text.disabled' : 'text.primary',
         }}
       >
         {format ? format(value) : unit ? `${value} ${unit}` : value}

@@ -1,0 +1,90 @@
+# Builds the bundle and copies it to a host that already terminates TLS with a
+# shared Caddy container.
+#
+# DEPLOY_STACK_DIR is that stack's directory on the host and DEPLOY_PROJECT its
+# compose project name, both repository variables, so no host of ours is named
+# in this file.
+#
+# Every docker call over ssh ends in `</dev/null`. The script arrives on
+# standard input, and a docker command that attaches stdin eats the rest of it,
+# which exits 0 having done half the work.
+
+name: deploy
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+concurrency:
+    group: deploy
+    cancel-in-progress: false
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Check
+              run: |
+                  npx tsc -b
+                  npx oxlint src
+
+            - run: npm run build
+
+            - name: Authorise the server
+              run: |
+                  mkdir -p ~/.ssh
+                  printf '%s' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+                  chmod 600 ~/.ssh/id_deploy
+                  printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+            - name: Ship the bundle
+              env:
+                  DESTINATION: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER_IP }}
+                  STACK: ${{ vars.DEPLOY_STACK_DIR }}
+              run: |
+                  ssh -i ~/.ssh/id_deploy "$DESTINATION" \
+                      "mkdir -p /opt/horsebeat/dist $STACK/caddy-conf.d" </dev/null
+
+                  # --delete so a file dropped from the build leaves the server
+                  # too. The directory itself is never replaced: Caddy and nginx
+                  # hold a bind mount to this inode and would keep serving the
+                  # old one.
+                  rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" \
+                      dist/ "$DESTINATION:/opt/horsebeat/dist/"
+
+                  scp -i ~/.ssh/id_deploy deploy/horsebeat.caddy \
+                      "$DESTINATION:$STACK/caddy-conf.d/horsebeat.caddy"
+                  scp -i ~/.ssh/id_deploy deploy/docker-compose.horsebeat.yml \
+                      "$DESTINATION:$STACK/docker-compose.horsebeat.yml"
+
+            - name: Start the site
+              env:
+                  DESTINATION: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER_IP }}
+                  STACK: ${{ vars.DEPLOY_STACK_DIR }}
+                  COMPOSE_PROJECT: ${{ vars.DEPLOY_PROJECT }}
+              run: |
+                  # Only our own service is named, so everything else on the
+                  # host is left alone. Caddy is reloaded rather than recreated
+                  # for the same reason: a recreate from these two files would
+                  # lose the settings its own stack gives it.
+                  ssh -i ~/.ssh/id_deploy "$DESTINATION" \
+                      "STACK='$STACK' COMPOSE_PROJECT='$COMPOSE_PROJECT' bash -s" <<'REMOTE'
+                  set -e
+                  cd "$STACK"
+                  export COMPOSE_PROJECT
+                  docker compose -f docker-compose.yml -f docker-compose.horsebeat.yml \
+                      up -d horsebeat-web </dev/null
+                  docker compose exec -T caddy \
+                      caddy reload --config /etc/caddy/Caddyfile </dev/null
+                  REMOTE

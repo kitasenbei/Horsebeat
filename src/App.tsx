@@ -32,7 +32,7 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
-import { createSection, sectionSpans, sortSections, type Section } from './timing'
+import { createSection, MAX_BPM, MIN_BPM, sectionSpans, sortSections, type Section } from './timing'
 import type { EditMode } from './mode'
 import { DEFAULT_CURVE, type Curve } from './curve'
 import { useHistory } from './useHistory'
@@ -118,6 +118,23 @@ export default function App() {
     ? (sectionSpans(sections, duration).find((item) => item.section.id === editingSection) ?? null)
     : null
 
+  const liveSection =
+    sectionSpans(sections, duration).find((item) => position >= item.start && position <= item.end)
+      ?.section ?? null
+
+  const bpmFraction = Math.round(((liveSection?.bpm ?? 120) % 1) * 100)
+
+  const tuneSection = (patch: Partial<Section>) => {
+    if (!liveSection) return
+    setSections((current) =>
+      sortSections(
+        current.map((section) =>
+          section.id === liveSection.id ? { ...section, ...patch } : section,
+        ),
+      ),
+    )
+  }
+
   const compiled = (() => {
     const span = sectionSpans(sections, duration).find(
       (item) => position >= item.start && position <= item.end,
@@ -172,11 +189,21 @@ export default function App() {
         if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
-        event.preventDefault()
-        if (event.shiftKey) history.redo()
-        else history.undo()
-        return
+      if (event.ctrlKey || event.metaKey) {
+        const key = event.key.toLowerCase()
+
+        if (key === 'z') {
+          event.preventDefault()
+          if (event.shiftKey) history.redo()
+          else history.undo()
+          return
+        }
+
+        if (key === 'y') {
+          event.preventDefault()
+          history.redo()
+          return
+        }
       }
 
       if (event.code !== 'Space' || event.repeat) return
@@ -467,6 +494,80 @@ export default function App() {
           onReset={reset}
           rate={rate}
           onRateChange={setRate}
+          left={
+            file ? (
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    width: 200,
+                    borderRadius: 999,
+                    overflow: 'hidden',
+                    border: 1,
+                    borderColor: 'divider',
+                  }}
+                >
+                  <RulerSlider
+                    value={Math.floor(liveSection?.bpm ?? 120)}
+                    disabled={!liveSection}
+                    min={Math.floor(MIN_BPM)}
+                    max={Math.floor(MAX_BPM)}
+                    step={1}
+                    pixelsPerStep={10}
+                    majorEvery={5}
+                    format={(value) => `${Math.round(value)} BPM`}
+                    onChange={(whole) => tuneSection({ bpm: whole + bpmFraction / 100 })}
+                  />
+                </Paper>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    width: 200,
+                    borderRadius: 999,
+                    overflow: 'hidden',
+                    border: 1,
+                    borderColor: 'divider',
+                  }}
+                >
+                  <RulerSlider
+                    value={bpmFraction}
+                    disabled={!liveSection}
+                    min={0}
+                    max={99}
+                    step={1}
+                    pixelsPerStep={6}
+                    majorEvery={5}
+                    format={(value) => `.${String(Math.round(value)).padStart(2, '0')}`}
+                    onChange={(fraction) =>
+                      tuneSection({ bpm: Math.floor(liveSection?.bpm ?? 120) + fraction / 100 })
+                    }
+                  />
+                </Paper>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    width: 200,
+                    borderRadius: 999,
+                    overflow: 'hidden',
+                    border: 1,
+                    borderColor: 'divider',
+                  }}
+                >
+                  <RulerSlider
+                    value={Math.round(liveSection?.offsetMs ?? 0)}
+                    disabled={!liveSection}
+                    min={0}
+                    max={Math.max(1, Math.round(duration * 1000))}
+                    step={1}
+                    pixelsPerStep={4}
+                    majorEvery={10}
+                    format={(value) => `${Math.round(value)} ms`}
+                    onChange={(offsetMs) => tuneSection({ offsetMs })}
+                  />
+                </Paper>
+              </Box>
+            ) : null
+          }
           above={
             mode === 'section' ? (
               <SectionBar

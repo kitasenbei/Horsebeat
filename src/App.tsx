@@ -411,39 +411,36 @@ export default function App() {
               />
             </Box>
             {barGrid ? (
-              <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
-                <BarGrid
-                  envelope={envelope}
-                  loudness={loudness}
-                  onsets={onsets}
-                  bands={bands}
-                  sections={sections}
-                  duration={duration}
-                  position={position}
-                  positionRef={positionRef}
-                  playing={playing}
-                  curve={curve}
-                  range={range}
-                  onRangeChange={changeRange}
-                  onSectionsChange={setSections}
-                  onSeek={seek}
-                  slice={slice}
-                  lane={lane}
-                />
+              <>
+                <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <BarGrid
+                    envelope={envelope}
+                    loudness={loudness}
+                    onsets={onsets}
+                    bands={bands}
+                    sections={sections}
+                    duration={duration}
+                    position={position}
+                    positionRef={positionRef}
+                    playing={playing}
+                    curve={curve}
+                    range={range}
+                    onRangeChange={changeRange}
+                    onSectionsChange={setSections}
+                    onSeek={seek}
+                    slice={slice}
+                    lane={lane}
+                  />
+                </Box>
                 <BarGridControls
                   lane={lane}
                   slice={slice}
                   onLaneChange={setLane}
                   onSliceChange={setSlice}
                 />
-              </Box>
+              </>
             ) : null}
-            <AnalysisLanes
-              loudness={loudness}
-              onsets={onsets}
-              bands={bands}
-              range={range}
-            />
+            <AnalysisLanes loudness={loudness} onsets={onsets} bands={bands} range={range} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
             <VerticalWaveform

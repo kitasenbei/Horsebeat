@@ -10,9 +10,9 @@ type BarGridControlsProps = {
   onSliceChange: (slice: number | 'auto') => void
 }
 
-// Rendered beside the compiled view rather than inside it: these are twenty
-// MUI buttons, and inside they would re-render on every pointer move and every
-// frame of a drag, which costs far more than the drawing does.
+// Rendered under the compiled view rather than over it: these are twenty MUI
+// buttons, and inside the view they would both cover the picture and re-render
+// on every pointer move and every frame of a drag.
 export default function BarGridControls({
   lane,
   slice,
@@ -23,14 +23,11 @@ export default function BarGridControls({
     <Paper
       elevation={3}
       sx={{
-        position: 'absolute',
-        top: 6,
-        right: 6,
+        alignSelf: 'flex-end',
         display: 'flex',
         gap: 0.5,
         borderRadius: 999,
         overflow: 'hidden',
-        zIndex: 1,
       }}
     >
       <ToggleButtonGroup

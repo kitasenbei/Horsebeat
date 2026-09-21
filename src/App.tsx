@@ -33,6 +33,7 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
+import { FIT_STEPS, polishFit, refineFit } from './fit'
 import { createSection, MAX_BPM, MIN_BPM, sectionSpans, sortSections, type Section } from './timing'
 import type { EditMode } from './mode'
 import { DEFAULT_CURVE, type Curve } from './curve'
@@ -49,6 +50,7 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
+const POLISH_ROUNDS = 3
 const DEFAULT_BPM = 120
 
 export default function App() {
@@ -57,6 +59,7 @@ export default function App() {
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [samples, setSamples] = useState<Float32Array | null>(null)
   const [envelope, setEnvelope] = useState<Float32Array | null>(null)
+  const [sampleRate, setSampleRate] = useState(44100)
   const [onsets, setOnsets] = useState<Float32Array | null>(null)
   const [loudness, setLoudness] = useState<Float32Array | null>(null)
   const [bands, setBands] = useState<Float32Array | null>(null)
@@ -93,6 +96,8 @@ export default function App() {
   const [lane, setLane] = useState<number | 'all'>(0)
   const [divisions, setDivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
+  const [fitting, setFitting] = useState(false)
+  const fitRef = useRef({ step: 0, polish: 0, sections: [] as Section[] })
   const [follow, setFollow] = useState(false)
   const touchedRef = useRef(0)
 
@@ -237,6 +242,75 @@ export default function App() {
     return () => cancelAnimationFrame(frame)
   }, [follow, playing, positionRef])
 
+  useEffect(() => {
+    fitRef.current.sections = sections
+  })
+
+  // Fitting runs a step per frame rather than solving in one go, so the grid
+  // can be watched walking onto the beat: the same picture the eye reads.
+  useEffect(() => {
+    if (!fitting || !envelope || duration <= 0) return
+
+    fitRef.current = { step: 0, polish: 0, sections: fitRef.current.sections }
+
+    let frame = requestAnimationFrame(function tick() {
+      const current = fitRef.current.sections
+      const spans = sectionSpans(current, duration)
+      const span =
+        spans.find((item) => positionRef.current >= item.start && positionRef.current <= item.end) ??
+        spans[0]
+
+      if (!span) {
+        setFitting(false)
+        return
+      }
+
+      const fromMs = span.start * duration * 1000
+      const toMs = span.end * duration * 1000
+      const current_ = { bpm: span.section.bpm, offsetMs: span.section.offsetMs }
+
+      // the ladder walks the grid onto the beat, then the polish measures where
+      // the hits actually are and fits a line through them
+      const result =
+        fitRef.current.step < FIT_STEPS
+          ? refineFit(envelope, sampleRate, fromMs, toMs, current_, fitRef.current.step)
+          : {
+              fit: polishFit(envelope, sampleRate, fromMs, toMs, current_),
+              moved: true,
+            }
+
+      if (fitRef.current.step >= FIT_STEPS) fitRef.current.polish += 1
+
+      if (result.moved) {
+        setSections((sections) =>
+          sortSections(
+            sections.map((section) =>
+              section.id === span.section.id
+                ? {
+                    ...section,
+                    bpm: Math.min(MAX_BPM, Math.max(MIN_BPM, result.fit.bpm)),
+                    offsetMs: result.fit.offsetMs,
+                  }
+                : section,
+            ),
+          ),
+        )
+      } else {
+        // this rung has nothing left to give, so tighten the search
+        fitRef.current.step += 1
+      }
+
+      if (fitRef.current.polish >= POLISH_ROUNDS) {
+        setFitting(false)
+        return
+      }
+
+      frame = requestAnimationFrame(tick)
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [fitting, envelope, duration, sampleRate, positionRef])
+
   const load = async (source: File) => {
     setLoadingName(source.name)
     const context = new AudioContext()
@@ -251,6 +325,7 @@ export default function App() {
       setOnsets(computeOnsets(mono))
       setLoudness(computeLoudness(mono))
       setBands(computeBands(mono, buffer.sampleRate))
+      setSampleRate(buffer.sampleRate)
       setRange(INITIAL_RANGE)
       setDoc((current) => ({
         markers: [],
@@ -293,6 +368,9 @@ export default function App() {
         onFollowChange={setFollow}
         compiled={barGrid}
         onCompiledChange={setBarGrid}
+        fitting={fitting}
+        onFittingChange={setFitting}
+        canFit={Boolean(envelope) && sections.length > 0}
       />
       <Box
         component="main"

@@ -205,7 +205,7 @@ export function buildPyramid(samples: Float32Array): Pyramid {
 }
 
 export const ENVELOPE_HOP = 64
-const ENVELOPE_RADIUS = 8
+export const ENVELOPE_RADIUS = 8
 const ENVELOPE_GAIN = 1.4
 
 export function computeEnvelope(samples: Float32Array): Float32Array {

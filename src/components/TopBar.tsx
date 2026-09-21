@@ -16,6 +16,7 @@ import StraightenIcon from '@mui/icons-material/Straighten'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import GpsFixedIcon from '@mui/icons-material/GpsFixed'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
 
@@ -32,6 +33,9 @@ type TopBarProps = {
   onFollowChange: (follow: boolean) => void
   compiled: boolean
   onCompiledChange: (compiled: boolean) => void
+  fitting: boolean
+  canFit: boolean
+  onFittingChange: (fitting: boolean) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -105,6 +109,9 @@ export default function TopBar({
   onFollowChange,
   compiled,
   onCompiledChange,
+  fitting,
+  canFit,
+  onFittingChange,
   canUndo,
   canRedo,
   onUndo,
@@ -208,6 +215,21 @@ export default function TopBar({
           <ToggleButton value="compiled" aria-label="Compiled view" sx={selected('info')}>
             <Tooltip title="Compiled view">
               <span>{segment('Compiled', <ViewHeadlineIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={fitting ? 'fit' : null}
+          disabled={!canFit}
+          onChange={() => onFittingChange(!fitting)}
+          sx={PILL}
+        >
+          <ToggleButton value="fit" aria-label="Fit the grid to the audio" sx={selected('info')}>
+            <Tooltip title="Fit the grid to the audio">
+              <span>{segment('Fit', <AutoFixHighIcon fontSize="small" />)}</span>
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>

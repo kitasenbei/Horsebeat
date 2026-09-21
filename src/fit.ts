@@ -735,6 +735,123 @@ export function scanBlock(
 
 // Once the spans are known, fit each one over its own audio rather than over
 // the block that happened to notice it.
+const SETTLE_ROWS = 256
+const SETTLE_BARS = 8
+const SETTLE_ROUNDS = 3
+
+function centred(rows: Float64Array): Float64Array {
+  let mean = 0
+  for (const value of rows) mean += value
+  mean /= rows.length
+
+  const out = new Float64Array(rows.length)
+  for (let row = 0; row < rows.length; row += 1) out[row] = rows[row] - mean
+  return out
+}
+
+// How far one bar sits from another, in rows. The search stops at half a beat
+// because bars look alike at beat level, and a wider one answers with a whole
+// beat of slide that never happened.
+function shiftRows(one: Float64Array, other: Float64Array, meter: number): number {
+  const size = one.length
+  const reach = Math.max(1, Math.round(size / (2 * Math.max(1, meter))))
+  let best = 0
+  let bestScore = -Infinity
+
+  for (let shift = -reach; shift <= reach; shift += 1) {
+    let sum = 0
+    for (let row = 0; row < size; row += 1) sum += one[row] * other[(row + shift + size) % size]
+    if (sum > bestScore) {
+      bestScore = sum
+      best = shift
+    }
+  }
+
+  return best
+}
+
+// How straight the compiled view runs under this grid: the average distance
+// between a stretch's bar and the section's bar. Zero is the picture banding
+// horizontally; anything else is the streak sliding, which is the drift you can
+// see in it.
+export function flatnessOf(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  fit: Fit,
+  meter: number,
+): number {
+  const barMs = (60000 / fit.bpm) * Math.max(1, meter)
+  const whole = barProfile(envelope, sampleRate, fromMs, toMs, barMs, SETTLE_ROWS)
+  if (!whole) return 0
+
+  const reference = centred(whole)
+  const stretch = SETTLE_BARS * barMs
+  const windows = Math.floor((toMs - fromMs) / stretch)
+  if (windows < 2) return 0
+
+  let total = 0
+  for (let index = 0; index < windows; index += 1) {
+    const at = fromMs + index * stretch
+    const rows = barProfile(envelope, sampleRate, at, at + stretch, barMs, SETTLE_ROWS)
+    if (!rows) continue
+    total += Math.abs((shiftRows(reference, centred(rows), meter) / SETTLE_ROWS) * barMs)
+  }
+
+  return total / windows
+}
+
+// The tempo that stops the picture sliding, solved rather than searched. The
+// first half of a span and the second half are each averaged into one bar; how
+// far those two sit apart is how far the grid slid between them, and dividing
+// that by the time between them gives the error in the tempo directly. One
+// round of it takes a tempo a fifth of a beat per minute out to within a
+// two-hundredth.
+//
+// A correction is only kept if the picture really did come out flatter, because
+// on a stretch with little to say the two bars can sit apart for reasons that
+// have nothing to do with tempo.
+export function settleFit(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  fit: Fit,
+  meter: number,
+): Fit {
+  let best = fit
+  let bestFlat = flatnessOf(envelope, sampleRate, fromMs, toMs, fit, meter)
+
+  for (let round = 0; round < SETTLE_ROUNDS; round += 1) {
+    const barMs = (60000 / best.bpm) * Math.max(1, meter)
+    const bars = Math.floor((toMs - fromMs) / barMs)
+    if (bars < SETTLE_BARS) break
+
+    // both halves start a whole number of bars from the same place, or the
+    // second is read half a bar out and that is what the shift measures
+    const middle = fromMs + Math.floor(bars / 2) * barMs
+    const first = barProfile(envelope, sampleRate, fromMs, middle, barMs, SETTLE_ROWS)
+    const second = barProfile(envelope, sampleRate, middle, fromMs + bars * barMs, barMs, SETTLE_ROWS)
+    if (!first || !second) break
+
+    const slid = (shiftRows(centred(first), centred(second), meter) / SETTLE_ROWS) * barMs
+    const apart = middle - fromMs
+    if (apart <= 0 || slid === 0) break
+
+    const candidate = { bpm: best.bpm * (1 - slid / apart), offsetMs: best.offsetMs }
+    if (candidate.bpm < MIN_BPM_SEARCH / 2 || candidate.bpm > MAX_BPM_SEARCH * 2) break
+
+    const flat = flatnessOf(envelope, sampleRate, fromMs, toMs, candidate, meter)
+    if (flat >= bestFlat) break
+
+    best = candidate
+    bestFlat = flat
+  }
+
+  return best
+}
+
 // The last word on a section's tempo, taken over the whole of it. A ladder that
 // starts from one window walks downhill from wherever that window put it, and a
 // tempo a twentieth of a beat per minute out still fits every window it is
@@ -779,7 +896,8 @@ export function refineScan(
 
   const refined = fitWindow(envelope, sampleRate, fromMs, toMs, found[index])
   const tuned = tuneFit(envelope, sampleRate, fromMs, toMs, refined)
-  const anchored = { bpm: tuned.bpm, offsetMs: beatNear(tuned, fromMs) }
+  const settled = settleFit(envelope, sampleRate, fromMs, toMs, tuned, meter)
+  const anchored = { bpm: settled.bpm, offsetMs: beatNear(settled, fromMs) }
   return alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
 }
 

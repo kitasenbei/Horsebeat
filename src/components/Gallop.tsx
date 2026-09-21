@@ -15,11 +15,13 @@ type GallopProps = {
 // lands anywhere in particular.
 const FRAMES = 6
 
-// Which frame plants the leading hoof. Measured rather than guessed: the
-// silhouette reaches lowest in this one, and rises eight pixels clear of the
-// ground two frames later. Putting it under the beat is what makes a footfall
-// and a beat the same moment.
-const STRIKE = 1 / FRAMES
+// Which frame drives the hind legs into the ground — the moment with the weight
+// behind it. Measured rather than guessed, by how low each half of the horse
+// reaches in each frame: the hind quarters bottom out in the sixth while the
+// forelegs are still six pixels clear, and it is the second frame that plants a
+// front hoof. Putting the sixth under the beat is what gives the beat its
+// shove.
+const STRIKE = 5 / FRAMES
 const WIDTH = 56
 const HEIGHT = 38
 

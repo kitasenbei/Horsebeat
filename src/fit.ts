@@ -7,6 +7,12 @@ export type Fit = {
 
 // How wide the ladder starts and how fine it ends. The last rung is the
 // resolution the app displays, so fitting can reach a value you can read.
+const COARSE_BPM_STEP = 0.5
+const COARSE_PHASES = 24
+const BOUNDARY_STEP_MS = 250
+const BOUNDARY_DROP = 0.6
+const DENSER_KEEPS = 0.9
+
 const SCALES = [
   { bpm: 1, ms: 40 },
   { bpm: 0.5, ms: 20 },
@@ -170,4 +176,187 @@ export function refineFit(
   }
 
   return { fit: best, score: bestScore, moved }
+}
+
+// Fit a window from a seed, running the whole ladder and polish at once. Used
+// by the scan, where a window is a frame's worth of work rather than a gesture
+// to watch.
+export function fitWindow(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  seed: Fit,
+): Fit {
+  let fit = seed
+
+  for (let step = 0; step < FIT_STEPS; ) {
+    const result = refineFit(envelope, sampleRate, fromMs, toMs, fit, step)
+    if (result.moved) fit = result.fit
+    else step += 1
+  }
+
+  for (let round = 0; round < 3; round += 1) {
+    fit = polishFit(envelope, sampleRate, fromMs, toMs, fit)
+  }
+
+  return fit
+}
+
+// The beat of a grid nearest a moment, never negative: where a section that
+// takes over there should be anchored. Nearest rather than next, so refitting
+// a section cannot walk its start forward a beat at a time.
+export function beatNear(fit: Fit, atMs: number): number {
+  const beatMs = 60000 / fit.bpm
+  let beats = Math.round((atMs - fit.offsetMs) / beatMs)
+  let anchor = fit.offsetMs + beats * beatMs
+
+  while (anchor < 0) {
+    beats += 1
+    anchor = fit.offsetMs + beats * beatMs
+  }
+
+  return anchor
+}
+
+// A wide sweep for the tempo of a window, with no seed to bias it. The ladder
+// can only walk a beat or two from where it starts, so anything that is not a
+// small correction has to begin here or it lands on a harmonic: at 96 bpm a
+// grid at 144 hits two beats in three and scores well enough to look right.
+export function searchTempo(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  minBpm: number,
+  maxBpm: number,
+): Fit {
+  let best: Fit = { bpm: minBpm, offsetMs: fromMs }
+  let bestScore = 0
+
+  for (let bpm = minBpm; bpm <= maxBpm; bpm += COARSE_BPM_STEP) {
+    const beatMs = 60000 / bpm
+
+    for (let phase = 0; phase < COARSE_PHASES; phase += 1) {
+      const candidate = { bpm, offsetMs: fromMs + (phase / COARSE_PHASES) * beatMs }
+      const score = scoreFit(envelope, sampleRate, fromMs, toMs, candidate)
+      if (score > bestScore) {
+        bestScore = score
+        best = candidate
+      }
+    }
+  }
+
+  // A grid at half the tempo hits every other beat, and every one of those is
+  // a real hit, so it scores as well as the truth or better. Whenever a denser
+  // grid holds up nearly as well, it is the honest answer.
+  for (const multiple of [2, 3, 2]) {
+    const faster = best.bpm * multiple
+    if (faster > maxBpm) continue
+
+    const beatMs = 60000 / faster
+    let bestPhase = best
+    let phaseScore = 0
+
+    for (let phase = 0; phase < COARSE_PHASES; phase += 1) {
+      const candidate = { bpm: faster, offsetMs: fromMs + (phase / COARSE_PHASES) * beatMs }
+      const score = scoreFit(envelope, sampleRate, fromMs, toMs, candidate)
+      if (score > phaseScore) {
+        phaseScore = score
+        bestPhase = candidate
+      }
+    }
+
+    if (phaseScore >= bestScore * DENSER_KEEPS) {
+      best = bestPhase
+      bestScore = phaseScore
+    }
+  }
+
+  return best
+}
+
+// Where a grid stops describing the audio: the first moment its score over a
+// short window collapses. Used to place a section at the tempo change rather
+// than at the edge of whichever block noticed it.
+export function findBoundary(
+  envelope: Float32Array,
+  sampleRate: number,
+  fit: Fit,
+  fromMs: number,
+  toMs: number,
+): number {
+  const probe = Math.max(1500, (60000 / fit.bpm) * 4)
+  let held = 0
+  let count = 0
+
+  for (let at = fromMs; at + probe <= toMs; at += BOUNDARY_STEP_MS) {
+    const score = scoreFit(envelope, sampleRate, at, at + probe, fit)
+
+    if (count > 0 && score < (held / count) * BOUNDARY_DROP) return at
+    held += score
+    count += 1
+  }
+
+  return toMs
+}
+
+export const BLOCK_MS = 6000
+const MIN_BPM_SEARCH = 60
+const MAX_BPM_SEARCH = 200
+const SAME_TEMPO = 0.2
+const HOLDS_UP = 2
+
+export type Scan = {
+  fromMs: number
+  found: Fit[]
+  done: boolean
+}
+
+// One block of the scan: carry the previous grid on if it still describes this
+// stretch, otherwise find where it gave out and search wide for what replaced
+// it. Called a block at a time so the sections appear as they are found.
+export function scanBlock(
+  envelope: Float32Array,
+  sampleRate: number,
+  durationMs: number,
+  scan: Scan,
+): Scan {
+  const fromMs = scan.fromMs
+  const toMs = Math.min(durationMs, fromMs + BLOCK_MS)
+  if (toMs - fromMs < 2000) return { ...scan, done: true }
+
+  const found = scan.found
+  const previous = found[found.length - 1]
+  const next = { fromMs: toMs, found, done: toMs >= durationMs }
+
+  if (previous) {
+    const held = scoreFit(envelope, sampleRate, fromMs, toMs, previous)
+    const nudged = fitWindow(envelope, sampleRate, fromMs, toMs, previous)
+    if (held > HOLDS_UP && Math.abs(nudged.bpm - previous.bpm) < SAME_TEMPO) return next
+  }
+
+  const boundary = previous ? findBoundary(envelope, sampleRate, previous, fromMs, toMs) : fromMs
+  const until = Math.min(durationMs, boundary + BLOCK_MS * 2)
+  const coarse = searchTempo(envelope, sampleRate, boundary, until, MIN_BPM_SEARCH, MAX_BPM_SEARCH)
+  const local = fitWindow(envelope, sampleRate, boundary, until, coarse)
+
+  return { ...next, found: [...found, { bpm: local.bpm, offsetMs: beatNear(local, boundary) }] }
+}
+
+// Once the spans are known, fit each one over its own audio rather than over
+// the block that happened to notice it.
+export function refineScan(
+  envelope: Float32Array,
+  sampleRate: number,
+  durationMs: number,
+  found: Fit[],
+  index: number,
+): Fit {
+  const fromMs = found[index].offsetMs
+  const toMs = index + 1 < found.length ? found[index + 1].offsetMs : durationMs
+  if (toMs - fromMs < 3000) return found[index]
+
+  const refined = fitWindow(envelope, sampleRate, fromMs, toMs, found[index])
+  return { bpm: refined.bpm, offsetMs: beatNear(refined, fromMs) }
 }

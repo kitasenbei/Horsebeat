@@ -33,8 +33,16 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
-import { FIT_STEPS, polishFit, refineFit } from './fit'
-import { createSection, MAX_BPM, MIN_BPM, sectionSpans, sortSections, type Section } from './timing'
+import { refineScan, scanBlock, type Fit, type Scan } from './fit'
+import {
+  createSection,
+  DEFAULT_METER,
+  MAX_BPM,
+  MIN_BPM,
+  sectionSpans,
+  sortSections,
+  type Section,
+} from './timing'
 import type { EditMode } from './mode'
 import { DEFAULT_CURVE, type Curve } from './curve'
 import { useHistory } from './useHistory'
@@ -50,7 +58,6 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
-const POLISH_ROUNDS = 3
 const DEFAULT_BPM = 120
 
 export default function App() {
@@ -97,7 +104,7 @@ export default function App() {
   const [divisions, setDivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
-  const fitRef = useRef({ step: 0, polish: 0, sections: [] as Section[] })
+  const fitRef = useRef({ meter: DEFAULT_METER })
   const [follow, setFollow] = useState(false)
   const touchedRef = useRef(0)
 
@@ -243,64 +250,41 @@ export default function App() {
   }, [follow, playing, positionRef])
 
   useEffect(() => {
-    fitRef.current.sections = sections
+    fitRef.current.meter = sections[0]?.meter ?? DEFAULT_METER
   })
 
-  // Fitting runs a step per frame rather than solving in one go, so the grid
-  // can be watched walking onto the beat: the same picture the eye reads.
+  // The scan runs a block per frame rather than solving in one go, so the
+  // sections appear along the track as they are found and the compiled view
+  // straightens while it works.
   useEffect(() => {
     if (!fitting || !envelope || duration <= 0) return
 
-    fitRef.current = { step: 0, polish: 0, sections: fitRef.current.sections }
+    const durationMs = duration * 1000
+    let scan: Scan = { fromMs: 0, found: [], done: false }
+    let polish = 0
+
+    const publish = (found: Fit[]) => {
+      const meter = fitRef.current.meter
+      setSections(
+        sortSections(
+          found.map((fit) =>
+            createSection(fit.offsetMs, Math.min(MAX_BPM, Math.max(MIN_BPM, fit.bpm)), meter),
+          ),
+        ),
+      )
+    }
 
     let frame = requestAnimationFrame(function tick() {
-      const current = fitRef.current.sections
-      const spans = sectionSpans(current, duration)
-      const span =
-        spans.find((item) => positionRef.current >= item.start && positionRef.current <= item.end) ??
-        spans[0]
-
-      if (!span) {
-        setFitting(false)
-        return
-      }
-
-      const fromMs = span.start * duration * 1000
-      const toMs = span.end * duration * 1000
-      const current_ = { bpm: span.section.bpm, offsetMs: span.section.offsetMs }
-
-      // the ladder walks the grid onto the beat, then the polish measures where
-      // the hits actually are and fits a line through them
-      const result =
-        fitRef.current.step < FIT_STEPS
-          ? refineFit(envelope, sampleRate, fromMs, toMs, current_, fitRef.current.step)
-          : {
-              fit: polishFit(envelope, sampleRate, fromMs, toMs, current_),
-              moved: true,
-            }
-
-      if (fitRef.current.step >= FIT_STEPS) fitRef.current.polish += 1
-
-      if (result.moved) {
-        setSections((sections) =>
-          sortSections(
-            sections.map((section) =>
-              section.id === span.section.id
-                ? {
-                    ...section,
-                    bpm: Math.min(MAX_BPM, Math.max(MIN_BPM, result.fit.bpm)),
-                    offsetMs: result.fit.offsetMs,
-                  }
-                : section,
-            ),
-          ),
-        )
+      if (!scan.done) {
+        scan = scanBlock(envelope, sampleRate, durationMs, scan)
+        publish(scan.found)
+      } else if (polish < scan.found.length) {
+        const found = [...scan.found]
+        found[polish] = refineScan(envelope, sampleRate, durationMs, found, polish)
+        scan = { ...scan, found }
+        polish += 1
+        publish(found)
       } else {
-        // this rung has nothing left to give, so tighten the search
-        fitRef.current.step += 1
-      }
-
-      if (fitRef.current.polish >= POLISH_ROUNDS) {
         setFitting(false)
         return
       }
@@ -309,7 +293,7 @@ export default function App() {
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [fitting, envelope, duration, sampleRate, positionRef])
+  }, [fitting, envelope, duration, sampleRate])
 
   const load = async (source: File) => {
     setLoadingName(source.name)

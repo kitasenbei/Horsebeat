@@ -64,6 +64,13 @@ const FINE_BPM = 0.01
 // block, which is the resolution the columns are drawn at
 const OFFSET_GAIN = 2
 
+// The panel on the right holds the projection, so the bars are drawn into what
+// is left. Every reading of a pointer position goes through this too, or the
+// column under the cursor stops being the column under the cursor.
+function plotWidth(full: number): number {
+  return Math.max(1, full - PROJECTION_WIDTH)
+}
+
 export default function BarGrid({
   envelope,
   loudness,
@@ -122,11 +129,6 @@ export default function BarGrid({
     .sort((left, right) => left.start - right.start)
 
   const sources = { envelope, loudness, onsets, bands }
-  // The panel on the right holds the projection, so the bars are drawn into
-  // what is left. Every reading of a pointer position goes through this too, or
-  // the column under the cursor stops being the column under the cursor.
-  const plotWidth = (full: number) => Math.max(1, full - PROJECTION_WIDTH)
-
   const cacheRef = useRef<{
     canvases: { canvas: HTMLCanvasElement; top: number; height: number; profile: Float32Array }[]
     key: string

@@ -11,29 +11,19 @@ import Typography from '@mui/material/Typography'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import UndoIcon from '@mui/icons-material/Undo'
 import RedoIcon from '@mui/icons-material/Redo'
-import BookmarkIcon from '@mui/icons-material/Bookmark'
-import StraightenIcon from '@mui/icons-material/Straighten'
-import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
-import GpsFixedIcon from '@mui/icons-material/GpsFixed'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import TuneIcon from '@mui/icons-material/Tune'
 import BeatLights from './BeatLights'
 import Gallop from './Gallop'
-import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
 
 type TopBarProps = {
-  mode: EditMode
   sections: Section[]
   duration: number
   positionRef: RefObject<number>
   playing: boolean
   onOpen: () => void
-  onModeChange: (mode: EditMode) => void
-  onClearMarkers: () => void
-  follow: boolean
-  onFollowChange: (follow: boolean) => void
   compiled: boolean
   onCompiledChange: (compiled: boolean) => void
   fitting: boolean
@@ -53,11 +43,6 @@ const BRAND_DARK = '#17161a'
 const BRAND_GREEN = '#2f9e44'
 const PULSE = 0.14
 const DECAY = 7
-
-const MODE_ICONS: Record<'marker' | 'section', ReactNode> = {
-  marker: <BookmarkIcon fontSize="small" />,
-  section: <StraightenIcon fontSize="small" />,
-}
 
 const PILL = {
   borderRadius: 999,
@@ -102,16 +87,11 @@ function segment(label: string, icon: ReactNode, iconOnly = false) {
 }
 
 export default function TopBar({
-  mode,
   sections,
   duration,
   positionRef,
   playing,
   onOpen,
-  onModeChange,
-  onClearMarkers,
-  follow,
-  onFollowChange,
   compiled,
   onCompiledChange,
   fitting,
@@ -184,37 +164,6 @@ export default function TopBar({
         <ToggleButtonGroup
           size="small"
           exclusive
-          value={mode === 'none' ? null : mode}
-          onChange={(_, next) => onModeChange((next as EditMode | null) ?? 'none')}
-          sx={PILL}
-        >
-          <ToggleButton value="marker" aria-label="Marker mode" sx={selected('secondary')}>
-            <Tooltip title="Marker mode">
-              <span>{segment('Marker', MODE_ICONS.marker)}</span>
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="section" aria-label="Section mode" sx={selected('info')}>
-            <Tooltip title="Section mode">
-              <span>{segment('Section', MODE_ICONS.section)}</span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
-
-        <ButtonGroup size="small" variant="text" color="inherit" sx={PILL}>
-          <Tooltip title="Clear markers">
-            <Button
-              aria-label="Clear markers"
-              onClick={onClearMarkers}
-              sx={{ color: 'error.main' }}
-            >
-              {segment('Clear', <DeleteSweepIcon fontSize="small" />)}
-            </Button>
-          </Tooltip>
-        </ButtonGroup>
-
-        <ToggleButtonGroup
-          size="small"
-          exclusive
           value={compiled ? 'compiled' : null}
           onChange={() => onCompiledChange(!compiled)}
           sx={PILL}
@@ -255,20 +204,6 @@ export default function TopBar({
           >
             <Tooltip title="Fit through the amplitude curve">
               <span>{segment('Fit Apply', <TuneIcon fontSize="small" />)}</span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
-
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={follow ? 'follow' : null}
-          onChange={() => onFollowChange(!follow)}
-          sx={PILL}
-        >
-          <ToggleButton value="follow" aria-label="Follow playhead" sx={selected('primary')}>
-            <Tooltip title="Follow playhead">
-              <span>{segment('Follow', <GpsFixedIcon fontSize="small" />)}</span>
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>

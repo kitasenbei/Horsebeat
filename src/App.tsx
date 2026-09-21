@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import TopBar from './components/TopBar'
-import Mascot from './components/Mascot'
 import StatusBar from './components/StatusBar'
 import Transport from './components/Transport'
 import Volume from './components/Volume'
@@ -56,9 +55,6 @@ type Doc = {
   curve: Curve
 }
 
-const FOLLOW_EDGE = 0.8
-const FOLLOW_LEAD = 0.2
-const FOLLOW_GRACE = 2000
 // The envelope read through the curve, clamped first because the curve is drawn
 // over nought to one and a loud master runs past it.
 function throughCurve(envelope: Float32Array, curve: Curve): Float32Array {
@@ -123,13 +119,7 @@ export default function App() {
   // whether the next fit reads the envelope through the amplitude curve
   const [curved, setCurved] = useState(false)
   const fitRef = useRef({ meter: DEFAULT_METER })
-  const [follow, setFollow] = useState(false)
-  const touchedRef = useRef(0)
-
-  const changeRange = (next: Range | ((current: Range) => Range)) => {
-    touchedRef.current = performance.now()
-    setRange(next)
-  }
+  const changeRange = (next: Range | ((current: Range) => Range)) => setRange(next)
   const {
     playing,
     position,
@@ -244,30 +234,6 @@ export default function App() {
   }, [toggle, history])
 
   useEffect(() => {
-    if (!follow || !playing) return
-
-    let frame = requestAnimationFrame(function tick() {
-      const at = positionRef.current
-      if (performance.now() - touchedRef.current < FOLLOW_GRACE) {
-        frame = requestAnimationFrame(tick)
-        return
-      }
-
-      setRange((current) => {
-        const span = current.end - current.start
-        const lead = current.start + span * FOLLOW_EDGE
-        if (at < current.start || at > lead) {
-          return clampRange({ start: at - span * FOLLOW_LEAD, end: at + span * (1 - FOLLOW_LEAD) })
-        }
-        return current
-      })
-      frame = requestAnimationFrame(tick)
-    })
-
-    return () => cancelAnimationFrame(frame)
-  }, [follow, playing, positionRef])
-
-  useEffect(() => {
     fitRef.current.meter = sections[0]?.meter ?? DEFAULT_METER
   })
 
@@ -365,26 +331,15 @@ export default function App() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <TopBar
-        mode={mode}
         sections={sections}
         duration={duration}
         positionRef={positionRef}
         playing={playing}
         onOpen={() => inputRef.current?.click()}
-        onModeChange={(next) => {
-          setMode(next)
-          setGhost(null)
-        }}
-        onClearMarkers={() => {
-          setMarkers([])
-          setAnchorId(null)
-        }}
         canUndo={history.canUndo}
         canRedo={history.canRedo}
         onUndo={history.undo}
         onRedo={history.redo}
-        follow={follow}
-        onFollowChange={setFollow}
         compiled={barGrid}
         onCompiledChange={setBarGrid}
         fitting={fitting}
@@ -779,12 +734,6 @@ export default function App() {
         positionRef={positionRef}
         position={position}
         duration={duration}
-        playing={playing}
-      />
-      <Mascot
-        sections={sections}
-        duration={duration}
-        positionRef={positionRef}
         playing={playing}
       />
       <input

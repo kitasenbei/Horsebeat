@@ -965,6 +965,7 @@ function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
 export type BlockLayer = {
   profile: Float32Array
   steady: Float32Array
+  both: Float32Array
   image: ImageData
   top: number
   height: number
@@ -1089,7 +1090,15 @@ export function renderBarLayers(
       }
     }
 
-    layers.push({ image, top, height: blockHeight, profile: shape, steady })
+    // The two read together: a row counts only where the bars both do a lot
+    // there and do the same thing there. Deliberately not stretched to fill the
+    // panel like the other two — left at its own size, it sits inside the sum
+    // it is drawn over, and the gap between them is the part of the picture
+    // that is loud without being repeated.
+    const both = new Float32Array(rows)
+    for (let row = 0; row < rows; row += 1) both[row] = shape[row] * steady[row]
+
+    layers.push({ image, top, height: blockHeight, profile: shape, steady, both })
     top += blockHeight + BLOCK_GAP
   }
 

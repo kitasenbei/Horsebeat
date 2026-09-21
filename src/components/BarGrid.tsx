@@ -136,6 +136,7 @@ export default function BarGrid({
       height: number
       profile: Float32Array
       steady: Float32Array
+      both: Float32Array
     }[]
     key: string
   } | null>(null)
@@ -207,6 +208,7 @@ export default function BarGrid({
             height: layer.height,
             profile: layer.profile,
             steady: layer.steady,
+            both: layer.both,
           }
         }),
       }
@@ -293,6 +295,17 @@ export default function BarGrid({
         PROJECTION_WIDTH,
         layer.height,
         theme.palette.text.primary,
+      )
+
+      // over the sum, so the two are read against each other
+      drawProjection(
+        context,
+        layer.both,
+        PROJECTION_WIDTH + width,
+        layer.top,
+        PROJECTION_WIDTH,
+        layer.height,
+        theme.palette.primary.main,
       )
     }
 

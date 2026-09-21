@@ -353,6 +353,37 @@ function barProfile(
   return totals
 }
 
+// How near the beat a count has to land before it is doubled, and how well the
+// beats in between have to be played.
+const DOUBLE_BELOW = 130
+const DOUBLE_KEEPS = 0.9
+
+// Whether what came out of the fold is the pulse rather than the beat. A bar
+// divides cleanly into the pulse that carries it and no further: where the beat
+// is twice that pulse the bar is really two bars, and two bars are not alike
+// enough for the fold to cut them into eight.
+//
+// So the audio is asked at the one place it can answer: are the beats in
+// between actually played? If they are, and the count is slow enough that the
+// music is unlikely to be counted there, the faster count is the beat. Both
+// halves matter — a ride cymbal plays the beats in between all night without
+// the tempo being twice what it is, and only the speed of the count says which
+// of the two a listener would tap.
+function counted(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  bpm: number,
+): number {
+  const doubled = bpm * 2
+  if (bpm >= DOUBLE_BELOW || doubled > MAX_BPM_COUNT) return bpm
+
+  const one = bestPhase(envelope, sampleRate, fromMs, toMs, bpm).score
+  const two = bestPhase(envelope, sampleRate, fromMs, toMs, doubled).score
+  return one > 0 && two >= one * DOUBLE_KEEPS ? doubled : bpm
+}
+
 // Which of the counts inside a bar is the beat. The pattern score answers about
 // the bar, and any whole number of beats makes a bar that repeats just as well,
 // so the count that wins is often two bars, or three beats. Folding the
@@ -406,7 +437,8 @@ export function beatWithin(
   // tempo the song has.
   const mine = patternScore(envelope, sampleRate, fromMs, toMs, found, meter)
   const given = patternScore(envelope, sampleRate, fromMs, toMs, bpm, meter)
-  return mine >= given * FOLD_KEEPS ? found : bpm
+  const held = mine >= given * FOLD_KEEPS ? found : bpm
+  return counted(envelope, sampleRate, fromMs, toMs, held)
 }
 
 

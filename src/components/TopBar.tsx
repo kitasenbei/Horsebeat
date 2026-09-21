@@ -17,6 +17,7 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import GpsFixedIcon from '@mui/icons-material/GpsFixed'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import BeatLights from './BeatLights'
 import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
 
@@ -249,6 +250,14 @@ export default function TopBar({
         </ToggleButtonGroup>
 
         <Box sx={{ flex: 1 }} />
+
+        <BeatLights
+          sections={sections}
+          duration={duration}
+          positionRef={positionRef}
+          playing={playing}
+          color={BRAND_GREEN}
+        />
 
         <Typography
           component="span"

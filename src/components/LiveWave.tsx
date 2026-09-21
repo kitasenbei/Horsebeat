@@ -137,7 +137,7 @@ export default function LiveWave({
       // one on top rather than the one buried
       const standing = beat > 0 ? Math.floor((at - opens) / beat) : 0
       for (let step = beats - 1; step >= 0; step -= 1) {
-        const index = (standing + 1 + step) % beats
+        const index = (standing + step) % beats
         const quarter = opens + beat * index + offset
         // past the end there is nothing to read, and drawing it would repeat
         // the last frame of the track as though it were a beat

@@ -1037,11 +1037,22 @@ export function renderBarLayers(
       }
     }
 
-    // read against its own tallest row, so a quiet block still shows its shape
-    let tallest = 0
-    for (const value of profile) if (value > tallest) tallest = value
+    // Read between its own quietest and loudest row rather than from nothing.
+    // Music never falls silent between beats, so the quietest row still carries
+    // most of what the loudest one does, and measuring from zero draws that
+    // shared floor as a slab with the shape a sliver on top of it. What the
+    // projection is for is the difference between the rows.
+    let least = Infinity
+    let most = -Infinity
+    for (const value of profile) {
+      if (value < least) least = value
+      if (value > most) most = value
+    }
+
     const shape = new Float32Array(rows)
-    if (tallest > 0) for (let row = 0; row < rows; row += 1) shape[row] = profile[row] / tallest
+    if (most > least) {
+      for (let row = 0; row < rows; row += 1) shape[row] = (profile[row] - least) / (most - least)
+    }
 
     layers.push({ image, top, height: blockHeight, profile: shape })
     top += blockHeight + BLOCK_GAP

@@ -46,6 +46,8 @@ type BarGridProps = {
   onSeek: (position: number) => void
   slice: number | 'auto'
   lane: number | 'all'
+  divisions: number
+  colormap: number
 }
 
 const GUIDE_COLOR = '#ffffff'
@@ -76,6 +78,8 @@ export default function BarGrid({
   onSeek,
   slice,
   lane,
+  divisions,
+  colormap,
 }: BarGridProps) {
   const theme = useTheme()
 
@@ -157,12 +161,13 @@ export default function BarGrid({
       onsets?.length ?? 0,
       bands?.length ?? 0,
       blocks.join(','),
+      colormap,
       curve.points.map((point) => `${point.x}:${point.y}`).join(','),
     ].join('|')
 
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
-      const layers = renderBarLayers(context, sources, bars, height, curve, blocks)
+      const layers = renderBarLayers(context, sources, bars, height, curve, blocks, colormap)
 
       cache = {
         key,
@@ -187,7 +192,9 @@ export default function BarGrid({
     sliceHeightRef.current = Math.max(1, heights[0] ?? 1)
     layoutRef.current = { tops, heights }
 
-    tops.forEach((top, index) => drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR))
+    tops.forEach((top, index) =>
+      drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR, divisions),
+    )
 
     // the section under the pointer is the one a drag would edit, so it is
     // tinted: the hover position already says which column
@@ -226,7 +233,7 @@ export default function BarGrid({
       theme.palette.error.main,
     )
 
-  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${curveSignature(curve)}`)
+  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -304,8 +311,13 @@ export default function BarGrid({
   }
 
   const addAt = (at: number, id: string) => {
-    const inherited = live.find((section) => section.id === id)?.bpm ?? 120
-    onSectionsChange(sortSections([...live, createSection(at * duration * 1000, inherited)]))
+    const from = live.find((section) => section.id === id)
+    onSectionsChange(
+      sortSections([
+        ...live,
+        createSection(at * duration * 1000, from?.bpm ?? 120, from?.meter),
+      ]),
+    )
   }
 
   const removeSection = () => {

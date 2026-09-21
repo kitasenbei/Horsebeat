@@ -2,14 +2,13 @@ import type { RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import {
-  curveSignature,
   drawGridVertical,
   drawSamplesVertical,
   drawVerticalPlayhead,
   sectionSignature,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
-import type { Curve } from '../curve'
+import { DEFAULT_CURVE } from '../curve'
 import type { Section } from '../timing'
 import { GRID_PURPLE } from '../theme'
 
@@ -21,7 +20,6 @@ type VerticalWaveformProps = {
   positionRef: RefObject<number>
   playing: boolean
   duration: number
-  curve: Curve
   seconds?: number
 }
 
@@ -33,7 +31,6 @@ export default function VerticalWaveform({
   positionRef,
   playing,
   duration,
-  curve,
   seconds = 2,
 }: VerticalWaveformProps) {
   const theme = useTheme()
@@ -49,7 +46,9 @@ export default function VerticalWaveform({
       width,
       height,
       theme.palette.primary.main,
-      curve,
+      // the falling view stays linear: it is read against the playhead rather
+      // than shaped like the compiled picture
+      DEFAULT_CURVE,
       samples.length,
     )
     drawGridVertical(
@@ -64,7 +63,7 @@ export default function VerticalWaveform({
       GRID_PURPLE,
     )
     drawVerticalPlayhead(context, width, height, theme.palette.error.main)
-  }, playing, `${span}|${position}|${envelope?.length}|${sectionSignature(sections)}|${curveSignature(curve)}`)
+  }, playing, `${span}|${position}|${envelope?.length}|${sectionSignature(sections)}`)
 
   return (
     <Box

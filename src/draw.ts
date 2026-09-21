@@ -811,18 +811,26 @@ export function drawEnvelopeStrip(
   context.globalAlpha = 1
 }
 
-export const BEATS_PER_BAR = 4
 export const SLICE_STEPS = [1, 2, 4, 8, 16]
 export const MIN_COLUMN = 4
 export const SLICE_SPAN = 1
 
+// the steps follow the section's meter, so "one column per bar" stays true in
+// three, five or seven as well as in four
+export function sliceSteps(meter: number): number[] {
+  const bar = Math.max(1, Math.round(meter))
+  const steps = [1, 2, bar, bar * 2, bar * 4]
+  return [...new Set(steps)].sort((left, right) => left - right)
+}
+
 export function autoSliceBeats(span: SectionSpan, width: number): number {
   const available = span.end - span.start
-  if (span.beat <= 0 || available <= 0 || width <= 0) return BEATS_PER_BAR
+  const steps = sliceSteps(span.section.meter)
+  if (span.beat <= 0 || available <= 0 || width <= 0) return span.section.meter
 
   return (
-    SLICE_STEPS.find((beats) => (available / (span.beat * beats)) * MIN_COLUMN <= width) ??
-    SLICE_STEPS[SLICE_STEPS.length - 1]
+    steps.find((beats) => (available / (span.beat * beats)) * MIN_COLUMN <= width) ??
+    steps[steps.length - 1]
   )
 }
 
@@ -883,7 +891,20 @@ function parseHex(color: string): [number, number, number] {
 
 const LEVEL_RGB = LEVEL_ZONES.map((zone) => ({ limit: zone.limit, rgb: parseHex(zone.color) }))
 const HEAT_RGB = HEAT_STOPS.map(parseHex)
-const WAVE_RGB = ['#123a8f', '#2a9df4', '#f7c948', '#d7263d'].map(parseHex)
+// Diverging maps have a pale middle, so a value reads as which side of the
+// midpoint it sits on and how far, rather than as one climb from low to high.
+// The midpoint is where the amplitude curve puts 0.5, which makes the curve
+// the control for what counts as the middle.
+export const COLORMAPS: { name: string; stops: string[] }[] = [
+  { name: 'cool', stops: ['#3b4cc0', '#8db0fe', '#f2f2f2', '#f49a7b', '#b40426'] },
+  { name: 'spectral', stops: ['#3288bd', '#99d594', '#ffffbf', '#fc8d59', '#d53e4f'] },
+  { name: 'pink', stops: ['#c51b7d', '#e9a3c9', '#f7f7f7', '#a1d76a', '#4d9221'] },
+  { name: 'earth', stops: ['#8c510a', '#d8b365', '#f5f5f5', '#5ab4ac', '#01665e'] },
+  { name: 'heat', stops: ['#123a8f', '#2a9df4', '#f7c948', '#d7263d'] },
+  { name: 'mono', stops: ['#111111', '#777777', '#dddddd', '#ffffff'] },
+]
+
+const COLORMAP_RGB = COLORMAPS.map((map) => map.stops.map(parseHex))
 const BAND_RGB = BAND_COLORS.map((band) => band.rgb.split(',').map(Number) as [number, number, number])
 
 function levelRgb(value: number) {
@@ -909,8 +930,8 @@ function heatRgb(value: number) {
   return rampRgb(HEAT_RGB, value)
 }
 
-function waveRgb(value: number) {
-  return rampRgb(WAVE_RGB, value)
+function waveRgb(value: number, colormap = 0) {
+  return rampRgb(COLORMAP_RGB[colormap] ?? COLORMAP_RGB[0], value)
 }
 
 const LUT_SIZE = 256
@@ -947,12 +968,13 @@ export function renderBarLayers(
   height: number,
   curve: Curve,
   blocks: number[] = ALL_BLOCKS,
+  colormap = 0,
 ): BlockLayer[] {
   if (bars.length === 0) return []
 
   const heights = blockHeights(height, blocks)
   const luts = [
-    buildLut(curve, waveRgb),
+    buildLut(curve, (value) => waveRgb(value, colormap)),
     buildLut(curve, levelRgb),
     buildLut(curve, heatRgb),
     ...BAND_ORDER.map((band) => bandLut(curve, BAND_RGB[band])),
@@ -1060,6 +1082,8 @@ export function drawSectionBounds(
   context.fillRect(first * column, 0, (last - first + 1) * column, height)
   context.restore()
 }
+
+export const DIVISION_STEPS = [2, 3, 4, 6, 8]
 
 export function drawSliceGuides(
   context: CanvasRenderingContext2D,

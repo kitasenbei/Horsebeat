@@ -2,16 +2,22 @@ export type Section = {
   id: string
   offsetMs: number
   bpm: number
+  // beats in a bar: 4 unless the chart says otherwise, which is the one place
+  // a time signature enters the app
+  meter: number
 }
 
 export const MIN_BPM = 20
 export const MAX_BPM = 400
 
-export function createSection(offsetMs: number, bpm: number): Section {
+export const DEFAULT_METER = 4
+
+export function createSection(offsetMs: number, bpm: number, meter = DEFAULT_METER): Section {
   return {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     offsetMs: Math.max(0, offsetMs),
     bpm: Math.min(MAX_BPM, Math.max(MIN_BPM, bpm)),
+    meter: Math.min(16, Math.max(1, Math.round(meter))),
   }
 }
 

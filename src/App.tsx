@@ -91,6 +91,8 @@ export default function App() {
   const [barGrid, setBarGrid] = useState(true)
   const [slice, setSlice] = useState<number | 'auto'>('auto')
   const [lane, setLane] = useState<number | 'all'>(0)
+  const [divisions, setDivisions] = useState(4)
+  const [colormap, setColormap] = useState(0)
   const [follow, setFollow] = useState(false)
   const touchedRef = useRef(0)
 
@@ -144,7 +146,8 @@ export default function App() {
       return
     }
 
-    const created = createSection(offsetMs, sections[sections.length - 1]?.bpm ?? 120)
+    const previous = sections[sections.length - 1]
+    const created = createSection(offsetMs, previous?.bpm ?? 120, previous?.meter)
     setAnchorId(created.id)
     setSections((current) => sortSections([...current, created]))
   }
@@ -430,13 +433,19 @@ export default function App() {
                     onSeek={seek}
                     slice={slice}
                     lane={lane}
+                    divisions={divisions}
+                    colormap={colormap}
                   />
                 </Box>
                 <BarGridControls
                   lane={lane}
                   slice={slice}
+                  divisions={divisions}
+                  colormap={colormap}
                   onLaneChange={setLane}
                   onSliceChange={setSlice}
+                  onDivisionsChange={setDivisions}
+                  onColormapChange={setColormap}
                 />
               </>
             ) : null}
@@ -451,7 +460,6 @@ export default function App() {
               positionRef={positionRef}
               playing={playing}
               duration={duration}
-              curve={curve}
               seconds={FALL_RANGE - fallSpeed}
             />
             <Paper

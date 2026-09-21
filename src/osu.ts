@@ -46,6 +46,7 @@ export function readTimingPoints(text: string): Section[] {
 
     const time = Number(parts[0])
     const beatLength = Number(parts[1])
+    const meter = Number(parts[2])
     const uninherited = parts.length > 6 ? parts[6].trim() !== '0' : beatLength > 0
     if (!uninherited || !Number.isFinite(time) || !Number.isFinite(beatLength)) continue
     if (beatLength <= 0) continue
@@ -56,7 +57,9 @@ export function readTimingPoints(text: string): Section[] {
     const previous = sections[sections.length - 1]
     if (previous && Math.abs(previous.offsetMs - time) < 1) continue
 
-    sections.push(createSection(Math.max(0, time), bpm))
+    sections.push(
+      createSection(Math.max(0, time), bpm, Number.isFinite(meter) && meter > 0 ? meter : undefined),
+    )
   }
 
   return sortSections(sections)
@@ -108,7 +111,7 @@ export function writeTimingPoints(sections: Section[]): string {
   return sortSections(sections)
     .map((section) => {
       const beatLength = 60000 / section.bpm
-      return `${Math.round(section.offsetMs)},${beatLength},4,2,0,60,1,0`
+      return `${Math.round(section.offsetMs)},${beatLength},${section.meter},2,0,60,1,0`
     })
     .join('\n')
 }

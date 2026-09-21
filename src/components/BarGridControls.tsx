@@ -1,13 +1,17 @@
 import Paper from '@mui/material/Paper'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import { BLOCK_LABELS, SLICE_STEPS } from '../draw'
+import { BLOCK_LABELS, COLORMAPS, DIVISION_STEPS, SLICE_STEPS } from '../draw'
 
 type BarGridControlsProps = {
   lane: number | 'all'
   slice: number | 'auto'
+  divisions: number
+  colormap: number
   onLaneChange: (lane: number | 'all') => void
   onSliceChange: (slice: number | 'auto') => void
+  onDivisionsChange: (divisions: number) => void
+  onColormapChange: (colormap: number) => void
 }
 
 // Rendered under the compiled view rather than over it: these are twenty MUI
@@ -16,8 +20,12 @@ type BarGridControlsProps = {
 export default function BarGridControls({
   lane,
   slice,
+  divisions,
+  colormap,
   onLaneChange,
   onSliceChange,
+  onDivisionsChange,
+  onColormapChange,
 }: BarGridControlsProps) {
   return (
     <Paper
@@ -66,6 +74,38 @@ export default function BarGridControls({
           </ToggleButton>
         ))}
       </ToggleButtonGroup>
+      <ToggleButtonGroup
+        size="small"
+        exclusive
+        value={divisions}
+        onChange={(_, next) => {
+          if (next !== null) onDivisionsChange(next as number)
+        }}
+        sx={{ '& .MuiToggleButton-root': { px: 0.75, py: 0.25, border: 0, fontSize: 11 } }}
+      >
+        {DIVISION_STEPS.map((entry) => (
+          <ToggleButton key={entry} value={entry} aria-label={`${entry} guide divisions`}>
+            {`/${entry}`}
+          </ToggleButton>
+        ))}
+      </ToggleButtonGroup>
+      {lane === 0 || lane === 'all' ? (
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={colormap}
+          onChange={(_, next) => {
+            if (next !== null) onColormapChange(next as number)
+          }}
+          sx={{ '& .MuiToggleButton-root': { px: 0.75, py: 0.25, border: 0, fontSize: 11 } }}
+        >
+          {COLORMAPS.map((map, index) => (
+            <ToggleButton key={map.name} value={index} aria-label={`${map.name} colours`}>
+              {map.name}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      ) : null}
     </Paper>
   )
 }

@@ -111,7 +111,11 @@ export default function TimingPanel({
     onSectionsChange(
       sortSections([
         ...sections,
-        createSection(offsetMs, sections[sections.length - 1]?.bpm ?? 120),
+        createSection(
+          offsetMs,
+          sections[sections.length - 1]?.bpm ?? 120,
+          sections[sections.length - 1]?.meter,
+        ),
       ]),
     )
   }
@@ -327,6 +331,27 @@ export default function TimingPanel({
                         }}
                       />
                     )}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                      <Typography variant="caption" sx={{ color: ACTION_INK, opacity: 0.8 }}>
+                        /
+                      </Typography>
+                      <InputBase
+                        value={section.meter}
+                        inputProps={{
+                          inputMode: 'numeric',
+                          'aria-label': 'Beats in a bar',
+                        }}
+                        onChange={(event) => update(section.id, { meter: Number(event.target.value) })}
+                        onFocus={() => onEditingChange(section.id)}
+                        onBlur={() => onEditingChange(null)}
+                        sx={{
+                          width: 22,
+                          color: ACTION_INK,
+                          fontSize: (current) => current.typography.caption.fontSize,
+                          '& input': { p: 0, textAlign: 'center' },
+                        }}
+                      />
+                    </Box>
                   </Box>
                 </Box>
 

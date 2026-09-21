@@ -13,8 +13,11 @@ import {
   SLICE_STEPS,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
-import { sectionSpans, type Section } from '../timing'
+import { MAX_BPM, MIN_BPM, sectionSpans, sortSections, type Section } from '../timing'
+import { clampRange } from '../range'
+import { useRafCallback } from '../useRafCallback'
 import type { Curve } from '../curve'
+import type { Range } from '../range'
 
 type BarGridProps = {
   envelope: Float32Array | null
@@ -27,11 +30,18 @@ type BarGridProps = {
   positionRef: RefObject<number>
   playing: boolean
   curve: Curve
+  range: Range
+  onRangeChange: (range: Range) => void
+  onSectionsChange: (sections: Section[]) => void
   slice: number | 'auto'
   onSliceChange: (slice: number | 'auto') => void
 }
 
 const GUIDE_COLOR = '#ffffff'
+const ZOOM_RATE = 0.002
+const AXIS_SLOP = 4
+const COARSE_BPM = 0.02
+const FINE_BPM = 0.002
 
 export default function BarGrid({
   envelope,
@@ -44,6 +54,9 @@ export default function BarGrid({
   positionRef,
   playing,
   curve,
+  range,
+  onRangeChange,
+  onSectionsChange,
   slice,
   onSliceChange,
 }: BarGridProps) {
@@ -69,13 +82,38 @@ export default function BarGrid({
       ? autoSliceBeats(active, width)
       : slice
     : 4
-  const bars = active ? collectBars(active, beats) : []
+  // the bars stay anchored to the section, so the window only decides how many
+  // of them are on screen: narrow it and the columns get wider
+  const all = active ? collectBars(active, beats) : []
+  const inside = all.filter((bar) => bar.end > range.start && bar.start < range.end)
+  const bars = inside.length > 0 ? inside : all
 
   const sources = { envelope, loudness, onsets, bands }
   const cacheRef = useRef<{
     canvases: { canvas: HTMLCanvasElement; top: number; height: number }[]
     key: string
   } | null>(null)
+
+  const applyRange = useRafCallback(onRangeChange)
+  const applySections = useRafCallback(onSectionsChange)
+  const sliceHeightRef = useRef(1)
+  const dragRef = useRef<{
+    clientX: number
+    clientY: number
+    offsetMs: number
+    perPixel: number
+    id: string
+    bpm: number
+    tempo: boolean
+    fine: boolean
+    start: number
+    span: number
+    axis: 'none' | 'vertical' | 'pan'
+  } | null>(null)
+  const zoomRef = useRef({ range, applyRange })
+  useEffect(() => {
+    zoomRef.current = { range, applyRange }
+  })
 
   const canvasRef = useCanvas((context, width, height) => {
     if (bars.length === 0) return
@@ -86,7 +124,7 @@ export default function BarGrid({
       bars.length,
       beats,
       bars[0]?.start ?? 0,
-      bars[0]?.end ?? 0,
+      bars[bars.length - 1]?.end ?? 0,
       envelope?.length ?? 0,
       loudness?.length ?? 0,
       onsets?.length ?? 0,
@@ -117,6 +155,7 @@ export default function BarGrid({
     }
 
     const heights = cache.canvases.map((layer) => layer.height)
+    sliceHeightRef.current = Math.max(1, heights[0] ?? 1)
     const tops = cache.canvases.map((layer) => layer.top)
 
     if (tops.length > 0) drawSliceGuides(context, tops[0], heights[0], width, GUIDE_COLOR)
@@ -133,12 +172,112 @@ export default function BarGrid({
     )
   }, playing)
 
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const onWheel = (event: WheelEvent) => {
+      const bounds = canvas.getBoundingClientRect()
+      if (bounds.width === 0) return
+      event.preventDefault()
+
+      const { range: current, applyRange: apply } = zoomRef.current
+      const ratio = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+      const span = current.end - current.start
+      const anchor = current.start + ratio * span
+      const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
+
+      apply(clampRange({ start: anchor - ratio * next, end: anchor + (1 - ratio) * next }))
+    }
+
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+  }, [canvasRef])
+
+  // one block is one slice tall, so a pixel of drag is a known number of
+  // milliseconds: the same gesture means the same thing at any zoom or density
+  const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!active) return
+
+    dragRef.current = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      offsetMs: active.section.offsetMs,
+      perPixel: ((60000 / active.section.bpm) * beats) / sliceHeightRef.current,
+      id: active.section.id,
+      bpm: active.section.bpm,
+      // held at the press, not read while moving: picking up a modifier
+      // mid-drag would jump the value by everything moved so far
+      tempo: event.shiftKey,
+      fine: event.shiftKey && (event.ctrlKey || event.metaKey),
+      start: range.start,
+      span: range.end - range.start,
+      axis: 'none',
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current
+    if (!drag) return
+
+    const dx = event.clientX - drag.clientX
+    const dy = event.clientY - drag.clientY
+
+    // the axis is decided once, so a sideways drag cannot nudge the offset on
+    // the way past and a vertical one cannot slide the window
+    if (drag.axis === 'none') {
+      if (Math.abs(dx) < AXIS_SLOP && Math.abs(dy) < AXIS_SLOP) return
+      drag.axis = Math.abs(dx) > Math.abs(dy) ? 'pan' : 'vertical'
+    }
+
+    if (drag.axis === 'pan') {
+      const width = event.currentTarget.clientWidth
+      if (width === 0) return
+      const shift = (dx / width) * drag.span
+      applyRange(clampRange({ start: drag.start - shift, end: drag.start - shift + drag.span }))
+      return
+    }
+
+    // up raises the tempo, and dragging down pulls the audio down the column,
+    // which is an earlier offset
+    const patch: Partial<Section> = drag.tempo
+      ? {
+          bpm: Math.min(
+            MAX_BPM,
+            Math.max(MIN_BPM, drag.bpm - dy * (drag.fine ? FINE_BPM : COARSE_BPM)),
+          ),
+        }
+      : { offsetMs: Math.max(0, drag.offsetMs - dy * drag.perPixel) }
+
+    applySections(
+      sortSections(
+        sections.map((section) => (section.id === drag.id ? { ...section, ...patch } : section)),
+      ),
+    )
+  }
+
+  const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
   return (
     <Box ref={wrapRef} sx={{ position: 'relative', height: '100%' }}>
       <Box
         component="canvas"
       ref={canvasRef}
-        sx={{ display: 'block', width: '100%', height: '100%', pointerEvents: 'none' }}
+        onPointerDown={begin}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        sx={{
+          display: 'block',
+          width: '100%',
+          height: '100%',
+          touchAction: 'none',
+          cursor: 'move',
+        }}
       />
       <Paper
         elevation={3}

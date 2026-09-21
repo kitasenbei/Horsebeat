@@ -48,7 +48,6 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
-const FULL_RANGE: Range = { start: 0, end: 1 }
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -134,13 +133,6 @@ export default function App() {
       ),
     )
   }
-
-  const compiled = (() => {
-    const span = sectionSpans(sections, duration).find(
-      (item) => position >= item.start && position <= item.end,
-    )
-    return span ? { start: span.start, end: span.end } : FULL_RANGE
-  })()
 
   const anchorSection = (at: number) => {
     const offsetMs = at * duration * 1000
@@ -439,6 +431,9 @@ export default function App() {
                   positionRef={positionRef}
                   playing={playing}
                   curve={curve}
+                  range={range}
+                  onRangeChange={changeRange}
+                  onSectionsChange={setSections}
                   slice={slice}
                   onSliceChange={setSlice}
                 />
@@ -448,7 +443,7 @@ export default function App() {
               loudness={loudness}
               onsets={onsets}
               bands={bands}
-              range={barGrid ? compiled : range}
+              range={range}
             />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>

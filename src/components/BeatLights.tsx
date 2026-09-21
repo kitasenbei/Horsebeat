@@ -10,8 +10,8 @@ type BeatLightsProps = {
   color: string
 }
 
-const SIZE = 10
-const GAP = 4
+const SIZE = 16
+const GAP = 5
 const IDLE = 0.15
 // how fast a lit square falls back, in beats
 const FADE = 7
@@ -88,7 +88,7 @@ export default function BeatLights({
           sx={{
             width: SIZE,
             height: SIZE,
-            borderRadius: '2px',
+            borderRadius: '3px',
             bgcolor: color,
             opacity: IDLE,
             willChange: 'opacity',

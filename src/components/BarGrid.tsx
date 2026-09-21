@@ -54,6 +54,7 @@ const GUIDE_COLOR = '#ffffff'
 const ZOOM_RATE = 0.002
 const HOVER_COLOR = '#ffffff'
 const HOVER_WIDTH = 3
+const GESTURE_END_MS = 140
 const AXIS_SLOP = 4
 const COARSE_BPM = 0.1
 const FINE_BPM = 0.01
@@ -72,7 +73,7 @@ export default function BarGrid({
   positionRef,
   playing,
   curve,
-  range,
+  range: givenRange,
   onRangeChange,
   onSectionsChange,
   onSeek,
@@ -84,6 +85,10 @@ export default function BarGrid({
   const theme = useTheme()
 
   const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
+  // the wheel fires faster than the app can usefully re-render, so the window
+  // is kept here during a gesture and handed over once it stops
+  const [range, editRange, settleRange] = useLiveEdit(givenRange, onRangeChange)
+  const settleTimer = useRef(0)
   const blocks = lane === 'all' ? ALL_BLOCKS : [lane]
   const spans = sectionSpans(live, duration)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -102,11 +107,11 @@ export default function BarGrid({
   // every section the window touches contributes its own slices, so the view is
   // continuous across tempo changes rather than one section at a time
   const visible = spans.filter((span) => span.end > range.start && span.start < range.end)
-  const window = Math.max(1e-9, range.end - range.start)
+  const windowSpan = Math.max(1e-9, range.end - range.start)
 
   const bars = (visible.length > 0 ? visible : spans.slice(0, 1))
     .flatMap((span) => {
-      const share = (Math.min(span.end, range.end) - Math.max(span.start, range.start)) / window
+      const share = (Math.min(span.end, range.end) - Math.max(span.start, range.start)) / windowSpan
       const beats =
         slice === 'auto' ? autoSliceBeats(span, Math.max(120, width * share)) : slice
       return collectBars(span, beats)
@@ -120,7 +125,7 @@ export default function BarGrid({
     key: string
   } | null>(null)
 
-  const applyRange = useRafCallback(onRangeChange)
+  const applyRange = useRafCallback(editRange)
   const sliceHeightRef = useRef(1)
   const [menu, setMenu] = useState<{ x: number; y: number; at: number; id: string } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
@@ -139,9 +144,9 @@ export default function BarGrid({
     span: number
     axis: 'none' | 'vertical' | 'pan'
   } | null>(null)
-  const zoomRef = useRef({ range, applyRange })
+  const zoomRef = useRef({ range, applyRange, settle: settleRange })
   useEffect(() => {
-    zoomRef.current = { range, applyRange }
+    zoomRef.current = { range, applyRange, settle: settleRange }
   })
 
   const canvasRef = useCanvas((context, width, height) => {
@@ -251,6 +256,9 @@ export default function BarGrid({
       const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
 
       apply(clampRange({ start: anchor - ratio * next, end: anchor + (1 - ratio) * next }))
+
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = window.setTimeout(() => zoomRef.current.settle(), GESTURE_END_MS)
     }
 
     canvas.addEventListener('wheel', onWheel, { passive: false })
@@ -417,6 +425,7 @@ export default function BarGrid({
     setDragging(false)
     event.currentTarget.releasePointerCapture(event.pointerId)
     settleSections()
+    settleRange()
 
     // a press that never moved far enough to pick an axis was a click, and a
     // click moves the playhead to the moment under the pointer

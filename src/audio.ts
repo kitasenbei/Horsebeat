@@ -37,16 +37,21 @@ export function computePeaks(samples: Float32Array): Float32Array {
   return peaks
 }
 
-const HOP = 512
+// Onsets are a difference between consecutive frames, so they want frames of
+// several milliseconds: at a finer hop the difference is mostly noise. Loudness
+// and the bands are levels rather than differences, so they can be measured as
+// finely as the envelope and stop looking stepped beside it.
+const ONSET_HOP = 512
+const LEVEL_HOP = 64
 const FLOOR_DB = -60
 
-export function computeRms(samples: Float32Array): Float32Array {
-  const frames = Math.max(1, Math.floor(samples.length / HOP))
+export function computeRms(samples: Float32Array, hop = ONSET_HOP): Float32Array {
+  const frames = Math.max(1, Math.floor(samples.length / hop))
   const energy = new Float32Array(frames)
 
   for (let frame = 0; frame < frames; frame += 1) {
-    const start = frame * HOP
-    const end = Math.min(samples.length, start + HOP)
+    const start = frame * hop
+    const end = Math.min(samples.length, start + hop)
     let sum = 0
     for (let index = start; index < end; index += 1) sum += samples[index] * samples[index]
     energy[frame] = Math.sqrt(sum / Math.max(1, end - start))
@@ -56,7 +61,7 @@ export function computeRms(samples: Float32Array): Float32Array {
 }
 
 export function computeLoudness(samples: Float32Array): Float32Array {
-  const energy = computeRms(samples)
+  const energy = computeRms(samples, LEVEL_HOP)
   const loudness = new Float32Array(energy.length)
 
   for (let frame = 0; frame < energy.length; frame += 1) {
@@ -104,7 +109,7 @@ function coefficient(cutoff: number, sampleRate: number) {
 }
 
 export function computeBands(samples: Float32Array, sampleRate: number): Float32Array {
-  const frames = Math.max(1, Math.floor(samples.length / HOP))
+  const frames = Math.max(1, Math.floor(samples.length / LEVEL_HOP))
   const bands = new Float32Array(frames * 3)
   const lowA = coefficient(LOW_HZ, sampleRate)
   const highA = coefficient(HIGH_HZ, sampleRate)
@@ -114,8 +119,8 @@ export function computeBands(samples: Float32Array, sampleRate: number): Float32
   const peaks = [0, 0, 0]
 
   for (let frame = 0; frame < frames; frame += 1) {
-    const start = frame * HOP
-    const end = Math.min(samples.length, start + HOP)
+    const start = frame * LEVEL_HOP
+    const end = Math.min(samples.length, start + LEVEL_HOP)
     const sums = [0, 0, 0]
 
     for (let index = start; index < end; index += 1) {

@@ -2,11 +2,13 @@ import { useState, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
-import { sectionSignature } from '../draw'
+import { curveSignature, sectionSignature } from '../draw'
+import { applyCurve, type Curve } from '../curve'
 import { sectionSpans, type Section } from '../timing'
 
 type LiveWaveProps = {
   envelope: Float32Array | null
+  curve: Curve
   sections: Section[]
   duration: number
   position: number
@@ -32,16 +34,6 @@ const HALVES = 12
 const HALVES_QUIET = 4
 const HALVES_LOUD = 28
 const STEADY_REACH = 0.7
-
-// What the strip counts as full, taken from the track itself rather than fixed.
-// The envelope is left unclamped where it is measured, and where it lands
-// depends on the master: a loud one runs past one while a quiet one peaks near
-// a third of it. Against a fixed ceiling the quiet one would be a flat line for
-// its whole length. The loud end is read as a high quantile so a single stray
-// frame cannot set the scale, and it is floored so silence stays silent.
-const LOUD_QUANTILE = 0.98
-const QUIETEST = 0.05
-const SAMPLED = 4096
 
 const EDGE = 3
 
@@ -72,29 +64,21 @@ const BEAT_COLOURS = ['error', 'warning', 'info', 'success'] as const
 // Beyond this the strip is a thicket rather than a reading.
 const MOST_BEATS = 8
 
-function ceilingOf(envelope: Float32Array | null): number {
-  if (!envelope || envelope.length === 0) return 1
-  const stride = Math.max(1, Math.floor(envelope.length / SAMPLED))
-  const taken: number[] = []
-  for (let index = 0; index < envelope.length; index += stride) {
-    const value = envelope[index]
-    if (Number.isFinite(value)) taken.push(Math.max(0, value))
-  }
-  if (taken.length === 0) return 1
-  taken.sort((left, right) => left - right)
-  const loud = taken[Math.min(taken.length - 1, Math.floor(taken.length * LOUD_QUANTILE))]
-  return Math.max(QUIETEST, loud)
-}
-
-function readAt(envelope: Float32Array | null, at: number): number {
+// The same reading the compiled view paints at that spot, arrived at the same
+// way: the frame the position lands on, held at one, and put through the
+// amplitude curve. The compiled view gives that value to a colour ramp and this
+// one gives it to a height, so a quarter drawn tall here is a bright row there.
+function readAt(envelope: Float32Array | null, at: number, curve: Curve): number {
   if (!envelope || envelope.length === 0) return 0
-  const index = Math.min(envelope.length - 1, Math.max(0, Math.round(at * envelope.length)))
-  const value = envelope[index]
-  return Number.isFinite(value) ? Math.max(0, value) : 0
+  const frame = Math.min(envelope.length - 1, Math.max(0, (at * envelope.length) | 0))
+  const value = envelope[frame]
+  if (!Number.isFinite(value)) return 0
+  return applyCurve(Math.min(1, Math.max(0, value)), curve)
 }
 
 export default function LiveWave({
   envelope,
+  curve,
   sections,
   duration,
   position,
@@ -104,15 +88,14 @@ export default function LiveWave({
   const theme = useTheme()
   const [reading, setReading] = useState<Reading>('amplitude')
   const sourceRef = useRef<Float32Array | null>(null)
-  const ceilingRef = useRef(1)
   const pastRef = useRef<number[]>([])
 
   const canvasRef = useCanvas(
     (context, width, height) => {
-      // measured once a track, not once a frame
+      // a new track is a new band: what the last one was doing says nothing
+      // about this one
       if (sourceRef.current !== envelope) {
         sourceRef.current = envelope
-        ceilingRef.current = ceilingOf(envelope)
         pastRef.current = []
       }
 
@@ -161,8 +144,7 @@ export default function LiveWave({
         // past the end there is nothing to read, and drawing it would repeat
         // the last frame of the track as though it were a beat
         if (quarter > 1) continue
-        const value = readAt(envelope, quarter)
-        const share = Math.min(1, value / ceilingRef.current)
+        const share = readAt(envelope, quarter, curve)
         shares.push(share)
         const colour = BEAT_COLOURS[index % BEAT_COLOURS.length]
         context.strokeStyle = theme.palette[colour].main
@@ -183,7 +165,7 @@ export default function LiveWave({
       }
     },
     playing,
-    `${position}|${reading}|${envelope?.length}|${sectionSignature(sections)}`,
+    `${position}|${reading}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}`,
   )
 
   return (

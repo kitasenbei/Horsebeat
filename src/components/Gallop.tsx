@@ -49,6 +49,10 @@ const CARRIES = 44
 // before it is back.
 const LAP = SPREAD + WIDTH
 
+// How far in from each end a horse is faded out, so one leaving or arriving
+// thins away instead of being cut off against a straight edge.
+const HAZE = 16
+
 // One stride to the beat, and only ever that: each beat is the hind legs going
 // into the ground and nothing comes between. Two strides to a beat smash twice
 // as often and four smash four times, and a landing that happens on the beat
@@ -109,6 +113,10 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
         height: TALL,
         mr: 1,
         flex: '0 0 auto',
+        // the horse itself is faded rather than covered by something white, so
+        // the ends read the same whatever the bar behind them is painted
+        maskImage: `linear-gradient(to right, transparent, #000 ${HAZE}px, #000 calc(100% - ${HAZE}px), transparent)`,
+        WebkitMaskImage: `linear-gradient(to right, transparent, #000 ${HAZE}px, #000 calc(100% - ${HAZE}px), transparent)`,
       }}
     >
       {HERD.map((horse, index) => (

@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
@@ -20,13 +20,31 @@ const TALL = 64
 const HALVES_QUIET = 4
 const HALVES_LOUD = 28
 
-// The envelope is deliberately left unclamped where it is measured, so a loud
-// master runs past one. The wave is drawn against a ceiling a little above that
-// instead of against one, which keeps the loudest moments inside the strip
-// rather than flattened along its edge.
-const CEILING = 1.4
+// What the strip counts as full, taken from the track itself rather than fixed.
+// The envelope is left unclamped where it is measured, and where it lands
+// depends on the master: a loud one runs past one while a quiet one peaks near
+// a third of it. Against a fixed ceiling the quiet one would be a flat line for
+// its whole length. The loud end is read as a high quantile so a single stray
+// frame cannot set the scale, and it is floored so silence stays silent.
+const LOUD_QUANTILE = 0.98
+const QUIETEST = 0.05
+const SAMPLED = 4096
 
 const EDGE = 3
+
+function ceilingOf(envelope: Float32Array | null): number {
+  if (!envelope || envelope.length === 0) return 1
+  const stride = Math.max(1, Math.floor(envelope.length / SAMPLED))
+  const taken: number[] = []
+  for (let index = 0; index < envelope.length; index += stride) {
+    const value = envelope[index]
+    if (Number.isFinite(value)) taken.push(Math.max(0, value))
+  }
+  if (taken.length === 0) return 1
+  taken.sort((left, right) => left - right)
+  const loud = taken[Math.min(taken.length - 1, Math.floor(taken.length * LOUD_QUANTILE))]
+  return Math.max(QUIETEST, loud)
+}
 
 function readAt(envelope: Float32Array | null, at: number): number {
   if (!envelope || envelope.length === 0) return 0
@@ -37,11 +55,19 @@ function readAt(envelope: Float32Array | null, at: number): number {
 
 export default function LiveWave({ envelope, position, positionRef, playing }: LiveWaveProps) {
   const theme = useTheme()
+  const sourceRef = useRef<Float32Array | null>(null)
+  const ceilingRef = useRef(1)
 
   const canvasRef = useCanvas(
     (context, width, height) => {
+      // measured once a track, not once a frame
+      if (sourceRef.current !== envelope) {
+        sourceRef.current = envelope
+        ceilingRef.current = ceilingOf(envelope)
+      }
+
       const value = readAt(envelope, positionRef.current)
-      const share = Math.min(1, value / CEILING)
+      const share = Math.min(1, value / ceilingRef.current)
       const middle = height / 2
       const reach = (middle - EDGE) * share
       const halves = Math.round(HALVES_QUIET + (HALVES_LOUD - HALVES_QUIET) * share)

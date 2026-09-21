@@ -200,10 +200,20 @@ export function flatnessOf(
     if (!rows) continue
 
     const here = centred(rows)
-    if (last) slides.push(Math.abs((shiftRows(last, here, count) / SETTLE_ROWS) * barMs))
+    if (last) {
+      // Only the readings that mean something. Where two stretches line up
+      // nearly as well a beat apart as in place, the winner is decided by a
+      // fraction and says nothing about whether the grid moved; counting it as
+      // a small movement is how a section that visibly slopes comes back
+      // measured as straight.
+      const slide = shiftRows(last, here, count)
+      if (slide.sure) slides.push(Math.abs((slide.rows / SETTLE_ROWS) * barMs))
+    }
     last = here
   }
 
+  // nothing readable is not the same as nothing moving: a stretch the readings
+  // cannot speak for is left to the rest of the fitting to judge
   if (slides.length === 0) return 0
 
   // the middle one, not the average: a fill or a break throws one stretch a

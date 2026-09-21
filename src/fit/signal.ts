@@ -103,22 +103,48 @@ export function centred(rows: Float64Array): Float64Array {
 // search may go: half a beat either way, whatever that is in rows. Columns look
 // alike at beat level, so a wider search answers with a whole beat of slide
 // that never happened.
-export function shiftRows(one: Float64Array, other: Float64Array, beats: number): number {
+// A reading and whether it means anything. Music repeats inside a bar as well
+// as across one, so two profiles often line up nearly as well a beat apart as
+// they do in place, and the winner is then decided by whichever was a fraction
+// higher. Such a reading is not a small movement — it is no movement and no
+// reading, and averaging it in with the rest is where a picture that visibly
+// slopes comes back measured as straight.
+export type Slide = {
+  rows: number
+  sure: boolean
+}
+
+// how much of the winner a rival some way off may reach before the two are
+// called indistinguishable
+const RIVAL_KEEPS = 0.85
+
+export function shiftRows(one: Float64Array, other: Float64Array, beats: number): Slide {
   const size = one.length
   const reach = Math.max(1, Math.round(size / (2 * Math.max(1, beats))))
+
+  const scores = new Float64Array(reach * 2 + 1)
   let best = 0
   let bestScore = -Infinity
 
   for (let shift = -reach; shift <= reach; shift += 1) {
     let sum = 0
     for (let row = 0; row < size; row += 1) sum += one[row] * other[(row + shift + size) % size]
+    scores[shift + reach] = sum
     if (sum > bestScore) {
       bestScore = sum
       best = shift
     }
   }
 
-  return best
+  // the best of everything that is not simply the shoulder of the winner
+  const apart = Math.max(1, Math.round(reach / 2))
+  let rival = -Infinity
+  for (let shift = -reach; shift <= reach; shift += 1) {
+    if (Math.abs(shift - best) < apart) continue
+    rival = Math.max(rival, scores[shift + reach])
+  }
+
+  return { rows: best, sure: bestScore > 0 && rival < bestScore * RIVAL_KEEPS }
 }
 
 // How straight the compiled view runs under this grid: the average distance

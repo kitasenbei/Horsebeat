@@ -14,10 +14,12 @@ const FRAMES = 24
 const WIDTH = 56
 const HEIGHT = 38
 
-// A horse at full gallop takes about two and a half strides a second. Tying one
-// stride to one beat is right for most music and absurd for the fast end of it,
-// so above this the stride is tied to every second beat instead, and then every
-// fourth: the gait stays a gait while it stays in step with the music.
+// Half a stride again to the beat, which reads as a horse with somewhere to be.
+const STRIDES_A_BEAT = 1.5
+
+// Above this beat rate the stride is tied to every second beat instead, and
+// then every fourth: the gait stays a gait at the fast end of the music while
+// staying in step with it.
 const MOST_A_MINUTE = 170
 
 function beatsAStride(bpm: number): number {
@@ -47,7 +49,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
       const at = positionRef.current
       const span = spans.find((item) => at >= item.start && at <= item.end) ?? spans[0]
       const beats = span.beat > 0 ? (at - span.start) / span.beat : 0
-      const stride = beats / beatsAStride(60000 / span.beat)
+      const stride = (beats / beatsAStride(60000 / span.beat)) * STRIDES_A_BEAT
       const step = Math.floor((((stride % 1) + 1) % 1) * FRAMES)
 
       node.style.backgroundPositionX = `${-step * WIDTH}px`

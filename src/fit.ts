@@ -11,6 +11,9 @@ const RISE_SPREAD = 0.25
 const BEAT_FRAMES = 3
 const COARSE_BPM_STEP = 0.5
 const COARSE_PHASES = 64
+// how finely, and how far either side, a section's own span is swept
+const TUNE_BPM = 0.01
+const TUNE_STEPS = 60
 const BOUNDARY_STEP_MS = 250
 const BOUNDARY_DROP = 0.6
 const DENSER_KEEPS = 0.78
@@ -559,6 +562,36 @@ export function scanBlock(
 
 // Once the spans are known, fit each one over its own audio rather than over
 // the block that happened to notice it.
+// The last word on a section's tempo, taken over the whole of it. A ladder that
+// starts from one window walks downhill from wherever that window put it, and a
+// tempo a twentieth of a beat per minute out still fits every window it is
+// checked against while sliding a quarter of a beat across four minutes. Only
+// the full span tells those apart, so the tempo is swept again against all of
+// it, finely, and the phase re-read for whatever wins.
+export function tuneFit(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  fit: Fit,
+): Fit {
+  let best = fit
+  let bestScore = scoreFit(envelope, sampleRate, fromMs, toMs, fit)
+
+  for (let step = -TUNE_STEPS; step <= TUNE_STEPS; step += 1) {
+    const bpm = fit.bpm + step * TUNE_BPM
+    if (bpm < MIN_BPM_SEARCH / 2) continue
+
+    const found = bestPhase(envelope, sampleRate, fromMs, toMs, bpm)
+    if (found.score > bestScore) {
+      bestScore = found.score
+      best = found.fit
+    }
+  }
+
+  return best
+}
+
 export function refineScan(
   envelope: Float32Array,
   sampleRate: number,
@@ -572,7 +605,8 @@ export function refineScan(
   if (toMs - fromMs < 3000) return found[index]
 
   const refined = fitWindow(envelope, sampleRate, fromMs, toMs, found[index])
-  const anchored = { bpm: refined.bpm, offsetMs: beatNear(refined, fromMs) }
+  const tuned = tuneFit(envelope, sampleRate, fromMs, toMs, refined)
+  const anchored = { bpm: tuned.bpm, offsetMs: beatNear(tuned, fromMs) }
   return alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
 }
 

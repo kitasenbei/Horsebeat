@@ -759,6 +759,13 @@ const SPLIT_KEEPS = 0.9
 const MAX_DEPTH = 6
 // how much better a span has to read at its own tempo to leave its parent's
 const TAKES_OVER = 1.15
+// how well a tempo has to have polled over the whole track to be allowed to
+// take a span, against the best anything polled
+const POLLED_ENOUGH = 0.4
+// how far from the tempo it was given a span may land. A song changes tempo by
+// a few bpm, or drops to two thirds for a half-time passage; past that it is
+// not a change of tempo but the same pulse counted some other way.
+const NEAREST = 0.65
 
 // What a span reads as on its own. A short span has few bars to count and reads
 // as all sorts of things, so the tempo it was given stands unless what it found
@@ -771,12 +778,19 @@ function tempoOf(
   toMs: number,
   given: number,
   meter: number,
+  track: Vote,
 ): number {
   const local = voteTempo(envelope, sampleRate, fromMs, toMs, meter)
   if (local.bpm === null) return given
 
   const found = beatWithin(envelope, sampleRate, fromMs, toMs, local.bpm, meter)
   if (found === given || runsAlready(found, given)) return given
+
+  // and it has to be a tempo the track plays. A stretch of a few bars reads as
+  // any number of things, most of which the song never goes near, and the count
+  // of the whole track is the only place that is known.
+  if (polledAs(track, found) < topVote(track) * POLLED_ENOUGH) return given
+  if (found < given * NEAREST || found > given / NEAREST) return given
 
   const mine = patternScore(envelope, sampleRate, fromMs, toMs, found, meter)
   const theirs = patternScore(envelope, sampleRate, fromMs, toMs, given, meter)
@@ -797,8 +811,9 @@ function settleSpan(
   toMs: number,
   given: number,
   meter: number,
+  track: Vote,
 ): Part {
-  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter)
+  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
   const phased = bestPhase(envelope, sampleRate, fromMs, toMs, bpm)
   const polished = fitWindow(envelope, sampleRate, fromMs, toMs, phased.fit)
   const settled = settleFit(envelope, sampleRate, fromMs, toMs, polished, meter)
@@ -814,14 +829,18 @@ export type Split = {
   pending: Span[]
   meter: number
   done: boolean
+  // what the whole track polled, kept so a span cannot take a tempo the song
+  // never plays
+  track: Vote
 }
 
-export function newSplit(durationMs: number, bpm: number, meter: number): Split {
+export function newSplit(durationMs: number, bpm: number, vote: Vote): Split {
   return {
     parts: [],
     pending: [{ fromMs: 0, toMs: durationMs, bpm, depth: 0 }],
-    meter,
+    meter: vote.meter,
     done: durationMs <= 0,
+    track: vote,
   }
 }
 
@@ -852,7 +871,7 @@ export function splitStep(
     done: pending.length === 0,
   })
 
-  const whole = settleSpan(envelope, sampleRate, span.fromMs, span.toMs, span.bpm, meter)
+  const whole = settleSpan(envelope, sampleRate, span.fromMs, span.toMs, span.bpm, meter, split.track)
   if (span.toMs - span.fromMs < MIN_SPAN_MS * 2 || span.depth >= MAX_DEPTH) return keep([whole])
 
   const barMs = (60000 / whole.fit.bpm) * Math.max(1, meter)
@@ -860,8 +879,8 @@ export function splitStep(
   if (bars < SETTLE_BARS) return keep([whole])
 
   const middle = span.fromMs + Math.floor(bars / 2) * barMs
-  const left = tempoOf(envelope, sampleRate, span.fromMs, middle, whole.fit.bpm, meter)
-  const right = tempoOf(envelope, sampleRate, middle, span.toMs, whole.fit.bpm, meter)
+  const left = tempoOf(envelope, sampleRate, span.fromMs, middle, whole.fit.bpm, meter, split.track)
+  const right = tempoOf(envelope, sampleRate, middle, span.toMs, whole.fit.bpm, meter, split.track)
   const agreed = left === whole.fit.bpm && right === whole.fit.bpm
   if (agreed && whole.flat <= FLAT_OK_MS) return keep([whole])
 
@@ -870,8 +889,8 @@ export function splitStep(
     // straighter, which a section that is already as straight as the audio
     // allows will not
     const under = [
-      settleSpan(envelope, sampleRate, span.fromMs, middle, left, meter),
-      settleSpan(envelope, sampleRate, middle, span.toMs, right, meter),
+      settleSpan(envelope, sampleRate, span.fromMs, middle, left, meter, split.track),
+      settleSpan(envelope, sampleRate, middle, span.toMs, right, meter, split.track),
     ]
     let weighted = 0
     for (const part of under) weighted += part.flat * (part.toMs - part.fromMs)

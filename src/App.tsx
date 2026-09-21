@@ -303,7 +303,7 @@ export default function App() {
           }
 
           const voted = beatWithin(envelope, sampleRate, 0, durationMs, picked, barMeter)
-          split = newSplit(durationMs, voted, barMeter)
+          split = newSplit(durationMs, voted, vote)
           vote = null
         }
       } else if (split && !split.done) {

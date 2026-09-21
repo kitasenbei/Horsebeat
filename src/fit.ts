@@ -11,14 +11,10 @@ const RISE_SPREAD = 0.25
 const BEAT_FRAMES = 3
 const COARSE_BPM_STEP = 0.5
 const COARSE_PHASES = 64
-// how finely, and how far either side, a section's own span is swept
-const TUNE_BPM = 0.01
-const TUNE_STEPS = 60
-const BOUNDARY_STEP_MS = 250
-const BOUNDARY_DROP = 0.6
+// how far a polish may move from the tempo it was given: wide enough for a
+// played performance drifting, far short of the half or double that fits well
+const DRIFT_BAND = 0.06
 const DENSER_KEEPS = 0.78
-// how well the running tempo has to poll on a stretch to keep it
-const VOTE_KEEPS = 0.6
 
 const SCALES = [
   { bpm: 1, ms: 40 },
@@ -474,32 +470,7 @@ export function bestPhase(
   return { fit: best, score: bestScore }
 }
 
-// Where a grid stops describing the audio: the first moment its score over a
-// short window collapses. Used to place a section at the tempo change rather
-// than at the edge of whichever block noticed it.
-export function findBoundary(
-  envelope: Float32Array,
-  sampleRate: number,
-  fit: Fit,
-  fromMs: number,
-  toMs: number,
-): number {
-  const probe = Math.max(1500, (60000 / fit.bpm) * 4)
-  let held = 0
-  let count = 0
 
-  for (let at = fromMs; at + probe <= toMs; at += BOUNDARY_STEP_MS) {
-    const score = scoreFit(envelope, sampleRate, at, at + probe, fit)
-
-    if (count > 0 && score < (held / count) * BOUNDARY_DROP) return at
-    held += score
-    count += 1
-  }
-
-  return toMs
-}
-
-export const BLOCK_MS = 6000
 const MIN_BPM_SEARCH = 60
 const MAX_BPM_SEARCH = 200
 // how far apart two readings have to be before they are two tempos
@@ -507,11 +478,6 @@ const MAX_BPM_SEARCH = 200
 // are two tempos rather than two readings of one
 const SAME_TEMPO = 0.01
 const COUNTED_BAND = 0.04
-const HOLDS_UP = 2
-// how much of its own best refit a running grid has to still be worth
-const CARRY_RATIO = 0.7
-// below this a block has too little to say, so the grid carries on
-const WORTH_SPLITTING = 1.6
 
 // Whether a tempo is the one already running: the same number, or that number
 // counted against two, three or four of its beats. Half a tempo lands on every
@@ -529,15 +495,6 @@ function runsAlready(bpm: number, against: number): boolean {
     if (Math.abs(bpm * times - against) < against * COUNTED_BAND) return true
   }
   return false
-}
-
-export type Scan = {
-  fromMs: number
-  found: Fit[]
-  done: boolean
-  meter: number
-  // what the track as a whole reads as, if it has been counted yet
-  voted?: number
 }
 
 // How long a stretch each vote is cast over. Long enough that a bar or two of
@@ -664,74 +621,6 @@ export function pickTempo(vote: Vote): number | null {
   return picked
 }
 
-export function scanBlock(
-  envelope: Float32Array,
-  sampleRate: number,
-  durationMs: number,
-  scan: Scan,
-): Scan {
-  const fromMs = scan.fromMs
-  const toMs = Math.min(durationMs, fromMs + BLOCK_MS)
-  if (toMs - fromMs < 2000) return { ...scan, done: true }
-
-  const found = scan.found
-  const previous = found[found.length - 1]
-  const next = { ...scan, fromMs: toMs, found, done: toMs >= durationMs }
-
-  if (previous) {
-    const held = scoreFit(envelope, sampleRate, fromMs, toMs, previous)
-    const nudged = fitWindow(envelope, sampleRate, fromMs, toMs, previous)
-    const nudgedScore = scoreFit(envelope, sampleRate, fromMs, toMs, nudged)
-
-    // The only question asked of a block is whether the grid already running
-    // still lands on it. Played music wanders, and a refit of any six seconds
-    // finds a slightly better bpm than the one before it, so comparing the two
-    // numbers cuts a section every block and calls a steady song eight tempos.
-    if (held > HOLDS_UP && held >= nudgedScore * CARRY_RATIO) return next
-  }
-
-  // Past here the grid has stopped describing the block, and the question is
-  // what replaced it. Everything the block is judged by is re-read over the
-  // stretch after the break rather than over the block that noticed it.
-  const boundary = previous ? findBoundary(envelope, sampleRate, previous, fromMs, toMs) : fromMs
-
-  // A section needs enough song after it to be read off, and the tail of a
-  // track is where the count is least sure, so the grid runs to the end rather
-  // than a new tempo being declared over the last few seconds.
-  if (durationMs - boundary < BLOCK_MS * 2) return next
-
-  const until = Math.min(durationMs, boundary + BLOCK_MS * 4)
-  const local = voteTempo(envelope, sampleRate, boundary, until, scan.meter)
-  if (local.bpm === null) return next
-
-  const coarse = bestPhase(envelope, sampleRate, boundary, until, local.bpm)
-
-  // An outro, a fade or a held chord gives the vote nothing to lock onto, and
-  // every candidate reads alike. Carrying the grid on is the honest answer
-  // there, not a section at 60 bpm.
-  if (coarse.score < WORTH_SPLITTING) return next
-
-  const winner = topVote(local.vote)
-
-  // The tempo already running is put back on the ballot. If it polls nearly as
-  // well over this stretch as anything else does, the stretch has not changed
-  // tempo, it has only gone quiet enough for something else to edge ahead.
-  if (previous && polledAs(local.vote, previous.bpm) >= winner * VOTE_KEEPS) return next
-
-  // and so is what the whole track reads as, so a thin passage cannot open a
-  // section at a tempo the song never plays
-  if (scan.voted !== undefined && polledAs(local.vote, scan.voted) >= winner * VOTE_KEEPS) return next
-
-  const fit = fitWindow(envelope, sampleRate, boundary, until, coarse.fit)
-
-  // A refit of any stretch of a played song comes back a fraction of a beat
-  // from the one before it. Opening a section for that reading turns one tempo
-  // into a list of readings of it, so a section is only worth cutting for a
-  // tempo the grid does not already carry.
-  if (previous && runsAlready(fit.bpm, previous.bpm)) return next
-
-  return { ...next, found: [...found, { bpm: fit.bpm, offsetMs: beatNear(fit, boundary) }] }
-}
 
 // Once the spans are known, fit each one over its own audio rather than over
 // the block that happened to notice it.
@@ -791,15 +680,21 @@ export function flatnessOf(
   const windows = Math.floor((toMs - fromMs) / stretch)
   if (windows < 2) return 0
 
-  let total = 0
+  const slides: number[] = []
   for (let index = 0; index < windows; index += 1) {
     const at = fromMs + index * stretch
     const rows = barProfile(envelope, sampleRate, at, at + stretch, barMs, SETTLE_ROWS)
     if (!rows) continue
-    total += Math.abs((shiftRows(reference, centred(rows), meter) / SETTLE_ROWS) * barMs)
+    slides.push(Math.abs((shiftRows(reference, centred(rows), meter) / SETTLE_ROWS) * barMs))
   }
 
-  return total / windows
+  if (slides.length === 0) return 0
+
+  // the middle one, not the average: a fill or a break throws one stretch a
+  // whole beat out, and an average lets that one stretch call a straight
+  // section crooked
+  slides.sort((one, other) => one - other)
+  return slides[slides.length >> 1]
 }
 
 // The tempo that stops the picture sliding, solved rather than searched. The
@@ -852,97 +747,146 @@ export function settleFit(
   return best
 }
 
-// The last word on a section's tempo, taken over the whole of it. A ladder that
-// starts from one window walks downhill from wherever that window put it, and a
-// tempo a twentieth of a beat per minute out still fits every window it is
-// checked against while sliding a quarter of a beat across four minutes. Only
-// the full span tells those apart, so the tempo is swept again against all of
-// it, finely, and the phase re-read for whatever wins.
-export function tuneFit(
+
+
+// A span shorter than this is not split again: two of them is the least a
+// section can be asked to cover.
+const MIN_SPAN_MS = 12000
+// how straight a section has to run before it is left alone
+const FLAT_OK_MS = 8
+// how much straighter a split has to come out to be worth its sections
+const SPLIT_KEEPS = 0.9
+const MAX_DEPTH = 6
+// how much better a span has to read at its own tempo to leave its parent's
+const TAKES_OVER = 1.15
+
+// What a span reads as on its own. A short span has few bars to count and reads
+// as all sorts of things, so the tempo it was given stands unless what it found
+// draws a decidedly better picture, and a count of that tempo is never a reason
+// to leave it: over a few bars the sparser count always looks better.
+function tempoOf(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
   toMs: number,
-  fit: Fit,
-): Fit {
-  let best = fit
-  let bestScore = scoreFit(envelope, sampleRate, fromMs, toMs, fit)
-
-  for (let step = -TUNE_STEPS; step <= TUNE_STEPS; step += 1) {
-    const bpm = fit.bpm + step * TUNE_BPM
-    if (bpm < MIN_BPM_SEARCH / 2) continue
-
-    const found = bestPhase(envelope, sampleRate, fromMs, toMs, bpm)
-    if (found.score > bestScore) {
-      bestScore = found.score
-      best = found.fit
-    }
-  }
-
-  return best
-}
-
-export function refineScan(
-  envelope: Float32Array,
-  sampleRate: number,
-  durationMs: number,
-  found: Fit[],
-  index: number,
+  given: number,
   meter: number,
-): Fit {
-  const fromMs = found[index].offsetMs
-  const toMs = index + 1 < found.length ? found[index + 1].offsetMs : durationMs
-  if (toMs - fromMs < 3000) return found[index]
+): number {
+  const local = voteTempo(envelope, sampleRate, fromMs, toMs, meter)
+  if (local.bpm === null) return given
 
-  const refined = fitWindow(envelope, sampleRate, fromMs, toMs, found[index])
-  const tuned = tuneFit(envelope, sampleRate, fromMs, toMs, refined)
-  const settled = settleFit(envelope, sampleRate, fromMs, toMs, tuned, meter)
-  const anchored = { bpm: settled.bpm, offsetMs: beatNear(settled, fromMs) }
-  return alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
+  const found = beatWithin(envelope, sampleRate, fromMs, toMs, local.bpm, meter)
+  if (found === given || runsAlready(found, given)) return given
+
+  const mine = patternScore(envelope, sampleRate, fromMs, toMs, found, meter)
+  const theirs = patternScore(envelope, sampleRate, fromMs, toMs, given, meter)
+  return mine > theirs * TAKES_OVER ? found : given
 }
 
-const MERGE_KEEPS = 0.94
-// how far a refit may move from the tempo it was given: wide enough for a
-// played performance drifting, far short of the half or double that scores well
-const DRIFT_BAND = 0.06
+export type Part = {
+  fromMs: number
+  toMs: number
+  fit: Fit
+  flat: number
+}
 
-// One merge attempt: if the grid of a section runs on through the next one
-// still landing on its beats, the two were one section that the scan cut in
-// half at a quiet passage or a fill.
-//
-// It deliberately does not ask whether some grid could cover both. Refit over a
-// long enough window, one grid covers almost any pair well enough to look like
-// an answer, and a song with three tempos comes back with one. The question is
-// only whether the tempo already running kept its alignment.
-export function mergeStep(
+function settleSpan(
   envelope: Float32Array,
   sampleRate: number,
-  durationMs: number,
-  found: Fit[],
-): { found: Fit[]; merged: boolean } {
-  for (let index = 0; index + 1 < found.length; index += 1) {
-    const startMs = found[index].offsetMs
-    const middleMs = found[index + 1].offsetMs
-    const endMs = index + 2 < found.length ? found[index + 2].offsetMs : durationMs
-    if (endMs - startMs < 4000) continue
+  fromMs: number,
+  toMs: number,
+  given: number,
+  meter: number,
+): Part {
+  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter)
+  const phased = bestPhase(envelope, sampleRate, fromMs, toMs, bpm)
+  const polished = fitWindow(envelope, sampleRate, fromMs, toMs, phased.fit)
+  const settled = settleFit(envelope, sampleRate, fromMs, toMs, polished, meter)
+  const anchored = { bpm: settled.bpm, offsetMs: beatNear(settled, fromMs) }
+  const fit = alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
+  return { fromMs, toMs, fit, flat: flatnessOf(envelope, sampleRate, fromMs, toMs, fit, meter) }
+}
 
-    // two readings of the same tempo, or two tempos?
-    if (Math.abs(found[index].bpm - found[index + 1].bpm) > found[index].bpm * SAME_TEMPO) continue
+type Span = { fromMs: number; toMs: number; bpm: number; depth: number }
 
-    // The same bpm starting on a different beat is still a cut worth keeping,
-    // so this asks the earlier grid to explain the later stretch as well as
-    // that stretch explains itself.
-    const carried = scoreFit(envelope, sampleRate, middleMs, endMs, found[index])
-    const own = scoreFit(envelope, sampleRate, middleMs, endMs, found[index + 1])
-    if (carried < own * MERGE_KEEPS) continue
+export type Split = {
+  parts: Part[]
+  pending: Span[]
+  meter: number
+  done: boolean
+}
 
-    const joined = fitWindow(envelope, sampleRate, startMs, endMs, found[index])
-    const merged = [...found]
-    merged.splice(index, 2, { bpm: joined.bpm, offsetMs: beatNear(joined, startMs) })
-    return { found: merged, merged: true }
+export function newSplit(durationMs: number, bpm: number, meter: number): Split {
+  return {
+    parts: [],
+    pending: [{ fromMs: 0, toMs: durationMs, bpm, depth: 0 }],
+    meter,
+    done: durationMs <= 0,
+  }
+}
+
+// One span of the split. The track is taken whole, then halved wherever one
+// grid cannot stay on the beat across it, and each half asked the same question
+// again. Splitting downwards rather than sweeping forwards means every answer
+// is read off as much audio as it can be, and a section appears only where the
+// song actually stops agreeing with the one before it.
+//
+// A span is left alone when it runs straight and both of its halves read as the
+// tempo it settled on. Straightness on its own is not enough: a half playing a
+// different tempo is not drifting, it is somewhere else, and its own picture
+// can be as straight as any other.
+export function splitStep(
+  envelope: Float32Array,
+  sampleRate: number,
+  split: Split,
+): Split {
+  const span = split.pending[0]
+  if (!span) return { ...split, done: true }
+
+  const pending = split.pending.slice(1)
+  const meter = split.meter
+  const keep = (parts: Part[]) => ({
+    ...split,
+    parts: [...split.parts, ...parts].sort((one, other) => one.fromMs - other.fromMs),
+    pending,
+    done: pending.length === 0,
+  })
+
+  const whole = settleSpan(envelope, sampleRate, span.fromMs, span.toMs, span.bpm, meter)
+  if (span.toMs - span.fromMs < MIN_SPAN_MS * 2 || span.depth >= MAX_DEPTH) return keep([whole])
+
+  const barMs = (60000 / whole.fit.bpm) * Math.max(1, meter)
+  const bars = Math.floor((span.toMs - span.fromMs) / barMs)
+  if (bars < SETTLE_BARS) return keep([whole])
+
+  const middle = span.fromMs + Math.floor(bars / 2) * barMs
+  const left = tempoOf(envelope, sampleRate, span.fromMs, middle, whole.fit.bpm, meter)
+  const right = tempoOf(envelope, sampleRate, middle, span.toMs, whole.fit.bpm, meter)
+  const agreed = left === whole.fit.bpm && right === whole.fit.bpm
+  if (agreed && whole.flat <= FLAT_OK_MS) return keep([whole])
+
+  if (agreed) {
+    // drifting rather than changing: worth halving only if it comes out
+    // straighter, which a section that is already as straight as the audio
+    // allows will not
+    const under = [
+      settleSpan(envelope, sampleRate, span.fromMs, middle, left, meter),
+      settleSpan(envelope, sampleRate, middle, span.toMs, right, meter),
+    ]
+    let weighted = 0
+    for (const part of under) weighted += part.flat * (part.toMs - part.fromMs)
+    if (weighted / (span.toMs - span.fromMs) >= whole.flat * SPLIT_KEEPS) return keep([whole])
   }
 
-  return { found, merged: false }
+  return {
+    ...split,
+    pending: [
+      { fromMs: span.fromMs, toMs: middle, bpm: left, depth: span.depth + 1 },
+      { fromMs: middle, toMs: span.toMs, bpm: right, depth: span.depth + 1 },
+      ...pending,
+    ],
+    done: false,
+  }
 }
 
 // Which beat of the bar is the downbeat. A fit lands on the beat, but a section

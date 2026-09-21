@@ -34,17 +34,14 @@ import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
 import {
-  beatNear,
-  bestPhase,
-  fitWindow,
-  mergeStep,
+  beatWithin,
+  newSplit,
   newVote,
   pickTempo,
-  refineScan,
-  scanBlock,
+  splitStep,
   voteStep,
   type Fit,
-  type Scan,
+  type Split,
   type Vote,
 } from './fit'
 import {
@@ -71,8 +68,6 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
-// how much of the start the voted tempo is given to find its phase against
-const SEED_MS = 30000
 const DEFAULT_BPM = 120
 
 export default function App() {
@@ -268,7 +263,7 @@ export default function App() {
     fitRef.current.meter = sections[0]?.meter ?? DEFAULT_METER
   })
 
-  // The scan runs a block per frame rather than solving in one go, so the
+  // The fit runs a step per frame rather than solving in one go, so the
   // sections appear along the track as they are found and the compiled view
   // straightens while it works.
   useEffect(() => {
@@ -279,8 +274,7 @@ export default function App() {
     // mid-fit still reaches the sections
     const barMeter = fitRef.current.meter
     let vote: Vote | null = newVote(barMeter)
-    let scan: Scan = { fromMs: 0, found: [], done: false, meter: barMeter }
-    let polish = 0
+    let split: Split | null = null
 
     const publish = (found: Fit[]) => {
       const meter = fitRef.current.meter
@@ -302,39 +296,24 @@ export default function App() {
         if (!vote.done) {
           vote = voteStep(envelope, sampleRate, durationMs, vote)
         } else {
-          const voted = pickTempo(vote)
-          if (voted !== null) {
-            const until = Math.min(durationMs, SEED_MS)
-            const seed = fitWindow(envelope, sampleRate, 0, until, bestPhase(envelope, sampleRate, 0, until, voted).fit)
-            scan = { ...scan, voted, found: [{ bpm: seed.bpm, offsetMs: beatNear(seed, 0) }] }
-            publish(scan.found)
+          const picked = pickTempo(vote)
+          if (picked === null) {
+            setFitting(false)
+            return
           }
+
+          const voted = beatWithin(envelope, sampleRate, 0, durationMs, picked, barMeter)
+          split = newSplit(durationMs, voted, barMeter)
           vote = null
         }
-      } else if (!scan.done) {
-        scan = scanBlock(envelope, sampleRate, durationMs, scan)
-        publish(scan.found)
-      } else if (polish < scan.found.length) {
-        const found = [...scan.found]
-        found[polish] = refineScan(envelope, sampleRate, durationMs, found, polish, fitRef.current.meter)
-        scan = { ...scan, found }
-        polish += 1
-        publish(found)
+      } else if (split && !split.done) {
+        // then the track is halved wherever one grid cannot stay on the beat
+        // across it, and each half asked the same question again
+        split = splitStep(envelope, sampleRate, split)
+        publish(split.parts.map((part) => part.fit))
       } else {
-        // a quiet passage or a fill can make the scan split one section in two,
-        // so neighbours that a single grid covers are put back together, and
-        // whatever comes out of a merge is re-fitted over its new span
-        const result = mergeStep(envelope, sampleRate, durationMs, scan.found)
-        if (!result.merged) {
-          setFitting(false)
-          return
-        }
-
-        const found = result.found.map((_, index) =>
-          refineScan(envelope, sampleRate, durationMs, result.found, index, fitRef.current.meter),
-        )
-        scan = { ...scan, found }
-        publish(found)
+        setFitting(false)
+        return
       }
 
       frame = requestAnimationFrame(tick)

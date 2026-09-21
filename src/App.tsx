@@ -280,7 +280,7 @@ export default function App() {
         publish(scan.found)
       } else if (polish < scan.found.length) {
         const found = [...scan.found]
-        found[polish] = refineScan(envelope, sampleRate, durationMs, found, polish)
+        found[polish] = refineScan(envelope, sampleRate, durationMs, found, polish, fitRef.current.meter)
         scan = { ...scan, found }
         polish += 1
         publish(found)
@@ -295,7 +295,7 @@ export default function App() {
         }
 
         const found = result.found.map((_, index) =>
-          refineScan(envelope, sampleRate, durationMs, result.found, index),
+          refineScan(envelope, sampleRate, durationMs, result.found, index, fitRef.current.meter),
         )
         scan = { ...scan, found }
         publish(found)

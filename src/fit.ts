@@ -11,7 +11,7 @@ const COARSE_BPM_STEP = 0.5
 const COARSE_PHASES = 24
 const BOUNDARY_STEP_MS = 250
 const BOUNDARY_DROP = 0.6
-const DENSER_KEEPS = 0.9
+const DENSER_KEEPS = 0.78
 
 const SCALES = [
   { bpm: 1, ms: 40 },
@@ -367,13 +367,15 @@ export function refineScan(
   durationMs: number,
   found: Fit[],
   index: number,
+  meter: number,
 ): Fit {
   const fromMs = found[index].offsetMs
   const toMs = index + 1 < found.length ? found[index + 1].offsetMs : durationMs
   if (toMs - fromMs < 3000) return found[index]
 
   const refined = fitWindow(envelope, sampleRate, fromMs, toMs, found[index])
-  return { bpm: refined.bpm, offsetMs: beatNear(refined, fromMs) }
+  const anchored = { bpm: refined.bpm, offsetMs: beatNear(refined, fromMs) }
+  return alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
 }
 
 const MERGE_KEEPS = 0.94
@@ -418,4 +420,61 @@ export function mergeStep(
   }
 
   return { found, merged: false }
+}
+
+// Which beat of the bar is the downbeat. A fit lands on the beat, but a section
+// wants to start a bar: with the offset on a downbeat, a column of four beats
+// is a bar, and the compiled view at that density shows bars rather than an
+// arbitrary window of four.
+export function alignDownbeat(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  fit: Fit,
+  meter: number,
+): Fit {
+  const bar = Math.max(1, Math.round(meter))
+  if (bar < 2) return fit
+
+  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const beatMs = 60000 / fit.bpm
+  const first = Math.ceil((fromMs - fit.offsetMs) / beatMs)
+  const last = Math.floor((toMs - fit.offsetMs) / beatMs)
+
+  const totals = new Float64Array(bar)
+  const counts = new Float64Array(bar)
+
+  for (let beat = first; beat <= last; beat += 1) {
+    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs)
+    if (centre < 1 || centre >= envelope.length) continue
+
+    let peak = 0
+    for (let at = centre - 1; at <= centre + 1; at += 1) {
+      if (at >= 0 && at < envelope.length && envelope[at] > peak) peak = envelope[at]
+    }
+
+    const phase = ((beat % bar) + bar) % bar
+    totals[phase] += peak
+    counts[phase] += 1
+  }
+
+  let best = 0
+  let bestMean = -1
+  for (let phase = 0; phase < bar; phase += 1) {
+    if (counts[phase] === 0) continue
+    const mean = totals[phase] / counts[phase]
+    if (mean > bestMean) {
+      bestMean = mean
+      best = phase
+    }
+  }
+
+  // the first downbeat at or after where the section already starts
+  const shifted = { bpm: fit.bpm, offsetMs: fit.offsetMs + best * beatMs }
+  const barMs = beatMs * bar
+  const bars = Math.round((fromMs - shifted.offsetMs) / barMs)
+  const anchor = shifted.offsetMs + bars * barMs
+
+  return { bpm: fit.bpm, offsetMs: anchor >= 0 ? anchor : anchor + barMs }
 }

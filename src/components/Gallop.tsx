@@ -38,6 +38,17 @@ const HERD = [
 const SPREAD = HERD[HERD.length - 1].at + WIDTH
 const TALL = HEIGHT + 5
 
+// How far a stride carries a horse. A shade under its own length, which is what
+// stops the legs looking like they are sliding under a body going somewhere
+// else.
+const CARRIES = 44
+
+// The horse runs to the left, so it leaves by the left and comes back at the
+// right, and because it is the head that is furthest left it is the head that
+// arrives first. A lap is the strip plus a whole horse, so it is fully gone
+// before it is back.
+const LAP = SPREAD + WIDTH
+
 // One stride to the beat, and only ever that: each beat is the hind legs going
 // into the ground and nothing comes between. Two strides to a beat smash twice
 // as often and four smash four times, and a landing that happens on the beat
@@ -53,12 +64,17 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
 
     const horses = Array.from(node.children) as HTMLElement[]
     const spans = sectionSpans(sections, duration)
-    const park = () => {
-      horses.forEach((horse, index) => {
-        const step = Math.floor((HERD[index].lead + STRIKE) * FRAMES) % FRAMES
-        horse.style.backgroundPositionX = `${-step * WIDTH}px`
-      })
+
+    const place = (horse: HTMLElement, index: number, stride: number) => {
+      const round = stride + HERD[index].lead + STRIKE
+      const step = Math.floor((((round % 1) + 1) % 1) * FRAMES)
+      horse.style.backgroundPositionX = `${-step * WIDTH}px`
+
+      const gone = HERD[index].at - stride * CARRIES
+      horse.style.transform = `translateX(${(((gone % LAP) + LAP) % LAP) - WIDTH}px)`
     }
+
+    const park = () => horses.forEach((horse, index) => place(horse, index, 0))
 
     if (!playing || spans.length === 0) {
       park()
@@ -71,11 +87,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
       const beats = span.beat > 0 ? (at - span.start) / span.beat : 0
       const stride = beats * STRIDES_A_BEAT
 
-      for (let index = 0; index < horses.length; index += 1) {
-        const round = stride + HERD[index].lead + STRIKE
-        const step = Math.floor((((round % 1) + 1) % 1) * FRAMES)
-        horses[index].style.backgroundPositionX = `${-step * WIDTH}px`
-      }
+      for (let index = 0; index < horses.length; index += 1) place(horses[index], index, stride)
 
       frame = requestAnimationFrame(tick)
     })
@@ -90,14 +102,21 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
     <Box
       ref={herdRef}
       aria-hidden
-      sx={{ position: 'relative', width: SPREAD, height: TALL, mr: 1, flex: '0 0 auto' }}
+      sx={{
+        position: 'relative',
+        overflow: 'hidden',
+        width: SPREAD,
+        height: TALL,
+        mr: 1,
+        flex: '0 0 auto',
+      }}
     >
       {HERD.map((horse, index) => (
         <Box
           key={horse.at}
           sx={{
             position: 'absolute',
-            left: horse.at,
+            left: 0,
             top: horse.high,
             zIndex: index,
             width: WIDTH,
@@ -107,7 +126,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
             backgroundSize: `${FRAMES * WIDTH}px ${HEIGHT}px`,
             backgroundRepeat: 'no-repeat',
             backgroundPositionX: '0px',
-            willChange: 'background-position',
+            willChange: 'background-position, transform',
           }}
         />
       ))}

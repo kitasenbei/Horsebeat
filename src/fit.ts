@@ -292,6 +292,164 @@ export function beatNear(fit: Fit, atMs: number): number {
 // can only walk a beat or two from where it starts, so anything that is not a
 // small correction has to begin here or it lands on a harmonic: at 96 bpm a
 // grid at 144 hits two beats in three and scores well enough to look right.
+// How many rows the averaged bar is read at. The compiled view draws a bar as
+// a column of pixels; this reads the same bar at a fixed resolution so tempos
+// are compared against the same picture.
+// divisible by every count a bar is likely to be cut into
+const BAR_ROWS = 240
+const PHASE_ROWS = 960
+const BAR_PARTS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]
+// too few bars and the average is one bar, which agrees with itself
+const MIN_BARS = 4
+
+// The compiled view as a number. The view lays a bar out as a column and puts
+// the next bar beside it, so a grid that sits on the music draws the same
+// column over and over and the picture bands horizontally, while a grid a
+// fraction out slides the pattern along and draws diagonals.
+//
+// This measures that directly: how much of everything the envelope does inside
+// a bar is the part every bar agrees on. It reads every frame rather than the
+// beats alone, so unlike a comb it cannot be won by a slow grid that samples
+// little and samples it well. It is also unchanged by where the bar starts,
+// which leaves it free to answer about tempo alone.
+export function patternScore(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  bpm: number,
+  meter: number,
+): number {
+  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const barMs = (60000 / bpm) * Math.max(1, meter)
+  const bars = Math.floor((toMs - fromMs) / barMs)
+  if (bars < MIN_BARS) return 0
+
+  const rows = new Float64Array(BAR_ROWS)
+  let all = 0
+  let squares = 0
+  let count = 0
+
+  for (let bar = 0; bar < bars; bar += 1) {
+    for (let row = 0; row < BAR_ROWS; row += 1) {
+      const at = (fromMs + (bar + row / BAR_ROWS) * barMs) * perMs
+      const low = Math.floor(at)
+      if (low < 0 || low + 1 >= envelope.length) continue
+
+      const value = envelope[low] + (envelope[low + 1] - envelope[low]) * (at - low)
+      rows[row] += value
+      all += value
+      squares += value * value
+      count += 1
+    }
+  }
+
+  if (count === 0) return 0
+  const mean = all / count
+  const spread = squares / count - mean * mean
+  if (spread <= 0) return 0
+
+  let agreed = 0
+  for (let row = 0; row < BAR_ROWS; row += 1) agreed += (rows[row] / bars - mean) ** 2
+  return agreed / BAR_ROWS / spread
+}
+
+// Every bar of the stretch laid on top of one another.
+function barProfile(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  barMs: number,
+  rows: number,
+): Float64Array | null {
+  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const bars = Math.floor((toMs - fromMs) / barMs)
+  if (bars < MIN_BARS) return null
+
+  const totals = new Float64Array(rows)
+  for (let bar = 0; bar < bars; bar += 1) {
+    for (let row = 0; row < rows; row += 1) {
+      const at = (fromMs + (bar + row / rows) * barMs) * perMs
+      const low = Math.floor(at)
+      if (low < 0 || low + 1 >= envelope.length) continue
+      totals[row] += envelope[low] + (envelope[low + 1] - envelope[low]) * (at - low)
+    }
+  }
+  return totals
+}
+
+// Which of the counts inside a bar is the beat. The pattern score answers about
+// the bar, and any whole number of beats makes a bar that repeats just as well,
+// so the count that wins is often two bars, or three beats. Folding the
+// averaged bar into equal parts and asking how much of it survives says how
+// many parts it is really made of: the most parts it still divides into
+// cleanly is the beat, which is the same argument as preferring the denser
+// grid, asked of the picture instead of a comb.
+export function beatWithin(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  bpm: number,
+  meter: number,
+): number {
+  const barMs = (60000 / bpm) * Math.max(1, meter)
+  const rows = barProfile(envelope, sampleRate, fromMs, toMs, barMs, BAR_ROWS)
+  if (!rows) return bpm
+
+  let mean = 0
+  for (const value of rows) mean += value
+  mean /= BAR_ROWS
+
+  let spread = 0
+  for (const value of rows) spread += (value - mean) ** 2
+  if (spread <= 0) return bpm
+
+  const kept: { bpm: number; share: number }[] = []
+  for (const parts of BAR_PARTS) {
+    if (BAR_ROWS % parts !== 0) continue
+    const beat = 60000 / (barMs / parts)
+    if (beat < MIN_BPM_SEARCH || beat > MAX_BPM_SEARCH) continue
+
+    const size = BAR_ROWS / parts
+    const folded = new Float64Array(size)
+    for (let row = 0; row < BAR_ROWS; row += 1) folded[row % size] += rows[row] / parts
+
+    let agreed = 0
+    for (const value of folded) agreed += (value - mean) ** 2
+    kept.push({ bpm: beat, share: (agreed * parts) / spread })
+  }
+
+  if (kept.length === 0) return bpm
+  const best = Math.max(...kept.map((part) => part.share))
+  return kept.filter((part) => part.share >= best * DENSER_KEEPS).pop()!.bpm
+}
+
+// Where the bar starts, read off the bars laid on top of one another. Averaging
+// every bar of a section puts far more evidence behind the answer than any one
+// of them carries, and the loudest place in that average is the downbeat.
+export function phaseOf(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  bpm: number,
+  meter: number,
+): number {
+  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const barMs = (60000 / bpm) * Math.max(1, meter)
+  const rows = barProfile(envelope, sampleRate, fromMs, toMs, barMs, PHASE_ROWS)
+  if (!rows) return fromMs
+
+  let peak = 0
+  for (let row = 0; row < PHASE_ROWS; row += 1) if (rows[row] > rows[peak]) peak = row
+
+  // the averaged bar is built from the envelope, which climbs a radius before
+  // the hit that made it
+  return fromMs + (peak / PHASE_ROWS) * barMs + ENVELOPE_RADIUS / perMs
+}
+
 // The best this tempo can do on this stretch, over every phase of one beat.
 export function bestPhase(
   envelope: Float32Array,
@@ -377,6 +535,7 @@ export type Scan = {
   fromMs: number
   found: Fit[]
   done: boolean
+  meter: number
   // what the track as a whole reads as, if it has been counted yet
   voted?: number
 }
@@ -384,12 +543,17 @@ export type Scan = {
 // How long a stretch each vote is cast over. Long enough that a bar or two of
 // something else does not decide it, short enough that a song with two tempos
 // still votes for both.
-export const VOTE_WINDOW_MS = 12000
+export const VOTE_WINDOW_MS = 60000
 
 export type Vote = {
   fromMs: number
   totals: Float64Array
   done: boolean
+  meter: number
+  // Counted as the compiled view draws it, or with a comb. The picture wants
+  // whole bars and several of them, which the track has and a stretch being
+  // judged at a boundary often has not.
+  pattern: boolean
 }
 
 function votedBpms(): number[] {
@@ -398,8 +562,8 @@ function votedBpms(): number[] {
   return bpms
 }
 
-export function newVote(): Vote {
-  return { fromMs: 0, totals: new Float64Array(votedBpms().length), done: false }
+export function newVote(meter: number): Vote {
+  return { fromMs: 0, totals: new Float64Array(votedBpms().length), done: false, meter, pattern: true }
 }
 
 // One window's vote on what the whole track is. Every tempo is scored over the
@@ -414,11 +578,17 @@ export function voteStep(
 ): Vote {
   const fromMs = vote.fromMs
   const toMs = Math.min(durationMs, fromMs + VOTE_WINDOW_MS)
+  // No length test here: a stretch judged at a boundary is shorter than a
+  // window and still has to be counted, and a stretch too short to hold a few
+  // bars scores nothing at every tempo and drops out below.
   const next = { ...vote, fromMs: toMs, done: toMs >= durationMs }
-  if (toMs - fromMs < VOTE_WINDOW_MS / 2) return { ...next, done: true }
 
   const bpms = votedBpms()
-  const scores = bpms.map((bpm) => bestPhase(envelope, sampleRate, fromMs, toMs, bpm).score)
+  const scores = bpms.map((bpm) =>
+    vote.pattern
+      ? patternScore(envelope, sampleRate, fromMs, toMs, bpm, vote.meter)
+      : bestPhase(envelope, sampleRate, fromMs, toMs, bpm).score,
+  )
   const top = Math.max(...scores)
   if (top <= 0) return next
 
@@ -440,8 +610,9 @@ export function voteTempo(
   sampleRate: number,
   fromMs: number,
   toMs: number,
+  meter: number,
 ): { bpm: number | null; vote: Vote } {
-  let vote: Vote = { fromMs, totals: new Float64Array(votedBpms().length), done: false }
+  let vote: Vote = { fromMs, totals: new Float64Array(votedBpms().length), done: false, meter, pattern: false }
   while (!vote.done && vote.fromMs < toMs) vote = voteStep(envelope, sampleRate, toMs, vote)
   return { bpm: pickTempo(vote), vote }
 }
@@ -472,6 +643,11 @@ export function voteFor(vote: Vote, bpm: number): number {
   return index >= 0 && index < vote.totals.length ? vote.totals[index] : 0
 }
 
+// What a count came out at. A pattern vote answers about the bar, and which
+// count inside it is the beat is settled by beatWithin against the audio; a
+// comb vote answers about the beat already, but the count that wins outright is
+// often half or a third of it, so the denser reading is preferred here where it
+// holds up.
 export function pickTempo(vote: Vote): number | null {
   const bpms = votedBpms()
   const voteOf = (bpm: number) => voteFor(vote, bpm)
@@ -479,6 +655,7 @@ export function pickTempo(vote: Vote): number | null {
   let top = 0
   for (const bpm of bpms) if (voteOf(bpm) > voteOf(top)) top = bpm
   if (voteOf(top) <= 0) return null
+  if (vote.pattern) return top
 
   let picked = top
   for (const times of [2, 3, 4]) {
@@ -487,9 +664,6 @@ export function pickTempo(vote: Vote): number | null {
   return picked
 }
 
-// One block of the scan: carry the previous grid on if it still describes this
-// stretch, otherwise find where it gave out and search wide for what replaced
-// it. Called a block at a time so the sections appear as they are found.
 export function scanBlock(
   envelope: Float32Array,
   sampleRate: number,
@@ -520,8 +694,14 @@ export function scanBlock(
   // what replaced it. Everything the block is judged by is re-read over the
   // stretch after the break rather than over the block that noticed it.
   const boundary = previous ? findBoundary(envelope, sampleRate, previous, fromMs, toMs) : fromMs
+
+  // A section needs enough song after it to be read off, and the tail of a
+  // track is where the count is least sure, so the grid runs to the end rather
+  // than a new tempo being declared over the last few seconds.
+  if (durationMs - boundary < BLOCK_MS * 2) return next
+
   const until = Math.min(durationMs, boundary + BLOCK_MS * 4)
-  const local = voteTempo(envelope, sampleRate, boundary, until)
+  const local = voteTempo(envelope, sampleRate, boundary, until, scan.meter)
   if (local.bpm === null) return next
 
   const coarse = bestPhase(envelope, sampleRate, boundary, until, local.bpm)

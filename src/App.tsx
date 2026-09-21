@@ -275,8 +275,11 @@ export default function App() {
     if (!fitting || !envelope || duration <= 0) return
 
     const durationMs = duration * 1000
-    let vote: Vote | null = newVote()
-    let scan: Scan = { fromMs: 0, found: [], done: false }
+    // the meter the counting is done under; publish re-reads it so a change
+    // mid-fit still reaches the sections
+    const barMeter = fitRef.current.meter
+    let vote: Vote | null = newVote(barMeter)
+    let scan: Scan = { fromMs: 0, found: [], done: false, meter: barMeter }
     let polish = 0
 
     const publish = (found: Fit[]) => {

@@ -230,18 +230,19 @@ export function computeEnvelope(samples: Float32Array, sampleRate: number): Floa
     energy[bin] = sum / Math.max(1, end - start)
   }
 
+  // Summed up front and read as differences rather than carried along as a
+  // running total. A running total adds and subtracts its way across the track,
+  // and over a long one the rounding piles up until a quiet stretch takes it
+  // below zero; the square root of that is not a number, and one of those makes
+  // the whole envelope, and everything read from it, not a number either.
+  const totals = new Float64Array(bins + 1)
+  for (let bin = 0; bin < bins; bin += 1) totals[bin + 1] = totals[bin] + energy[bin]
+
   const envelope = new Float32Array(bins)
-  let window = 0
-  for (let bin = 0; bin <= ENVELOPE_RADIUS && bin < bins; bin += 1) window += energy[bin]
-
   for (let bin = 0; bin < bins; bin += 1) {
-    const leaving = bin - ENVELOPE_RADIUS - 1
-    const entering = bin + ENVELOPE_RADIUS
-    if (leaving >= 0) window -= energy[leaving]
-    if (entering < bins && bin > 0) window += energy[entering]
-
     const from = Math.max(0, bin - ENVELOPE_RADIUS)
     const to = Math.min(bins - 1, bin + ENVELOPE_RADIUS)
+    const window = totals[to + 1] - totals[from]
     // deliberately not clamped: a loud master would saturate and lose the
     // shape the fitting reads. Drawing clamps through the amplitude curve.
     envelope[bin] = Math.sqrt(window / (to - from + 1)) * ENVELOPE_GAIN

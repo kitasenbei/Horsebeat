@@ -52,7 +52,7 @@ const EDGE = 3
 // by it is how many frames are held.
 const STRIPE = 10
 const GAP = 4
-const POINT = 4
+const POINT = 16
 
 // How together the quarters were, drawn as a colour: the spread between the
 // tallest and the shortest of them, which is nought when they land on one

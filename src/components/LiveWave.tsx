@@ -45,12 +45,13 @@ const SAMPLED = 4096
 
 const EDGE = 3
 
-// One wave a beat, each in its own colour, the first being the beat the
-// playhead is standing in and the rest the beats after it in the bar. A bar of
-// four draws four. The grid says where those beats are, so the four heights are
-// what the music is doing at the four places the grid claims a beat: four alike
-// means the bar is sitting on the music, and one tall among three flat means it
-// is not.
+// One wave a quarter of the bar, each in its own colour, and always the bar the
+// playhead is standing in: the first is its first beat, the last its last. What
+// is read in each is the playhead's own offset into a beat, carried across to
+// the other three, so the four are the same place in four beats of one bar
+// rather than four places. Four alike means the bar is sitting on the music,
+// and one tall among three flat means it is not. The colour of a quarter never
+// changes, so the first beat is red wherever the playhead stands.
 const BEAT_COLOURS = ['error', 'warning', 'info', 'success'] as const
 
 // Beyond this the strip is a thicket rather than a reading.
@@ -124,17 +125,24 @@ export default function LiveWave({
       const beat = span && span.beat > 0 ? span.beat : 0
       const beats = beat > 0 ? Math.min(MOST_BEATS, Math.max(1, span.section.meter)) : 1
 
+      const into = beat > 0 ? at - span.start : 0
+      const bar = beat * beats
+      const opens = beat > 0 ? span.start + Math.floor(into / bar) * bar : at
+      const offset = beat > 0 ? into - Math.floor(into / beat) * beat : 0
+
       context.lineWidth = 1.5
       context.lineJoin = 'round'
 
-      // drawn back to front, so the beat the playhead is standing in is the one
-      // on top rather than the one buried
-      for (let index = beats - 1; index >= 0; index -= 1) {
-        const ahead = at + beat * index
+      // drawn back to front, so the quarter the playhead is standing in is the
+      // one on top rather than the one buried
+      const standing = beat > 0 ? Math.floor((at - opens) / beat) : 0
+      for (let step = beats - 1; step >= 0; step -= 1) {
+        const index = (standing + 1 + step) % beats
+        const quarter = opens + beat * index + offset
         // past the end there is nothing to read, and drawing it would repeat
         // the last frame of the track as though it were a beat
-        if (ahead > 1) continue
-        const value = readAt(envelope, ahead)
+        if (quarter > 1) continue
+        const value = readAt(envelope, quarter)
         const colour = BEAT_COLOURS[index % BEAT_COLOURS.length]
         context.strokeStyle = theme.palette[colour].main
         wave(Math.min(1, value / ceilingRef.current))

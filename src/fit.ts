@@ -24,6 +24,8 @@ const COARSE_PHASES = 64
 // played performance drifting, far short of the half or double that fits well
 const DRIFT_BAND = 0.06
 const DENSER_KEEPS = 0.78
+// how much of the pulse's own reading a denser count of it has to keep
+const FOLD_KEEPS = 0.6
 
 const SCALES = [
   { bpm: 1, ms: 40 },
@@ -427,7 +429,16 @@ export function beatWithin(
 
   if (kept.length === 0) return bpm
   const best = Math.max(...kept.map((part) => part.share))
-  return kept.filter((part) => part.share >= best * DENSER_KEEPS).pop()!.bpm
+  const found = kept.filter((part) => part.share >= best * DENSER_KEEPS).pop()!.bpm
+  if (found === bpm) return bpm
+
+  // A denser count always reads a little worse than the pulse it divides, and
+  // that is expected. Reading far worse is not: it means the bar was cut into a
+  // number of parts it is not made of, and the count that came out is not a
+  // tempo the song has.
+  const mine = patternScore(envelope, sampleRate, fromMs, toMs, found, meter)
+  const given = patternScore(envelope, sampleRate, fromMs, toMs, bpm, meter)
+  return mine >= given * FOLD_KEEPS ? found : bpm
 }
 
 
@@ -590,6 +601,47 @@ function voteFor(vote: Vote, bpm: number): number {
 // comb vote answers about the beat already, but the count that wins outright is
 // often half or a third of it, so the denser reading is preferred here where it
 // holds up.
+// How much better a tempo has to read over the whole track before it overrules
+// what the windows voted for.
+const OVERRULES = 1.2
+
+// What the track is, settled between the two ways of counting it. The vote asks
+// each window separately and adds up what they say, which follows a song that
+// changes tempo but can be led astray on a short track with few windows to ask.
+// The pattern read over the whole track at once cannot follow a change, but it
+// is the more certain answer where there is one tempo. Where they disagree and
+// the whole track reads decidedly better, the whole track wins.
+export function bestTempo(
+  envelope: Float32Array,
+  sampleRate: number,
+  durationMs: number,
+  vote: Vote,
+): number | null {
+  const picked = pickTempo(vote)
+  if (picked === null) return null
+
+  const meter = vote.meter
+  const voted = beatWithin(envelope, sampleRate, 0, durationMs, picked, meter)
+
+  let swept = 0
+  let best = 0
+  for (const bpm of votedBpms()) {
+    const score = patternScore(envelope, sampleRate, 0, durationMs, bpm, meter)
+    if (score > best) {
+      best = score
+      swept = bpm
+    }
+  }
+  if (swept === 0) return voted
+
+  const found = beatWithin(envelope, sampleRate, 0, durationMs, swept, meter)
+  if (found === voted || runsAlready(found, voted)) return voted
+
+  const mine = patternScore(envelope, sampleRate, 0, durationMs, found, meter)
+  const theirs = patternScore(envelope, sampleRate, 0, durationMs, voted, meter)
+  return mine > theirs * OVERRULES ? found : voted
+}
+
 export function pickTempo(vote: Vote): number | null {
   const bpms = votedBpms()
   const voteOf = (bpm: number) => voteFor(vote, bpm)

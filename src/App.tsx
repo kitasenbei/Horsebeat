@@ -34,10 +34,9 @@ import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
 import {
-  beatWithin,
+  bestTempo,
   newSplit,
   newVote,
-  pickTempo,
   splitStep,
   voteStep,
   type Fit,
@@ -296,13 +295,12 @@ export default function App() {
         if (!vote.done) {
           vote = voteStep(envelope, sampleRate, durationMs, vote)
         } else {
-          const picked = pickTempo(vote)
-          if (picked === null) {
+          const voted = bestTempo(envelope, sampleRate, durationMs, vote)
+          if (voted === null) {
             setFitting(false)
             return
           }
 
-          const voted = beatWithin(envelope, sampleRate, 0, durationMs, picked, barMeter)
           split = newSplit(durationMs, voted, vote)
           vote = null
         }

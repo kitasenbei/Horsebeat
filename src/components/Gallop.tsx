@@ -47,6 +47,11 @@ const TALL = HEIGHT + 5
 // before it is back.
 const LAP = RUN + WIDTH
 
+// The last of them is the one the bar is counted from: on the downbeat it sits
+// flush against the right edge, and four beats later it has just cleared the
+// left. The others are placed behind it and cross a little after.
+const TRAILS = HERD[HERD.length - 1].at
+
 // A lap to the bar. The herd crosses, leaves, and is back where it started on
 // the next downbeat, so where a horse stands is as much a reading of the music
 // as which frame it is showing.
@@ -82,7 +87,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
       const step = Math.floor((((round % 1) + 1) % 1) * FRAMES)
       horse.style.backgroundPositionX = `${-step * WIDTH}px`
 
-      const gone = HERD[index].at - stride * CARRIES
+      const gone = RUN + HERD[index].at - TRAILS - stride * CARRIES
       horse.style.transform = `translateX(${(((gone % LAP) + LAP) % LAP) - WIDTH}px)`
     }
 

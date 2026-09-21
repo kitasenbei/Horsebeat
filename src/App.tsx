@@ -772,7 +772,14 @@ export default function App() {
           </Box>
         </Box>
       </Box>
-      <StatusBar fileName={file?.name ?? null} loadingName={loadingName} />
+      <StatusBar
+        fileName={file?.name ?? null}
+        loadingName={loadingName}
+        positionRef={positionRef}
+        position={position}
+        duration={duration}
+        playing={playing}
+      />
       <input
         ref={inputRef}
         type="file"

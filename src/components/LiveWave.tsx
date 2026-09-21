@@ -46,28 +46,43 @@ const STRIPE = 10
 const GAP = 4
 const POINT = 16
 
-// How together the quarters were, drawn as a colour. The spread between the
-// tallest and the shortest is read against their average rather than on its
-// own: a loud bar differs by more than a quiet one without being any less
-// together, and taken raw the reading is green almost everywhere, since on real
-// music half of all bars sit inside a spread of 0.14 out of a possible 1 and
-// ninety-nine in a hundred stay under 0.74.
+// What the band reads is not the waves. A handful of readings taken at one spot
+// in each bar cannot tell a good grid from a bad one: measured against a wrong
+// tempo they scatter by about a third more than against the right one, which is
+// nothing beside how much the music itself differs from bar to bar.
 //
-// Against the average the same measurements run 0.22 at the middle and 0.77 at
-// the ninetieth, so a relative spread near four fifths is what a scattered bar
-// actually looks like and is where the band is fully red. The floor keeps a
-// silent stretch, where every quarter is nothing and the average is nothing
-// too, from dividing its way to a false alarm.
-const SCATTERED = 0.8
-const QUIET_FLOOR = 0.02
+// So the band reads the whole bar. The last few bars are each sampled at the
+// same set of places across their length, and the question asked of those
+// numbers is how much of their variation is the shape of a bar — loud here,
+// quiet there, the same in every bar — rather than the same place in the bar
+// disagreeing from one bar to the next. A grid that holds puts most of the
+// variation in the shape; a grid sliding against the music smears the shape
+// away and leaves the disagreement.
+//
+// Measured at a known tempo and then at deliberately wrong ones, the reading
+// falls away in step with the error and roughly halves by ten beats a minute
+// out, which is the separation the spread of single readings never had:
+//
+//   right   0.338      1 out   0.316      2 out   0.291
+//   5 out   0.198     10 out   0.158
+//
+// The band is green from where a holding grid sits and red by where a slipping
+// one does.
+const PLACES = 64
+const HOLDS = 0.34
+const SLIPS = 0.1
 const AGREED_HUE = 120
 
-// One wave a quarter of the bar, and always the bar the playhead is standing
-// in: the first is its first beat, the last its last. What is read in each is
-// the playhead's own offset into a beat, carried across to the other three, so
-// the four are the same place in four beats of one bar rather than four places.
-// Four alike means the bar is sitting on the music, and one tall among three
-// flat means it is not.
+// One wave a bar: the place the playhead stands in its own bar, and the same
+// place in the bars before it. Quarters of one bar were the first try and they
+// cannot answer the question, because a grid whose tempo is wrong drags all
+// four of a bar's quarters along with it by nearly the same amount — four beats
+// is too short a lever for the error to show. Bar to bar is the long lever, and
+// it is the one the compiled view already draws: a column standing straight
+// against columns leaning over.
+//
+// So four alike means this place in the music arrives where the grid says it
+// will, bar after bar, and a fan means the grid is sliding against the music.
 //
 // A wave is painted the colour the compiled view paints that same value, which
 // is the whole point of reading it from there: a quarter that shows red in the
@@ -75,6 +90,11 @@ const AGREED_HUE = 120
 // where height barely moves, so two quarters a few hundredths apart are told
 // apart by colour and their true distance is still in the height.
 
+
+// How far back to look, and the ceiling on it. More bars is a longer lever and
+// a clearer answer, up to the point where the music itself has moved on and the
+// oldest bar is a different passage rather than the same one mistimed.
+const BARS_BACK = 4
 
 // Beyond this the strip is a thicket rather than a reading.
 const MOST_BEATS = 8
@@ -157,36 +177,52 @@ export default function LiveWave({
       const beat = span && span.beat > 0 ? span.beat : 0
       const beats = beat > 0 ? Math.min(MOST_BEATS, Math.max(1, span.section.meter)) : 1
 
-      const into = beat > 0 ? at - span.start : 0
       const bar = beat * beats
-      const opens = beat > 0 ? span.start + Math.floor(into / bar) * bar : at
-      const offset = beat > 0 ? into - Math.floor(into / beat) * beat : 0
+      const opens = bar > 0 ? span.start + Math.floor((at - span.start) / bar) * bar : at
 
       context.lineWidth = 1.5
       context.lineJoin = 'round'
 
-      // drawn back to front, so the quarter the playhead is standing in is the
-      // one on top rather than the one buried
-      const standing = beat > 0 ? Math.floor((at - opens) / beat) : 0
+      // drawn back to front, so the bar the playhead is standing in is the one
+      // on top rather than the one buried
       const shares: number[] = []
-      for (let step = beats - 1; step >= 0; step -= 1) {
-        const index = (standing + step) % beats
-        const quarter = opens + beat * index + offset
-        // past the end there is nothing to read, and drawing it would repeat
-        // the last frame of the track as though it were a beat
-        if (quarter > 1) continue
-        const share = readAt(envelope, lutRef.current.lut, quarter)
+      for (let back = BARS_BACK - 1; back >= 0; back -= 1) {
+        const earlier = at - bar * back
+        // before the section began there is no bar to compare with, and the
+        // frame that sits there belongs to different music
+        if (bar <= 0 ? back > 0 : earlier < span.start) continue
+        const share = readAt(envelope, lutRef.current.lut, earlier)
         shares.push(share)
         context.strokeStyle = laneColor(share, colormap)
         wave(share)
       }
 
       const rows = pastRef.current
-      if (shares.length > 1) {
-        const spread = Math.max(...shares) - Math.min(...shares)
-        const mean = shares.reduce((sum, share) => sum + share, 0) / shares.length
-        const apart = spread / Math.max(mean, QUIET_FLOOR)
-        rows.unshift(Math.max(0, 1 - Math.min(1, apart / SCATTERED)))
+      if (bar > 0 && opens - bar * (BARS_BACK - 1) >= span.start && shares.length > 1) {
+        const shape = new Float64Array(PLACES)
+        let total = 0
+        let squares = 0
+        let counted = 0
+
+        for (let place = 0; place < PLACES; place += 1) {
+          const inside = (place / PLACES) * bar
+          let sum = 0
+          for (let back = 0; back < BARS_BACK; back += 1) {
+            const value = readAt(envelope, lutRef.current.lut, opens - bar * back + inside)
+            sum += value
+            total += value
+            squares += value * value
+            counted += 1
+          }
+          shape[place] = sum / BARS_BACK
+        }
+
+        const grand = total / counted
+        const spread = squares / counted - grand * grand
+        let held = 0
+        for (const value of shape) held += (value - grand) * (value - grand)
+        const holding = spread > 0 ? held / PLACES / spread : 0
+        rows.unshift(Math.min(1, Math.max(0, (holding - SLIPS) / (HOLDS - SLIPS))))
       }
       const kept = Math.max(1, Math.ceil(width / POINT))
       if (rows.length > kept) rows.length = kept

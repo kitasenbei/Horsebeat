@@ -12,12 +12,13 @@ type LiveWaveProps = {
 
 const TALL = 64
 
-// How many times the wave goes up and down across the strip, at nothing and at
-// full. The value drives the period as well as the height, so a loud moment is
-// a tall tight wave and a quiet one a low slack one, and the strip says the
-// same thing twice over rather than once.
-const CYCLES_QUIET = 2
-const CYCLES_LOUD = 14
+// The wave is counted in half turns rather than whole ones, and in whole
+// numbers of them, which is what pins both ends to the middle: a half turn
+// starts and finishes level whatever else it does in between. The value picks
+// how many, so a loud moment is a tall tight wave and a quiet one a low slack
+// one, tied down at the left and the right either way.
+const HALVES_QUIET = 4
+const HALVES_LOUD = 28
 
 // The envelope is deliberately left unclamped where it is measured, so a loud
 // master runs past one. The wave is drawn against a ceiling a little above that
@@ -43,7 +44,7 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
       const share = Math.min(1, value / CEILING)
       const middle = height / 2
       const reach = (middle - EDGE) * share
-      const cycles = CYCLES_QUIET + (CYCLES_LOUD - CYCLES_QUIET) * share
+      const halves = Math.round(HALVES_QUIET + (HALVES_LOUD - HALVES_QUIET) * share)
 
       context.strokeStyle = theme.palette.primary.main
       context.lineWidth = 1.5
@@ -51,7 +52,7 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
       context.beginPath()
 
       for (let x = 0; x <= width; x += 1) {
-        const turn = (x / width) * cycles * Math.PI * 2
+        const turn = (x / width) * halves * Math.PI
         const y = middle - Math.sin(turn) * reach
         if (x === 0) context.moveTo(x, y)
         else context.lineTo(x, y)

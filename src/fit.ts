@@ -357,6 +357,9 @@ function barProfile(
 // beats in between have to be played.
 const DOUBLE_BELOW = 130
 const DOUBLE_KEEPS = 0.9
+const DOTTED_KEEPS = 0.95
+// how many times a count may be promoted before it is taken as read
+const COUNT_ROUNDS = 3
 
 // Whether what came out of the fold is the pulse rather than the beat. A bar
 // divides cleanly into the pulse that carries it and no further: where the beat
@@ -376,12 +379,40 @@ function counted(
   toMs: number,
   bpm: number,
 ): number {
-  const doubled = bpm * 2
-  if (bpm >= DOUBLE_BELOW || doubled > MAX_BPM_COUNT) return bpm
+  let count = bpm
 
-  const one = bestPhase(envelope, sampleRate, fromMs, toMs, bpm).score
-  const two = bestPhase(envelope, sampleRate, fromMs, toMs, doubled).score
-  return one > 0 && two >= one * DOUBLE_KEEPS ? doubled : bpm
+  // Each promotion opens the next one: a pulse of 75 doubles to 150, and 150 is
+  // then itself a count of 225 that nothing would otherwise ask about.
+  for (let round = 0; round < COUNT_ROUNDS; round += 1) {
+    const mine = bestPhase(envelope, sampleRate, fromMs, toMs, count).score
+    if (mine <= 0) return count
+
+    const plays = (faster: number, keeps: number) =>
+      faster <= MAX_BPM_COUNT &&
+      bestPhase(envelope, sampleRate, fromMs, toMs, faster).score >= mine * keeps
+
+    // twice the count, where the count is slow enough that the music is
+    // unlikely to be tapped there
+    if (count < DOUBLE_BELOW && plays(count * 2, DOUBLE_KEEPS)) {
+      count *= 2
+      continue
+    }
+
+    // and three of the count against two of it, which is what is left when a
+    // bar divides evenly into a tempo that is not the beat: a bar of four at
+    // 150 is also six beats of 225, and only the audio says which is played.
+    // Held to a stricter share than the doubling, because a count two thirds of
+    // the beat lands on every other one of its beats and so keeps more of the
+    // reading than half a tempo would.
+    if (plays(count * 1.5, DOTTED_KEEPS)) {
+      count *= 1.5
+      continue
+    }
+
+    return count
+  }
+
+  return count
 }
 
 // Which of the counts inside a bar is the beat. The pattern score answers about
@@ -479,6 +510,8 @@ const MAX_BPM_COUNT = 300
 // are two tempos rather than two readings of one
 const SAME_TEMPO = 0.01
 const COUNTED_BAND = 0.04
+// how near three-against-two a reading has to be to be that rather than a tempo
+const DOTTED_BAND = 0.015
 
 // Whether a tempo is the one already running: the same number, or that number
 // counted against two, three or four of its beats. Half a tempo lands on every
@@ -495,7 +528,25 @@ function runsAlready(bpm: number, against: number): boolean {
     if (Math.abs(bpm - against * times) < against * times * COUNTED_BAND) return true
     if (Math.abs(bpm * times - against) < against * COUNTED_BAND) return true
   }
+
   return false
+}
+
+// Three of one against two of the other: the same pulse read in dotted notes,
+// which a shuffle or a passage in three invites. Kept apart from runsAlready
+// because it only holds between a section and the one it came from — a track
+// whose best reading over its whole length is three against two of what the
+// windows voted for is a track being counted wrongly, not one in dotted notes.
+//
+// The band is narrow because a real change of tempo can land near two thirds
+// and mean it: a song dropping from 140 to 96 sits at 0.686, and two thirds is
+// 0.667.
+function readsAsDotted(bpm: number, against: number): boolean {
+  // only the slower reading. Two thirds of the tempo it was handed is a stretch
+  // counted in dotted notes; three halves of it is a stretch correcting a count
+  // that was already dotted, and that has to be allowed through or a section
+  // can never recover from a parent that was wrong.
+  return Math.abs(bpm * 3 - against * 2) < against * 2 * DOTTED_BAND
 }
 
 // How long a stretch each vote is cast over. Long enough that a bar or two of
@@ -799,7 +850,7 @@ function tempoOf(
   if (local.bpm === null) return given
 
   const found = beatWithin(envelope, sampleRate, fromMs, toMs, local.bpm, meter)
-  if (found === given || runsAlready(found, given)) return given
+  if (found === given || runsAlready(found, given) || readsAsDotted(found, given)) return given
 
   // and it has to be a tempo the track plays. A stretch of a few bars reads as
   // any number of things, most of which the song never goes near, and the count

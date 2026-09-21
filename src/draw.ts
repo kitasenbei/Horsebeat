@@ -937,6 +937,13 @@ function waveRgb(value: number, colormap = 0) {
   return rampRgb(COLORMAP_RGB[colormap] ?? COLORMAP_RGB[0], value)
 }
 
+// The colour the compiled view paints a value, for anything drawn beside it
+// that wants to say the same thing about the same number.
+export function laneColor(value: number, colormap = 0): string {
+  const [red, green, blue] = waveRgb(value, colormap)
+  return `rgb(${red | 0} ${green | 0} ${blue | 0})`
+}
+
 const LUT_SIZE = 256
 
 // The curve as a plain table, so the projections read the same shaped value the

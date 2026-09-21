@@ -510,6 +510,7 @@ export default function App() {
             <LiveWave
               envelope={envelope}
               curve={curve}
+              colormap={colormap}
               sections={sections}
               duration={duration}
               position={position}

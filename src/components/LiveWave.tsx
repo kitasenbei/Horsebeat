@@ -1,14 +1,14 @@
 import { useState, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
-import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
-import { curveSignature, sectionSignature } from '../draw'
+import { curveSignature, laneColor, sectionSignature } from '../draw'
 import { applyCurve, type Curve } from '../curve'
 import { sectionSpans, type Section } from '../timing'
 
 type LiveWaveProps = {
   envelope: Float32Array | null
   curve: Curve
+  colormap: number
   sections: Section[]
   duration: number
   position: number
@@ -52,14 +52,23 @@ const POINT = 16
 // agree, red where they do not, by way of the hues between.
 const AGREED_HUE = 120
 
-// One wave a quarter of the bar, each in its own colour, and always the bar the
-// playhead is standing in: the first is its first beat, the last its last. What
-// is read in each is the playhead's own offset into a beat, carried across to
-// the other three, so the four are the same place in four beats of one bar
-// rather than four places. Four alike means the bar is sitting on the music,
-// and one tall among three flat means it is not. The colour of a quarter never
-// changes, so the first beat is red wherever the playhead stands.
-const BEAT_COLOURS = ['error', 'warning', 'info', 'success'] as const
+// One wave a quarter of the bar, and always the bar the playhead is standing
+// in: the first is its first beat, the last its last. What is read in each is
+// the playhead's own offset into a beat, carried across to the other three, so
+// the four are the same place in four beats of one bar rather than four places.
+// Four alike means the bar is sitting on the music, and one tall among three
+// flat means it is not.
+//
+// A wave is painted the colour the compiled view paints that same value, which
+// is the whole point of reading it from there: a quarter that shows red in the
+// canvas is a red wave here. Colour pulls apart around the middle of the ramp
+// where height barely moves, so two quarters a few hundredths apart are told
+// apart by colour and their true distance is still in the height.
+//
+// Which quarter is which is then the dash: solid for the first, and on through
+// the list. Colour is spoken for, and a shape that survives two waves landing
+// on one another is what is wanted.
+const QUARTER_DASHES = [[], [7, 4], [2, 3], [9, 3, 2, 3]]
 
 // Beyond this the strip is a thicket rather than a reading.
 const MOST_BEATS = 8
@@ -89,13 +98,13 @@ function readAt(envelope: Float32Array | null, lut: Float32Array, at: number): n
 export default function LiveWave({
   envelope,
   curve,
+  colormap,
   sections,
   duration,
   position,
   positionRef,
   playing,
 }: LiveWaveProps) {
-  const theme = useTheme()
   const [reading, setReading] = useState<Reading>('amplitude')
   const sourceRef = useRef<Float32Array | null>(null)
   const pastRef = useRef<number[]>([])
@@ -162,10 +171,12 @@ export default function LiveWave({
         if (quarter > 1) continue
         const share = readAt(envelope, lutRef.current.lut, quarter)
         shares.push(share)
-        const colour = BEAT_COLOURS[index % BEAT_COLOURS.length]
-        context.strokeStyle = theme.palette[colour].main
+        context.strokeStyle = laneColor(share, colormap)
+        context.setLineDash(QUARTER_DASHES[index % QUARTER_DASHES.length])
         wave(share)
       }
+
+      context.setLineDash([])
 
       const rows = pastRef.current
       if (shares.length > 1) {
@@ -181,7 +192,7 @@ export default function LiveWave({
       }
     },
     playing,
-    `${position}|${reading}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}`,
+    `${position}|${reading}|${colormap}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}`,
   )
 
   return (

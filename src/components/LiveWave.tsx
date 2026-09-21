@@ -64,16 +64,39 @@ const BEAT_COLOURS = ['error', 'warning', 'info', 'success'] as const
 // Beyond this the strip is a thicket rather than a reading.
 const MOST_BEATS = 8
 
-// The same reading the compiled view paints at that spot, arrived at the same
-// way: the frame the position lands on, held at one, and put through the
-// amplitude curve. The compiled view gives that value to a colour ramp and this
-// one gives it to a height, so a quarter drawn tall here is a bright row there.
-function readAt(envelope: Float32Array | null, at: number, curve: Curve): number {
+// The amplitude curve as a table of the same size the compiled view uses, so a
+// quarter is read through exactly the steps its pixels are painted through.
+const LEVELS = 256
+
+function shapeLut(curve: Curve): Float32Array {
+  const lut = new Float32Array(LEVELS)
+  for (let step = 0; step < LEVELS; step += 1) lut[step] = applyCurve(step / (LEVELS - 1), curve)
+  return lut
+}
+
+// A quarter is a stretch of the bar, not an instant in it: the block of rows
+// the compiled view paints between one beat and the next. Read as the average
+// of that stretch, so what the wave stands for is the same thing the eye reads
+// off those rows, and moving the playhead within a quarter leaves it alone.
+function readSpan(
+  envelope: Float32Array | null,
+  lut: Float32Array,
+  from: number,
+  to: number,
+): number {
   if (!envelope || envelope.length === 0) return 0
-  const frame = Math.min(envelope.length - 1, Math.max(0, (at * envelope.length) | 0))
-  const value = envelope[frame]
-  if (!Number.isFinite(value)) return 0
-  return applyCurve(Math.min(1, Math.max(0, value)), curve)
+  const last = envelope.length - 1
+  const first = Math.min(last, Math.max(0, (from * envelope.length) | 0))
+  const after = Math.min(envelope.length, Math.max(first + 1, (to * envelope.length) | 0))
+
+  let total = 0
+  for (let frame = first; frame < after; frame += 1) {
+    const value = envelope[frame]
+    if (!Number.isFinite(value)) continue
+    total += lut[((value < 1 ? Math.max(0, value) : 1) * (LEVELS - 1) + 0.5) | 0]
+  }
+
+  return total / Math.max(1, after - first)
 }
 
 export default function LiveWave({
@@ -89,6 +112,7 @@ export default function LiveWave({
   const [reading, setReading] = useState<Reading>('amplitude')
   const sourceRef = useRef<Float32Array | null>(null)
   const pastRef = useRef<number[]>([])
+  const lutRef = useRef({ signature: '', lut: shapeLut(curve) })
 
   const canvasRef = useCanvas(
     (context, width, height) => {
@@ -101,6 +125,11 @@ export default function LiveWave({
 
       const plot = width
       const middle = Math.max(1, height - STRIPE - GAP) / 2
+
+      const signature = curveSignature(curve)
+      if (lutRef.current.signature !== signature) {
+        lutRef.current = { signature, lut: shapeLut(curve) }
+      }
 
       const wave = (share: number) => {
         const full = middle - EDGE
@@ -129,7 +158,6 @@ export default function LiveWave({
       const into = beat > 0 ? at - span.start : 0
       const bar = beat * beats
       const opens = beat > 0 ? span.start + Math.floor(into / bar) * bar : at
-      const offset = beat > 0 ? into - Math.floor(into / beat) * beat : 0
 
       context.lineWidth = 1.5
       context.lineJoin = 'round'
@@ -140,11 +168,11 @@ export default function LiveWave({
       const shares: number[] = []
       for (let step = beats - 1; step >= 0; step -= 1) {
         const index = (standing + step) % beats
-        const quarter = opens + beat * index + offset
+        const from = opens + beat * index
         // past the end there is nothing to read, and drawing it would repeat
-        // the last frame of the track as though it were a beat
-        if (quarter > 1) continue
-        const share = readAt(envelope, quarter, curve)
+        // the last frames of the track as though they were a beat
+        if (from > 1) continue
+        const share = readSpan(envelope, lutRef.current.lut, from, Math.min(1, from + beat))
         shares.push(share)
         const colour = BEAT_COLOURS[index % BEAT_COLOURS.length]
         context.strokeStyle = theme.palette[colour].main

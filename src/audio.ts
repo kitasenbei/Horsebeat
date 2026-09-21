@@ -232,7 +232,9 @@ export function computeEnvelope(samples: Float32Array): Float32Array {
 
     const from = Math.max(0, bin - ENVELOPE_RADIUS)
     const to = Math.min(bins - 1, bin + ENVELOPE_RADIUS)
-    envelope[bin] = Math.min(1, Math.sqrt(window / (to - from + 1)) * ENVELOPE_GAIN)
+    // deliberately not clamped: a loud master would saturate and lose the
+    // shape the fitting reads. Drawing clamps through the amplitude curve.
+    envelope[bin] = Math.sqrt(window / (to - from + 1)) * ENVELOPE_GAIN
   }
 
   return envelope

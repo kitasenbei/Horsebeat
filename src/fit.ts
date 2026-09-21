@@ -7,8 +7,10 @@ export type Fit = {
 
 // How wide the ladder starts and how fine it ends. The last rung is the
 // resolution the app displays, so fitting can reach a value you can read.
+const RISE_SPREAD = 0.25
+const BEAT_FRAMES = 3
 const COARSE_BPM_STEP = 0.5
-const COARSE_PHASES = 24
+const COARSE_PHASES = 64
 const BOUNDARY_STEP_MS = 250
 const BOUNDARY_DROP = 0.6
 const DENSER_KEEPS = 0.78
@@ -30,6 +32,35 @@ export const FIT_STEPS = SCALES.length
 // The score a grid earns on this audio: the average envelope height at the
 // beats it predicts, against the average everywhere. One means the beats are
 // no louder than the gaps; higher means the grid is landing on the music.
+const rises = new WeakMap<Float32Array, Float32Array>()
+
+// What the fitting actually reads: how fast the envelope is climbing, not how
+// high it stands. A loud master holds the envelope near its ceiling for most of
+// a song, so levels barely differ between a beat and the gap after it, while
+// the climb onto each beat stays sharp.
+function riseOf(envelope: Float32Array): Float32Array {
+  const cached = rises.get(envelope)
+  if (cached) return cached
+
+  const raw = new Float32Array(envelope.length)
+  for (let at = 1; at < envelope.length; at += 1) {
+    const step = envelope[at] - envelope[at - 1]
+    raw[at] = step > 0 ? step : 0
+  }
+
+  // A hit can climb over two or three frames, and a raw difference then splits
+  // it between them, so whether a grid scores depends on which frame it landed
+  // in. Leaning each frame on its neighbours puts the whole climb under any of
+  // them.
+  const rise = new Float32Array(envelope.length)
+  for (let at = 1; at < envelope.length - 1; at += 1) {
+    rise[at] = raw[at] + (raw[at - 1] + raw[at + 1]) * RISE_SPREAD
+  }
+
+  rises.set(envelope, rise)
+  return rise
+}
+
 const totals = new WeakMap<Float32Array, Float64Array>()
 
 function runningTotal(envelope: Float32Array): Float64Array {
@@ -43,12 +74,13 @@ function runningTotal(envelope: Float32Array): Float64Array {
 }
 
 export function scoreFit(
-  envelope: Float32Array,
+  levels: Float32Array,
   sampleRate: number,
   fromMs: number,
   toMs: number,
   fit: Fit,
 ): number {
+  const envelope = riseOf(levels)
   const frames = envelope.length
   if (frames === 0 || fit.bpm <= 0 || toMs <= fromMs) return 0
 
@@ -62,13 +94,17 @@ export function scoreFit(
   let count = 0
 
   for (let beat = first; beat <= last; beat += 1) {
+    // Sampled at the beat itself and interpolated between frames, so a grid is
+    // judged by where it falls rather than by which side of a frame boundary it
+    // landed on. A window of whole frames makes the score jump as the offset
+    // crosses one, which the search then chases.
     const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs)
     if (centre < 0 || centre >= frames) continue
 
-    // the loudest frame within a millisecond or so, because a hit is an edge
-    // rather than a single sample
+    // the sharpest climb within a few milliseconds, because a hit is an edge
+    // with a soft start rather than a single sample
     let peak = 0
-    for (let at = centre - 1; at <= centre + 1; at += 1) {
+    for (let at = centre - BEAT_FRAMES; at <= centre + BEAT_FRAMES; at += 1) {
       if (at >= 0 && at < frames && envelope[at] > peak) peak = envelope[at]
     }
 

@@ -37,41 +37,6 @@ const STEADY_REACH = 0.7
 
 const EDGE = 3
 
-// The band under the wave and the gap that keeps it off it. One column of it is
-// one frame, newest at the right, so it runs the way time does. A column is
-// several pixels across, which is what makes a single bad frame among good ones
-// something you can see rather than a hairline; the width of the strip divided
-// by it is how many frames are held.
-const STRIPE = 10
-const GAP = 4
-const POINT = 16
-
-// What the band reads is not the waves. A handful of readings taken at one spot
-// in each bar cannot tell a good grid from a bad one: measured against a wrong
-// tempo they scatter by about a third more than against the right one, which is
-// nothing beside how much the music itself differs from bar to bar.
-//
-// So the band reads the whole bar. The last few bars are each sampled at the
-// same set of places across their length, and the question asked of those
-// numbers is how much of their variation is the shape of a bar — loud here,
-// quiet there, the same in every bar — rather than the same place in the bar
-// disagreeing from one bar to the next. A grid that holds puts most of the
-// variation in the shape; a grid sliding against the music smears the shape
-// away and leaves the disagreement.
-//
-// Measured at a known tempo and then at deliberately wrong ones, the reading
-// falls away in step with the error and roughly halves by ten beats a minute
-// out, which is the separation the spread of single readings never had:
-//
-//   right   0.338      1 out   0.316      2 out   0.291
-//   5 out   0.198     10 out   0.158
-//
-// The band is green from where a holding grid sits and red by where a slipping
-// one does.
-const PLACES = 64
-const HOLDS = 0.34
-const SLIPS = 0.1
-const AGREED_HUE = 120
 
 // One wave a bar: the place the playhead stands in its own bar, and the same
 // place in the bars before it. Quarters of one bar were the first try and they
@@ -132,21 +97,12 @@ export default function LiveWave({
   playing,
 }: LiveWaveProps) {
   const [reading, setReading] = useState<Reading>('amplitude')
-  const sourceRef = useRef<Float32Array | null>(null)
-  const pastRef = useRef<number[]>([])
   const lutRef = useRef({ signature: '', lut: shapeLut(curve) })
 
   const canvasRef = useCanvas(
     (context, width, height) => {
-      // a new track is a new band: what the last one was doing says nothing
-      // about this one
-      if (sourceRef.current !== envelope) {
-        sourceRef.current = envelope
-        pastRef.current = []
-      }
-
       const plot = width
-      const middle = Math.max(1, height - STRIPE - GAP) / 2
+      const middle = height / 2
 
       const signature = curveSignature(curve)
       if (lutRef.current.signature !== signature) {
@@ -178,59 +134,22 @@ export default function LiveWave({
       const beats = beat > 0 ? Math.min(MOST_BEATS, Math.max(1, span.section.meter)) : 1
 
       const bar = beat * beats
-      const opens = bar > 0 ? span.start + Math.floor((at - span.start) / bar) * bar : at
 
       context.lineWidth = 1.5
       context.lineJoin = 'round'
 
       // drawn back to front, so the bar the playhead is standing in is the one
       // on top rather than the one buried
-      const shares: number[] = []
       for (let back = BARS_BACK - 1; back >= 0; back -= 1) {
         const earlier = at - bar * back
         // before the section began there is no bar to compare with, and the
         // frame that sits there belongs to different music
         if (bar <= 0 ? back > 0 : earlier < span.start) continue
         const share = readAt(envelope, lutRef.current.lut, earlier)
-        shares.push(share)
         context.strokeStyle = laneColor(share, colormap)
         wave(share)
       }
 
-      const rows = pastRef.current
-      if (bar > 0 && opens - bar * (BARS_BACK - 1) >= span.start && shares.length > 1) {
-        const shape = new Float64Array(PLACES)
-        let total = 0
-        let squares = 0
-        let counted = 0
-
-        for (let place = 0; place < PLACES; place += 1) {
-          const inside = (place / PLACES) * bar
-          let sum = 0
-          for (let back = 0; back < BARS_BACK; back += 1) {
-            const value = readAt(envelope, lutRef.current.lut, opens - bar * back + inside)
-            sum += value
-            total += value
-            squares += value * value
-            counted += 1
-          }
-          shape[place] = sum / BARS_BACK
-        }
-
-        const grand = total / counted
-        const spread = squares / counted - grand * grand
-        let held = 0
-        for (const value of shape) held += (value - grand) * (value - grand)
-        const holding = spread > 0 ? held / PLACES / spread : 0
-        rows.unshift(Math.min(1, Math.max(0, (holding - SLIPS) / (HOLDS - SLIPS))))
-      }
-      const kept = Math.max(1, Math.ceil(width / POINT))
-      if (rows.length > kept) rows.length = kept
-
-      for (let row = 0; row < rows.length; row += 1) {
-        context.fillStyle = `hsl(${AGREED_HUE * rows[row]} 70% 45%)`
-        context.fillRect(width - (row + 1) * POINT, height - STRIPE, POINT, STRIPE)
-      }
     },
     playing,
     `${position}|${reading}|${colormap}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}`,

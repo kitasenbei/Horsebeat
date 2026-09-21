@@ -10,7 +10,16 @@ type GallopProps = {
   playing: boolean
 }
 
-const FRAMES = 24
+// One stride, six frames. The gif holds the same stride four times over, which
+// is worth knowing: read as twenty-four it runs at a quarter the rate and never
+// lands anywhere in particular.
+const FRAMES = 6
+
+// Which frame plants the leading hoof. Measured rather than guessed: the
+// silhouette reaches lowest in this one, and rises eight pixels clear of the
+// ground two frames later. Putting it under the beat is what makes a footfall
+// and a beat the same moment.
+const STRIKE = 1 / FRAMES
 const WIDTH = 56
 const HEIGHT = 38
 
@@ -27,8 +36,8 @@ const HERD = [
 const SPREAD = HERD[HERD.length - 1].at + WIDTH
 const TALL = HEIGHT + 5
 
-// Half a stride again to the beat, which reads as a horse with somewhere to be.
-const STRIDES_A_BEAT = 1.5
+// A stride to the beat, so every beat is a hoof landing.
+const STRIDES_A_BEAT = 1
 
 // Above this beat rate the stride is tied to every second beat instead, and
 // then every fourth: the gait stays a gait at the fast end of the music while
@@ -52,7 +61,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
     const spans = sectionSpans(sections, duration)
     const park = () => {
       horses.forEach((horse, index) => {
-        const step = Math.floor(HERD[index].lead * FRAMES)
+        const step = Math.floor((HERD[index].lead + STRIKE) * FRAMES) % FRAMES
         horse.style.backgroundPositionX = `${-step * WIDTH}px`
       })
     }
@@ -69,7 +78,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
       const stride = (beats / beatsAStride(60000 / span.beat)) * STRIDES_A_BEAT
 
       for (let index = 0; index < horses.length; index += 1) {
-        const round = stride + HERD[index].lead
+        const round = stride + HERD[index].lead + STRIKE
         const step = Math.floor((((round % 1) + 1) % 1) * FRAMES)
         horses[index].style.backgroundPositionX = `${-step * WIDTH}px`
       }

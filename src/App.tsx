@@ -33,16 +33,7 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
-import {
-  bestTempo,
-  newSplit,
-  newVote,
-  splitStep,
-  voteStep,
-  type Fit,
-  type Split,
-  type Vote,
-} from './fit'
+import { fitTrack, type Fit } from './fit'
 import {
   createSection,
   DEFAULT_METER,
@@ -271,9 +262,7 @@ export default function App() {
     const durationMs = duration * 1000
     // the meter the counting is done under; publish re-reads it so a change
     // mid-fit still reaches the sections
-    const barMeter = fitRef.current.meter
-    let vote: Vote | null = newVote(barMeter)
-    let split: Split | null = null
+    const run = fitTrack(envelope, sampleRate, durationMs, fitRef.current.meter)
 
     const publish = (found: Fit[]) => {
       const meter = fitRef.current.meter
@@ -286,36 +275,21 @@ export default function App() {
       )
     }
 
+    // A step a frame: the track is counted end to end, then halved wherever one
+    // grid cannot stay on the beat across it. The span under the knobs is
+    // published with the settled ones, so the grid is seen moving onto the
+    // music rather than appearing on it.
     let frame = requestAnimationFrame(function tick() {
-      // First the track is counted end to end, a window a frame. Every stretch
-      // of a song reads as several tempos and a slow count of a busy stretch
-      // often reads best of all, so the tempo is the one the whole track keeps
-      // voting for rather than whatever the opening seconds fit.
-      if (vote) {
-        if (!vote.done) {
-          vote = voteStep(envelope, sampleRate, durationMs, vote)
-        } else {
-          const voted = bestTempo(envelope, sampleRate, durationMs, vote)
-          if (voted === null) {
-            setFitting(false)
-            return
-          }
+      const step = run.next()
 
-          split = newSplit(durationMs, voted, vote)
-          vote = null
-        }
-      } else if (split && !split.done) {
-        // then the track is halved wherever one grid cannot stay on the beat
-        // across it, and each half asked the same question again
-        split = splitStep(envelope, sampleRate, split)
-
-        // the span under the knobs is published with the settled ones, so the
-        // grid is seen moving onto the music a turn at a time
-        const working = split.working
-        publish(working ? [...split.parts.map((part) => part.fit), working.fit] : split.parts.map((part) => part.fit))
-      } else {
+      if (step.done) {
+        publish(step.value.map((part) => part.fit))
         setFitting(false)
         return
+      }
+
+      if (step.value) {
+        publish([...step.value.parts.map((part) => part.fit), step.value.working])
       }
 
       frame = requestAnimationFrame(tick)

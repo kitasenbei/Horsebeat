@@ -367,7 +367,7 @@ function votedBpms(): number[] {
   return bpms
 }
 
-export function newVote(meter: number): Vote {
+function newVote(meter: number): Vote {
   return { fromMs: 0, totals: new Float64Array(votedBpms().length), done: false, meter, pattern: true }
 }
 
@@ -375,7 +375,7 @@ export function newVote(meter: number): Vote {
 // window and the window's own best is called one vote, so a loud chorus and a
 // quiet verse count the same and no stretch decides the track by being louder
 // than the rest of it.
-export function voteStep(
+function voteStep(
   envelope: Float32Array,
   sampleRate: number,
   durationMs: number,
@@ -463,7 +463,7 @@ const OVERRULES = 1.2
 // The pattern read over the whole track at once cannot follow a change, but it
 // is the more certain answer where there is one tempo. Where they disagree and
 // the whole track reads decidedly better, the whole track wins.
-export function bestTempo(
+function bestTempo(
   envelope: Float32Array,
   sampleRate: number,
   durationMs: number,
@@ -621,29 +621,79 @@ function anchorBeat(
   return { bpm: fit.bpm, offsetMs: Math.max(0, fit.offsetMs + shift) }
 }
 
-type Part = {
+export type Part = {
   fromMs: number
   toMs: number
   fit: Fit
   flat: number
 }
 
-// A span being fitted, one turn of the knobs at a time. The ladder inside
-// fitWindow already moves the two knobs a step each way and keeps whichever
-// reads better; this is the same walk, handed out a rung a frame, so the grid
-// can be watched moving onto the music instead of appearing on it.
-export type Turn = {
-  fromMs: number
-  toMs: number
-  depth: number
-  fit: Fit
-  step: number
-  round: number
-  low: number
-  high: number
+// What a caller sees between steps: the sections settled so far, and the grid
+// currently being moved onto the music.
+export type Progress = {
+  parts: Part[]
+  working: Fit
 }
 
-export function newTurn(
+// Settling one span, a rung at a time. The ladder moves both knobs a step each
+// way and keeps whichever reads better, then the polish regresses the landmarks
+// it can see; yielding after each leaves the grid visible while it walks onto
+// the music.
+function* settle(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  given: number,
+  meter: number,
+  track: Vote,
+  parts: Part[],
+): Generator<Progress, Part, void> {
+  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
+  let fit = bestPhase(envelope, sampleRate, fromMs, toMs, bpm).fit
+
+  const low = bpm * (1 - DRIFT_BAND)
+  const high = bpm * (1 + DRIFT_BAND)
+  const inBand = (candidate: Fit) => candidate.bpm >= low && candidate.bpm <= high
+
+  for (let step = 0; step < FIT_STEPS; ) {
+    const moved = refineFit(envelope, sampleRate, fromMs, toMs, fit, step)
+    if (moved.moved && inBand(moved.fit)) fit = moved.fit
+    else step += 1
+    yield { parts, working: fit }
+  }
+
+  for (let round = 0; round < POLISH_ROUNDS; round += 1) {
+    const polished = polishFit(envelope, sampleRate, fromMs, toMs, fit)
+    if (!inBand(polished)) break
+    fit = polished
+    yield { parts, working: fit }
+  }
+
+  // the grid on the beat, and the bar on a downbeat
+  const anchored = { bpm: fit.bpm, offsetMs: beatNear(fit, fromMs) }
+  const barred = alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
+  const placed = anchorBeat(envelope, sampleRate, fromMs, toMs, barred)
+
+  return {
+    fromMs,
+    toMs,
+    fit: placed,
+    flat: flatnessOf(envelope, sampleRate, fromMs, toMs, placed, meter),
+  }
+}
+
+// The track is taken whole, then halved wherever one grid cannot stay on the
+// beat across it, and each half asked the same question again. Splitting
+// downwards rather than sweeping forwards means every answer is read off as
+// much audio as it can be, and a section appears only where the song actually
+// stops agreeing with the one before it.
+//
+// A span is left alone when it runs straight and both of its halves read as the
+// tempo it settled on. Both tests are needed: a half playing a different tempo
+// is somewhere else rather than drifting, and its own picture can be as
+// straight as any other.
+function* solve(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -652,157 +702,54 @@ export function newTurn(
   meter: number,
   track: Vote,
   depth: number,
-): Turn {
-  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
-  const fit = bestPhase(envelope, sampleRate, fromMs, toMs, bpm).fit
-  return {
-    fromMs,
-    toMs,
-    depth,
-    fit,
-    step: 0,
-    round: 0,
-    low: bpm * (1 - DRIFT_BAND),
-    high: bpm * (1 + DRIFT_BAND),
-  }
-}
+  parts: Part[],
+): Generator<Progress, void, void> {
+  const whole = yield* settle(envelope, sampleRate, fromMs, toMs, given, meter, track, parts)
 
-export function turned(turn: Turn): boolean {
-  return turn.step >= FIT_STEPS && turn.round >= POLISH_ROUNDS
-}
-
-// One rung, or one round of the polish once the ladder has run out.
-export function turnStep(envelope: Float32Array, sampleRate: number, turn: Turn): Turn {
-  const inBand = (candidate: Fit) => candidate.bpm >= turn.low && candidate.bpm <= turn.high
-
-  if (turn.step < FIT_STEPS) {
-    const result = refineFit(envelope, sampleRate, turn.fromMs, turn.toMs, turn.fit, turn.step)
-    if (result.moved && inBand(result.fit)) return { ...turn, fit: result.fit }
-    return { ...turn, step: turn.step + 1 }
+  const keep = () => {
+    parts.push(whole)
+    parts.sort((one, other) => one.fromMs - other.fromMs)
   }
 
-  const polished = polishFit(envelope, sampleRate, turn.fromMs, turn.toMs, turn.fit)
-  if (!inBand(polished)) return { ...turn, round: POLISH_ROUNDS }
-  return { ...turn, fit: polished, round: turn.round + 1 }
-}
-
-// What a turn leaves behind: the grid on the beat, and the bar on a downbeat.
-export function turnDone(
-  envelope: Float32Array,
-  sampleRate: number,
-  turn: Turn,
-  meter: number,
-): Part {
-  const anchored = { bpm: turn.fit.bpm, offsetMs: beatNear(turn.fit, turn.fromMs) }
-  const barred = alignDownbeat(envelope, sampleRate, turn.fromMs, turn.toMs, anchored, meter)
-  const fit = anchorBeat(envelope, sampleRate, turn.fromMs, turn.toMs, barred)
-  return {
-    fromMs: turn.fromMs,
-    toMs: turn.toMs,
-    fit,
-    flat: flatnessOf(envelope, sampleRate, turn.fromMs, turn.toMs, fit, meter),
-  }
-}
-
-
-type Span = { fromMs: number; toMs: number; bpm: number; depth: number }
-
-export type Split = {
-  parts: Part[]
-  pending: Span[]
-  // the span whose knobs are being turned right now, shown while it moves
-  working: Turn | null
-  meter: number
-  done: boolean
-  // what the whole track polled, kept so a span cannot take a tempo the song
-  // never plays
-  track: Vote
-}
-
-export function newSplit(durationMs: number, bpm: number, vote: Vote): Split {
-  return {
-    parts: [],
-    pending: [{ fromMs: 0, toMs: durationMs, bpm, depth: 0 }],
-    working: null,
-    meter: vote.meter,
-    done: durationMs <= 0,
-    track: vote,
-  }
-}
-
-// One span of the split. The track is taken whole, then halved wherever one
-// grid cannot stay on the beat across it, and each half asked the same question
-// again. Splitting downwards rather than sweeping forwards means every answer
-// is read off as much audio as it can be, and a section appears only where the
-// song actually stops agreeing with the one before it.
-//
-// A span is left alone when it runs straight and both of its halves read as the
-// tempo it settled on. Straightness on its own is not enough: a half playing a
-// different tempo is not drifting, it is somewhere else, and its own picture
-// can be as straight as any other.
-export function splitStep(
-  envelope: Float32Array,
-  sampleRate: number,
-  split: Split,
-): Split {
-  const meter = split.meter
-
-  // a span that is not yet under the knobs is put under them
-  if (!split.working) {
-    const span = split.pending[0]
-    if (!span) return { ...split, done: true }
-
-    return {
-      ...split,
-      pending: split.pending.slice(1),
-      working: newTurn(
-        envelope,
-        sampleRate,
-        span.fromMs,
-        span.toMs,
-        span.bpm,
-        meter,
-        split.track,
-        span.depth,
-      ),
-    }
-  }
-
-  // one turn of the knobs, which is what the compiled view redraws against
-  if (!turned(split.working)) {
-    return { ...split, working: turnStep(envelope, sampleRate, split.working) }
-  }
-
-  const span = split.working
-  const whole = turnDone(envelope, sampleRate, span, meter)
-  const rest = { ...split, working: null }
-  const keep = () => ({
-    ...rest,
-    parts: [...split.parts, whole].sort((one, other) => one.fromMs - other.fromMs),
-    done: rest.pending.length === 0,
-  })
-
-  if (span.toMs - span.fromMs < MIN_SPAN_MS * 2 || span.depth >= MAX_DEPTH) return keep()
+  if (toMs - fromMs < MIN_SPAN_MS * 2 || depth >= MAX_DEPTH) return keep()
 
   const barMs = (60000 / whole.fit.bpm) * Math.max(1, meter)
-  const bars = Math.floor((span.toMs - span.fromMs) / barMs)
+  const bars = Math.floor((toMs - fromMs) / barMs)
   if (bars < SETTLE_BARS) return keep()
 
-  const middle = span.fromMs + Math.floor(bars / 2) * barMs
-  const left = tempoOf(envelope, sampleRate, span.fromMs, middle, whole.fit.bpm, meter, split.track)
-  const right = tempoOf(envelope, sampleRate, middle, span.toMs, whole.fit.bpm, meter, split.track)
+  const middle = fromMs + Math.floor(bars / 2) * barMs
+  const left = tempoOf(envelope, sampleRate, fromMs, middle, whole.fit.bpm, meter, track)
+  const right = tempoOf(envelope, sampleRate, middle, toMs, whole.fit.bpm, meter, track)
   const agreed = left === whole.fit.bpm && right === whole.fit.bpm
   if (agreed && whole.flat <= FLAT_OK_MS) return keep()
 
-  return {
-    ...rest,
-    pending: [
-      { fromMs: span.fromMs, toMs: middle, bpm: left, depth: span.depth + 1 },
-      { fromMs: middle, toMs: span.toMs, bpm: right, depth: span.depth + 1 },
-      ...rest.pending,
-    ],
-    done: false,
+  yield* solve(envelope, sampleRate, fromMs, middle, left, meter, track, depth + 1, parts)
+  yield* solve(envelope, sampleRate, middle, toMs, right, meter, track, depth + 1, parts)
+}
+
+// The whole of it: count the track, then split it. Driven one `next()` a frame,
+// so the sections appear along the track as they are found and the compiled
+// view straightens while it works.
+export function* fitTrack(
+  envelope: Float32Array,
+  sampleRate: number,
+  durationMs: number,
+  meter: number,
+): Generator<Progress | null, Part[], void> {
+  if (durationMs <= 0) return []
+
+  let vote = newVote(meter)
+  while (!vote.done) {
+    vote = voteStep(envelope, sampleRate, durationMs, vote)
+    yield null
   }
+
+  const bpm = bestTempo(envelope, sampleRate, durationMs, vote)
+  if (bpm === null) return []
+
+  const parts: Part[] = []
+  yield* solve(envelope, sampleRate, 0, durationMs, bpm, meter, vote, 0, parts)
+  return parts
 }
 
 // Which beat of the bar is the downbeat. A fit lands on the beat, but a section

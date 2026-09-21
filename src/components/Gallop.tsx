@@ -31,17 +31,17 @@ const HEIGHT = 38
 // stands clearest, and the rest trail behind it.
 const HERD = [
   { at: 0, lead: 0.31, high: 3, faded: 0.45 },
-  { at: 20, lead: 0.62, high: 0, faded: 0.6 },
-  { at: 40, lead: 0.17, high: 4, faded: 0.78 },
-  { at: 62, lead: 0, high: 1, faded: 1 },
+  { at: 52, lead: 0.62, high: 0, faded: 0.6 },
+  { at: 104, lead: 0.17, high: 4, faded: 0.78 },
+  { at: 158, lead: 0, high: 1, faded: 1 },
 ]
 const SPREAD = HERD[HERD.length - 1].at + WIDTH
 const TALL = HEIGHT + 5
 
-// How far a stride carries a horse. A shade under its own length, which is what
-// stops the legs looking like they are sliding under a body going somewhere
-// else.
-const CARRIES = 44
+// How far a stride carries a horse. A galloping horse covers well over its own
+// length in a stride; going much past this starts to look like the legs are
+// sliding under a body that is going somewhere on its own.
+const CARRIES = 74
 
 // The horse runs to the left, so it leaves by the left and comes back at the
 // right, and because it is the head that is furthest left it is the head that

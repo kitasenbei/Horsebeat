@@ -35,6 +35,9 @@ const SCALES = [
 const FIT_STEPS = SCALES.length
 // how many times the least-squares polish is repeated once the ladder is done
 const POLISH_ROUNDS = 3
+// how finely, and how far either side, the finished tempo is swept again
+const TUNE_BPM = 0.002
+const TUNE_STEPS = 40
 
 
 
@@ -762,6 +765,34 @@ export function* fitTrack(
 
   const parts: Part[] = []
   yield* solve(envelope, sampleRate, 0, durationMs, bpm, meter, vote, 0, parts)
+
+  // A last word on each tempo, taken against the picture over the whole of the
+  // section it ended up covering. The ladder and the polish both read the comb,
+  // which is asked only about the beats and on a long span can peak a few
+  // hundredths from where the bars actually agree; the pattern reads every
+  // frame. It is done here rather than inside the settling because the split
+  // decides on what the settling produced, and moving the tempo underneath it
+  // changes where the cuts land.
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]
+    const toMs = index + 1 < parts.length ? parts[index + 1].fromMs : durationMs
+
+    let best = part.fit.bpm
+    let top = patternScore(envelope, sampleRate, part.fromMs, toMs, best, meter)
+    for (let step = -TUNE_STEPS; step <= TUNE_STEPS; step += 1) {
+      const bpm = part.fit.bpm + step * TUNE_BPM
+      if (bpm <= 0) continue
+      const score = patternScore(envelope, sampleRate, part.fromMs, toMs, bpm, meter)
+      if (score > top) {
+        top = score
+        best = bpm
+      }
+    }
+
+    parts[index] = { ...part, fit: { bpm: best, offsetMs: part.fit.offsetMs } }
+    yield { parts, working: parts[index].fit }
+  }
+
   return parts
 }
 

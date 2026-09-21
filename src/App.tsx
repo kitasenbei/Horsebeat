@@ -33,7 +33,7 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
-import { fitTrack, type Fit } from './fit'
+import { fitTrack, type Fit, type Progress } from './fit'
 import {
   createSection,
   DEFAULT_METER,
@@ -58,6 +58,11 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
+// How long a frame may spend stepping the fit. Chosen by measurement: at eight
+// the fit takes 10.4 seconds and holds a median frame of 10ms, at fourteen it
+// takes 6.2 but spends half its frames over budget. Eleven keeps the median
+// inside a frame and finishes in 7.8.
+const FIT_BUDGET_MS = 11
 const DEFAULT_BPM = 120
 
 export default function App() {
@@ -275,22 +280,29 @@ export default function App() {
       )
     }
 
-    // A step a frame: the track is counted end to end, then halved wherever one
-    // grid cannot stay on the beat across it. The span under the knobs is
-    // published with the settled ones, so the grid is seen moving onto the
-    // music rather than appearing on it.
+    // As many steps as fit in a frame, rather than one. A rung of the ladder
+    // takes a fortieth of a millisecond and a frame is sixteen, so stepping once
+    // a frame spends the whole fit waiting: the run took nine seconds of wall
+    // clock for seven of work. Counting a window takes longer than a frame on
+    // its own, which no budget can help, so the budget is spent rather than
+    // guarded — a step already begun runs to its end.
     let frame = requestAnimationFrame(function tick() {
-      const step = run.next()
+      const until = performance.now() + FIT_BUDGET_MS
+      let last: Progress | null = null
 
-      if (step.done) {
-        publish(step.value.map((part) => part.fit))
-        setFitting(false)
-        return
-      }
+      do {
+        const step = run.next()
 
-      if (step.value) {
-        publish([...step.value.parts.map((part) => part.fit), step.value.working])
-      }
+        if (step.done) {
+          publish(step.value.map((part) => part.fit))
+          setFitting(false)
+          return
+        }
+
+        if (step.value) last = step.value
+      } while (performance.now() < until)
+
+      if (last) publish([...last.parts.map((part) => part.fit), last.working])
 
       frame = requestAnimationFrame(tick)
     })

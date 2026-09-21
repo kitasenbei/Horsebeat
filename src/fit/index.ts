@@ -367,58 +367,59 @@ function votedBpms(): number[] {
   return bpms
 }
 
-function newVote(meter: number): Vote {
-  return { fromMs: 0, totals: new Float64Array(votedBpms().length), done: false, meter, pattern: true }
-}
+// How many tempos are scored before the fit offers the frame back. A window
+// holds 281 of them and takes about eighty milliseconds, which is five frames
+// spent at once; in chunks it is a few milliseconds at a time.
+const COUNT_CHUNK = 24
 
-// One window's vote on what the whole track is. Every tempo is scored over the
-// window and the window's own best is called one vote, so a loud chorus and a
-// quiet verse count the same and no stretch decides the track by being louder
-// than the rest of it.
-function voteStep(
-  envelope: Float32Array,
-  sampleRate: number,
-  durationMs: number,
-  vote: Vote,
-): Vote {
-  const fromMs = vote.fromMs
-  const toMs = Math.min(durationMs, fromMs + VOTE_WINDOW_MS)
-  // No length test here: a stretch judged at a boundary is shorter than a
-  // window and still has to be counted, and a stretch too short to hold a few
-  // bars scores nothing at every tempo and drops out below.
-  const next = { ...vote, fromMs: toMs, done: toMs >= durationMs }
-
-  const bpms = votedBpms()
-  const scores = bpms.map((bpm) =>
-    vote.pattern
-      ? patternScore(envelope, sampleRate, fromMs, toMs, bpm, vote.meter)
-      : bestPhase(envelope, sampleRate, fromMs, toMs, bpm).score,
-  )
-  const top = Math.max(...scores)
-  if (top <= 0) return next
-
-  const totals = vote.totals.slice()
-  for (let index = 0; index < bpms.length; index += 1) totals[index] += scores[index] / top
-  return { ...next, totals }
-}
-
-// What the track reads as. The count that wins outright is often half or a
-// third of the tempo, because a sparser grid is asked about fewer beats and
-// they are the ones certain to be played; where the denser count holds up
-// nearly as well over the whole track, that is the tempo.
-// What a stretch reads as, counted the same way the whole track is counted.
-// A single window's best is not enough to open a section on: where the music
-// thins out, one loose slow grid wins one window and the next window picks
-// something else again, while a vote asks several and keeps what they agree on.
-function voteTempo(
+// Counting a stretch: every tempo scored over each window, each window's own
+// best called one vote, and the votes added up. Normalising per window is the
+// point — a loud chorus and a quiet verse then count the same, and no stretch
+// decides the track by being louder than the rest of it.
+function* counting(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
   toMs: number,
   meter: number,
-): { bpm: number | null; vote: Vote } {
-  let vote: Vote = { fromMs, totals: new Float64Array(votedBpms().length), done: false, meter, pattern: false }
-  while (!vote.done && vote.fromMs < toMs) vote = voteStep(envelope, sampleRate, toMs, vote)
+  pattern: boolean,
+): Generator<null, Vote, void> {
+  const bpms = votedBpms()
+  const totals = new Float64Array(bpms.length)
+  const scores = new Float64Array(bpms.length)
+
+  // A stretch judged at a boundary is shorter than a window and still has to be
+  // counted; one too short to hold a few bars scores nothing at every tempo and
+  // falls out below.
+  for (let at = fromMs; at < toMs; at += VOTE_WINDOW_MS) {
+    const until = Math.min(toMs, at + VOTE_WINDOW_MS)
+    let top = 0
+
+    for (let index = 0; index < bpms.length; index += 1) {
+      const score = pattern
+        ? patternScore(envelope, sampleRate, at, until, bpms[index], meter)
+        : bestPhase(envelope, sampleRate, at, until, bpms[index]).score
+      scores[index] = score
+      if (score > top) top = score
+      if (index % COUNT_CHUNK === COUNT_CHUNK - 1) yield null
+    }
+
+    if (top <= 0) continue
+    for (let index = 0; index < bpms.length; index += 1) totals[index] += scores[index] / top
+    yield null
+  }
+
+  return { fromMs: toMs, totals, done: true, meter, pattern }
+}
+
+function* voteTempo(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  meter: number,
+): Generator<null, { bpm: number | null; vote: Vote }, void> {
+  const vote = yield* counting(envelope, sampleRate, fromMs, toMs, meter, false)
   return { bpm: pickTempo(vote), vote }
 }
 
@@ -463,12 +464,12 @@ const OVERRULES = 1.2
 // The pattern read over the whole track at once cannot follow a change, but it
 // is the more certain answer where there is one tempo. Where they disagree and
 // the whole track reads decidedly better, the whole track wins.
-function bestTempo(
+function* bestTempo(
   envelope: Float32Array,
   sampleRate: number,
   durationMs: number,
   vote: Vote,
-): number | null {
+): Generator<null, number | null, void> {
   const picked = pickTempo(vote)
   if (picked === null) return null
 
@@ -477,12 +478,14 @@ function bestTempo(
 
   let swept = 0
   let best = 0
-  for (const bpm of votedBpms()) {
-    const score = patternScore(envelope, sampleRate, 0, durationMs, bpm, meter)
+  const bpms = votedBpms()
+  for (let index = 0; index < bpms.length; index += 1) {
+    const score = patternScore(envelope, sampleRate, 0, durationMs, bpms[index], meter)
     if (score > best) {
       best = score
-      swept = bpm
+      swept = bpms[index]
     }
+    if (index % COUNT_CHUNK === COUNT_CHUNK - 1) yield null
   }
   if (swept === 0) return voted
 
@@ -542,7 +545,7 @@ const NEAREST = 0.65
 // as all sorts of things, so the tempo it was given stands unless what it found
 // draws a decidedly better picture, and a count of that tempo is never a reason
 // to leave it: over a few bars the sparser count always looks better.
-function tempoOf(
+function* tempoOf(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
@@ -550,8 +553,8 @@ function tempoOf(
   given: number,
   meter: number,
   track: Vote,
-): number {
-  const local = voteTempo(envelope, sampleRate, fromMs, toMs, meter)
+): Generator<null, number, void> {
+  const local = yield* voteTempo(envelope, sampleRate, fromMs, toMs, meter)
   if (local.bpm === null) return given
 
   const found = beatWithin(envelope, sampleRate, fromMs, toMs, local.bpm, meter)
@@ -648,8 +651,13 @@ function* settle(
   meter: number,
   track: Vote,
   parts: Part[],
-): Generator<Progress, Part, void> {
-  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
+  asked: boolean,
+): Generator<Progress | null, Part, void> {
+  // The whole track has already been counted, so the span that covers it is
+  // given that answer rather than made to count itself again: the second count
+  // reads the same audio, returns the same tempo, and is the slowest single
+  // thing the fitting does.
+  const bpm = asked ? given : yield* tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
   let fit = bestPhase(envelope, sampleRate, fromMs, toMs, bpm).fit
 
   const low = bpm * (1 - DRIFT_BAND)
@@ -703,8 +711,18 @@ function* solve(
   track: Vote,
   depth: number,
   parts: Part[],
-): Generator<Progress, void, void> {
-  const whole = yield* settle(envelope, sampleRate, fromMs, toMs, given, meter, track, parts)
+): Generator<Progress | null, void, void> {
+  const whole = yield* settle(
+    envelope,
+    sampleRate,
+    fromMs,
+    toMs,
+    given,
+    meter,
+    track,
+    parts,
+    depth === 0,
+  )
 
   const keep = () => {
     parts.push(whole)
@@ -718,8 +736,8 @@ function* solve(
   if (bars < SETTLE_BARS) return keep()
 
   const middle = fromMs + Math.floor(bars / 2) * barMs
-  const left = tempoOf(envelope, sampleRate, fromMs, middle, whole.fit.bpm, meter, track)
-  const right = tempoOf(envelope, sampleRate, middle, toMs, whole.fit.bpm, meter, track)
+  const left = yield* tempoOf(envelope, sampleRate, fromMs, middle, whole.fit.bpm, meter, track)
+  const right = yield* tempoOf(envelope, sampleRate, middle, toMs, whole.fit.bpm, meter, track)
   const agreed = left === whole.fit.bpm && right === whole.fit.bpm
   if (agreed && whole.flat <= FLAT_OK_MS) return keep()
 
@@ -738,13 +756,8 @@ export function* fitTrack(
 ): Generator<Progress | null, Part[], void> {
   if (durationMs <= 0) return []
 
-  let vote = newVote(meter)
-  while (!vote.done) {
-    vote = voteStep(envelope, sampleRate, durationMs, vote)
-    yield null
-  }
-
-  const bpm = bestTempo(envelope, sampleRate, durationMs, vote)
+  const vote = yield* counting(envelope, sampleRate, 0, durationMs, meter, true)
+  const bpm = yield* bestTempo(envelope, sampleRate, durationMs, vote)
   if (bpm === null) return []
 
   const parts: Part[] = []

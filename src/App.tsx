@@ -13,6 +13,7 @@ import SectionRail from './components/SectionRail'
 import SectionBlocks from './components/SectionBlocks'
 import RangeStrip from './components/RangeStrip'
 import VerticalWaveform from './components/VerticalWaveform'
+import LiveWave from './components/LiveWave'
 import RulerSlider from './components/RulerSlider'
 import AnalysisLanes from './components/AnalysisLanes'
 import ResolveBpm from './components/ResolveBpm'
@@ -505,40 +506,48 @@ export default function App() {
             ) : null}
             <AnalysisLanes loudness={loudness} onsets={onsets} bands={bands} range={range} />
           </Box>
-          <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
-            <VerticalWaveform
-              samples={samples}
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <LiveWave
               envelope={envelope}
-              sections={sections}
               position={position}
               positionRef={positionRef}
               playing={playing}
-              duration={duration}
-              seconds={FALL_RANGE - fallSpeed}
             />
-            <Paper
-              elevation={4}
-              sx={{
-                position: 'absolute',
-                left: '50%',
-                bottom: 8,
-                width: '60%',
-                transform: 'translateX(-50%)',
-                borderRadius: 999,
-                overflow: 'hidden',
-              }}
-            >
-              <RulerSlider
-                value={fallSpeed}
-                min={0.5}
-                max={10}
-                step={0.1}
-                pixelsPerStep={6}
-                majorEvery={10}
-                format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
-                onChange={setFallSpeed}
+            <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              <VerticalWaveform
+                samples={samples}
+                envelope={envelope}
+                sections={sections}
+                position={position}
+                positionRef={positionRef}
+                playing={playing}
+                duration={duration}
+                seconds={FALL_RANGE - fallSpeed}
               />
-            </Paper>
+              <Paper
+                elevation={4}
+                sx={{
+                  position: 'absolute',
+                  left: '50%',
+                  bottom: 8,
+                  width: '60%',
+                  transform: 'translateX(-50%)',
+                  borderRadius: 999,
+                  overflow: 'hidden',
+                }}
+              >
+                <RulerSlider
+                  value={fallSpeed}
+                  min={0.5}
+                  max={10}
+                  step={0.1}
+                  pixelsPerStep={6}
+                  majorEvery={10}
+                  format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
+                  onChange={setFallSpeed}
+                />
+              </Paper>
+            </Box>
           </Box>
         </Box>
         <Transport

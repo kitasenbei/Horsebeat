@@ -51,9 +51,14 @@ type BarGridProps = {
 
 const GUIDE_COLOR = '#ffffff'
 const ZOOM_RATE = 0.002
+const HOVER_COLOR = '#ffffff'
+const HOVER_WIDTH = 3
 const AXIS_SLOP = 4
-const COARSE_BPM = 0.02
-const FINE_BPM = 0.002
+const COARSE_BPM = 0.1
+const FINE_BPM = 0.01
+// plain drag covers several slices per screen; ctrl drops to one slice per
+// block, which is the resolution the columns are drawn at
+const OFFSET_GAIN = 4
 
 export default function BarGrid({
   envelope,
@@ -112,8 +117,9 @@ export default function BarGrid({
   const applyRange = useRafCallback(onRangeChange)
   const applySections = useRafCallback(onSectionsChange)
   const sliceHeightRef = useRef(1)
-  const [hovered, setHovered] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; at: number; id: string } | null>(null)
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
   const layoutRef = useRef<{ tops: number[]; heights: number[] }>({ tops: [], heights: [] })
   const dragRef = useRef<{
     clientX: number
@@ -179,15 +185,16 @@ export default function BarGrid({
     if (tops.length > 0) drawSliceGuides(context, tops[0], heights[0], width, GUIDE_COLOR)
     if (tops.length > 3) drawSliceGuides(context, tops[3], heights[3], width, GUIDE_COLOR)
 
-    drawSectionBounds(
-      context,
-      bars,
-      width,
-      height,
-      theme.palette.info.dark,
-      hovered,
-      theme.palette.info.main,
-    )
+    drawSectionBounds(context, bars, width, height, theme.palette.info.dark)
+
+    // only across the column under the pointer, so it reads as a position in
+    // that slice rather than as a rule over the whole picture
+    if (hover && bars.length > 0) {
+      const column = width / bars.length
+      const index = Math.min(bars.length - 1, Math.max(0, Math.floor(hover.x / column)))
+      context.fillStyle = HOVER_COLOR
+      context.fillRect(index * column, hover.y - HOVER_WIDTH / 2, column, HOVER_WIDTH)
+    }
 
     drawColumnCursor(
       context,
@@ -198,7 +205,7 @@ export default function BarGrid({
       width,
       theme.palette.error.main,
     )
-  }, playing, `${bars.length}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${hovered}|${position}|${curveSignature(curve)}`)
+  }, playing, `${bars.length}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -286,6 +293,10 @@ export default function BarGrid({
   }
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    // pointerdown fires for every button, and a right click that also started a
+    // drag edited the section on its way to opening the menu
+    if (event.button !== 0) return
+
     // whichever section is under the pointer is the one the drag edits
     const target = sectionAt(event)
     if (!target) return
@@ -301,11 +312,12 @@ export default function BarGrid({
       // held at the press, not read while moving: picking up a modifier
       // mid-drag would jump the value by everything moved so far
       tempo: event.shiftKey,
-      fine: event.shiftKey && (event.ctrlKey || event.metaKey),
+      fine: event.ctrlKey || event.metaKey,
       start: range.start,
       span: range.end - range.start,
       axis: 'none',
     }
+    setDragging(true)
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
@@ -313,17 +325,23 @@ export default function BarGrid({
     const drag = dragRef.current
 
     if (!drag) {
-      const target = sectionAt(event)
-      const next = target?.span.section.id ?? null
-      setHovered((current) => (current === next ? current : next))
+      const bounds = event.currentTarget.getBoundingClientRect()
+      const x = Math.round(event.clientX - bounds.left)
+      const y = Math.round(event.clientY - bounds.top)
+      setHover((current) => (current?.x === x && current?.y === y ? current : { x, y }))
       return
     }
 
     const dx = event.clientX - drag.clientX
     const dy = event.clientY - drag.clientY
 
-    // the axis is decided once, so a sideways drag cannot nudge the offset on
-    // the way past and a vertical one cannot slide the window
+    // holding shift means tempo, so it edits from the first pixel: waiting for
+    // an axis to win made a sideways wobble pan instead, and the edit only
+    // started once the drag had already moved
+    if (drag.tempo) drag.axis = 'vertical'
+
+    // otherwise the axis is decided once, so a sideways drag cannot nudge the
+    // offset on the way past and a vertical one cannot slide the window
     if (drag.axis === 'none') {
       if (Math.abs(dx) < AXIS_SLOP && Math.abs(dy) < AXIS_SLOP) return
       drag.axis = Math.abs(dx) > Math.abs(dy) ? 'pan' : 'vertical'
@@ -346,7 +364,12 @@ export default function BarGrid({
             Math.max(MIN_BPM, drag.bpm - dy * (drag.fine ? FINE_BPM : COARSE_BPM)),
           ),
         }
-      : { offsetMs: Math.max(0, drag.offsetMs - dy * drag.perPixel) }
+      : {
+          offsetMs: Math.max(
+            0,
+            drag.offsetMs - dy * drag.perPixel * (drag.fine ? 1 : OFFSET_GAIN),
+          ),
+        }
 
     applySections(
       sortSections(
@@ -357,6 +380,7 @@ export default function BarGrid({
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
     dragRef.current = null
+    setDragging(false)
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
@@ -369,14 +393,14 @@ export default function BarGrid({
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
-        onPointerLeave={() => setHovered(null)}
+        onPointerLeave={() => setHover(null)}
         onContextMenu={openMenu}
         sx={{
           display: 'block',
           width: '100%',
           height: '100%',
           touchAction: 'none',
-          cursor: 'move',
+          cursor: dragging ? 'move' : 'default',
         }}
       />
       <Menu

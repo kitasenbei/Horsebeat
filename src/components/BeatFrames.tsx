@@ -70,7 +70,7 @@ export default function BeatFrames({
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const active = activeSpan()
-    if (!active || active.section.bpm <= 0) return
+    if (!active || active.section.bpm <= 0 || event.button !== 0) return
 
     dragRef.current = {
       clientX: event.clientX,

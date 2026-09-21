@@ -90,7 +90,7 @@ export default function MarkerRail({
   }
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!enabled) return
+    if (!enabled || event.button !== 0) return
     const index = nearest(positionAt(event.clientX))
     if (index < 0) {
       setSelected(null)

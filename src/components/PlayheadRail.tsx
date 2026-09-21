@@ -61,7 +61,7 @@ export default function PlayheadRail({
   }, [canvasRef, enabled, onSeek, positionRef, range.start, range.end])
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!enabled) return
+    if (!enabled || event.button !== 0) return
     draggingRef.current = true
     event.currentTarget.setPointerCapture(event.pointerId)
     onSeek(positionAt(event.clientX))

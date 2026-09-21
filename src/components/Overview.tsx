@@ -66,7 +66,7 @@ export default function Overview({
   }
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!peaks) return
+    if (!peaks || event.button !== 0) return
     const at = positionAt(event.clientX)
     const span = range.end - range.start
 

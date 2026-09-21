@@ -189,7 +189,7 @@ export default function Waveform({
   }
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!interactive) return
+    if (!interactive || event.button !== 0) return
     panRef.current = { clientX: event.clientX, start: range.start, span: range.end - range.start }
     event.currentTarget.setPointerCapture(event.pointerId)
   }

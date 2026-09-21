@@ -89,7 +89,7 @@ export default function RulerSlider({
   }, false, `${value}|${min}|${max}|${step}|${pixelsPerStep}|${disabled}`)
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (disabled) return
+    if (disabled || event.button !== 0) return
     dragRef.current = { clientX: event.clientX, value }
     event.currentTarget.setPointerCapture(event.pointerId)
   }

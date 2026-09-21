@@ -69,6 +69,7 @@ export default function SectionRail({
   }
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0) return
     const id = nearest(positionAt(event.clientX))
     if (!id) return
     dragRef.current = id

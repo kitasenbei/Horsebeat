@@ -1008,8 +1008,6 @@ export function drawSectionBounds(
   width: number,
   height: number,
   color: string,
-  highlight: string | null,
-  highlightColor: string,
 ) {
   if (bars.length === 0) return
 
@@ -1026,18 +1024,6 @@ export function drawSectionBounds(
     context.lineTo(x, height)
     context.stroke()
   }
-  context.globalAlpha = 1
-
-  if (!highlight) return
-
-  const first = bars.findIndex((bar) => bar.section === highlight)
-  if (first < 0) return
-  let last = first
-  while (last + 1 < bars.length && bars[last + 1].section === highlight) last += 1
-
-  context.fillStyle = highlightColor
-  context.globalAlpha = 0.12
-  context.fillRect(first * column, 0, (last - first + 1) * column, height)
   context.globalAlpha = 1
 }
 

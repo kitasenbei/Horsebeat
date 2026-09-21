@@ -15,12 +15,13 @@ type GallopProps = {
 // lands anywhere in particular.
 const FRAMES = 6
 
-// How long each frame is held, in slots. The first frame is the horse at full
-// stretch and the third has it reaching with all four feet clear, and those are
-// the ones worth looking at, so they are held while the gathered frames go by
-// in one slot each. The horse then spends more than half of every beat in the
-// air with its legs spread.
-const HOLD = [3, 1, 2, 1, 1, 1]
+// How long each frame is held, in slots. The horse is off the ground for three
+// of the six: the first has it at full stretch, the third reaching with all
+// four feet clear, and the fourth with the hooves folded up under the belly,
+// which is the other way a horse flies. Those three are held while the frames
+// that carry weight go by in one slot each, so seven beats in ten the horse is
+// in the air.
+const HOLD = [3, 1, 2, 2, 1, 1]
 
 // The stride written out slot by slot, beginning with the frame that drives the
 // hind legs into the ground — the moment with the weight behind it. That frame

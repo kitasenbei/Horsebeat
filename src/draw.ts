@@ -958,7 +958,12 @@ function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
   ])
 }
 
+// The picture projected onto its vertical axis: every column summed onto every
+// other, so a row says how much happens at that place in the bar across the
+// whole stretch. A grid on the music makes this a row of humps, one to a beat;
+// a grid off it smears them into one another.
 export type BlockLayer = {
+  profile: Float32Array
   image: ImageData
   top: number
   height: number
@@ -1005,6 +1010,7 @@ export function renderBarLayers(
     const slice = bars[0].end - bars[0].start
     const rows = Math.max(1, Math.min(blockHeight, Math.ceil(slice * frames)))
 
+    const profile = new Float64Array(rows)
     const image = context.createImageData(columns, rows)
     const pixels = new Uint32Array(image.data.buffer)
     pixels.fill(0xffffffff)
@@ -1025,16 +1031,69 @@ export function renderBarLayers(
         for (let row = 0; row < rows; row += 1) {
           const frame = Math.min(last, Math.max(0, (base + row * step) | 0))
           const value = source[frame * stride + band]
+          profile[row] += value
           pixels[row * columns + column] = lut[((value < 1 ? value : 1) * top255 + 0.5) | 0]
         }
       }
     }
 
-    layers.push({ image, top, height: blockHeight })
+    // read against its own tallest row, so a quiet block still shows its shape
+    let tallest = 0
+    for (const value of profile) if (value > tallest) tallest = value
+    const shape = new Float32Array(rows)
+    if (tallest > 0) for (let row = 0; row < rows; row += 1) shape[row] = profile[row] / tallest
+
+    layers.push({ image, top, height: blockHeight, profile: shape })
     top += blockHeight + BLOCK_GAP
   }
 
   return layers
+}
+
+// How wide the projection panel is, and how far off its own edge it sits.
+export const PROJECTION_WIDTH = 74
+const PROJECTION_PAD = 6
+
+// The projection drawn as a graph lying on its side, so its rows line up with
+// the rows of the block it belongs to and a hump sits level with the beat that
+// made it.
+export function drawProjection(
+  context: CanvasRenderingContext2D,
+  profile: Float32Array,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  color: string,
+) {
+  if (profile.length === 0 || height <= 0) return
+
+  const from = left + PROJECTION_PAD
+  const room = Math.max(1, width - PROJECTION_PAD * 2)
+
+  context.save()
+  context.beginPath()
+  context.rect(left, top, width, height)
+  context.clip()
+
+  context.beginPath()
+  context.moveTo(from, top)
+  for (let row = 0; row < profile.length; row += 1) {
+    // the middle of the row's band, so the graph sits where the colour does
+    const y = top + ((row + 0.5) / profile.length) * height
+    context.lineTo(from + profile[row] * room, y)
+  }
+  context.lineTo(from, top + height)
+  context.closePath()
+
+  context.fillStyle = color
+  context.globalAlpha = 0.22
+  context.fill()
+  context.globalAlpha = 1
+  context.strokeStyle = color
+  context.lineWidth = 1
+  context.stroke()
+  context.restore()
 }
 
 export const CURSOR_WIDTH = 3

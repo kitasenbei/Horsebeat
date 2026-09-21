@@ -9,9 +9,11 @@ import {
   curveSignature,
   collectBars,
   drawColumnCursor,
+  drawProjection,
   drawSectionBounds,
   drawSliceGuides,
   renderBarLayers,
+  PROJECTION_WIDTH,
   sectionSignature,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
@@ -113,15 +115,20 @@ export default function BarGrid({
     .flatMap((span) => {
       const share = (Math.min(span.end, range.end) - Math.max(span.start, range.start)) / windowSpan
       const beats =
-        slice === 'auto' ? autoSliceBeats(span, Math.max(120, width * share)) : slice
+        slice === 'auto' ? autoSliceBeats(span, Math.max(120, plotWidth(width) * share)) : slice
       return collectBars(span, beats)
     })
     .filter((bar) => bar.end > range.start && bar.start < range.end)
     .sort((left, right) => left.start - right.start)
 
   const sources = { envelope, loudness, onsets, bands }
+  // The panel on the right holds the projection, so the bars are drawn into
+  // what is left. Every reading of a pointer position goes through this too, or
+  // the column under the cursor stops being the column under the cursor.
+  const plotWidth = (full: number) => Math.max(1, full - PROJECTION_WIDTH)
+
   const cacheRef = useRef<{
-    canvases: { canvas: HTMLCanvasElement; top: number; height: number }[]
+    canvases: { canvas: HTMLCanvasElement; top: number; height: number; profile: Float32Array }[]
     key: string
   } | null>(null)
 
@@ -149,8 +156,13 @@ export default function BarGrid({
     zoomRef.current = { range, applyRange, settle: settleRange }
   })
 
-  const canvasRef = useCanvas((context, width, height) => {
+  const canvasRef = useCanvas((context, full, height) => {
     if (bars.length === 0) return
+
+    // the bars keep the canvas minus the panel on the right, and everything
+    // that maps a position to a column measures against this rather than the
+    // whole canvas
+    const width = plotWidth(full)
 
     const key = [
       Math.round(width),
@@ -181,7 +193,7 @@ export default function BarGrid({
           canvas.width = layer.image.width
           canvas.height = layer.image.height
           canvas.getContext('2d')?.putImageData(layer.image, 0, 0)
-          return { canvas, top: layer.top, height: layer.height }
+          return { canvas, top: layer.top, height: layer.height, profile: layer.profile }
         }),
       }
       cacheRef.current = cache
@@ -238,6 +250,18 @@ export default function BarGrid({
       theme.palette.error.main,
     )
 
+    for (const layer of cache.canvases) {
+      drawProjection(
+        context,
+        layer.profile,
+        width,
+        layer.top,
+        full - width,
+        layer.height,
+        theme.palette.text.primary,
+      )
+    }
+
   }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${curveSignature(curve)}`)
 
   useEffect(() => {
@@ -250,7 +274,7 @@ export default function BarGrid({
       event.preventDefault()
 
       const { range: current, applyRange: apply } = zoomRef.current
-      const ratio = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+      const ratio = Math.min(1, Math.max(0, (event.clientX - bounds.left) / plotWidth(bounds.width)))
       const span = current.end - current.start
       const anchor = current.start + ratio * span
       const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
@@ -271,7 +295,7 @@ export default function BarGrid({
     const bounds = event.currentTarget.getBoundingClientRect()
     if (bounds.width === 0 || bars.length === 0) return null
 
-    const ratio = Math.min(0.999, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+    const ratio = Math.min(0.999, Math.max(0, (event.clientX - bounds.left) / plotWidth(bounds.width)))
     const bar = bars[Math.floor(ratio * bars.length)]
     const span = spans.find((item) => item.section.id === bar.section)
     return span ? { span, bar } : null
@@ -390,8 +414,8 @@ export default function BarGrid({
     }
 
     if (drag.axis === 'pan') {
-      const width = event.currentTarget.clientWidth
-      if (width === 0) return
+      const width = plotWidth(event.currentTarget.clientWidth)
+      if (width <= 1) return
       const shift = (dx / width) * drag.span
       applyRange(clampRange({ start: drag.start - shift, end: drag.start - shift + drag.span }))
       return

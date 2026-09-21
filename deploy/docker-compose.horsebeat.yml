@@ -9,7 +9,8 @@
 # HorseBeat has no API, no database and no server-side state, so there is no
 # image to build: stock nginx serves a directory that CI keeps in sync. The
 # bundle is a bind mount rather than a baked image, which is why a deploy is a
-# file copy and needs no container restart.
+# file copy and needs no container restart. SITE_DIR says where it lives on the
+# host, so the deploy can put it anywhere the deploy user can already write.
 
 name: horsebeat
 
@@ -17,7 +18,7 @@ services:
     horsebeat-web:
         image: nginx:alpine
         volumes:
-            - /opt/horsebeat/dist:/usr/share/nginx/html:ro
+            - ${SITE_DIR}/dist:/usr/share/nginx/html:ro
         expose:
             - "80"
         networks:

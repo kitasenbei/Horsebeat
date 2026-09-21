@@ -2,8 +2,9 @@
 # shared Caddy container.
 #
 # DEPLOY_STACK_DIR is the directory on the host holding that stack's site block
-# directory, and EDGE_NETWORK is the docker network its Caddy sits on. Both are
-# repository variables, so no host of ours is named in this file.
+# directory, SITE_DIR is where the bundle lands, and EDGE_NETWORK is the docker
+# network that Caddy sits on. All three are repository variables, so no host of
+# ours is named in this file.
 #
 # Every docker call over ssh ends in `</dev/null`. The script arrives on
 # standard input, and a docker command that attaches stdin eats the rest of it,
@@ -55,16 +56,17 @@ jobs:
               env:
                   DESTINATION: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER_IP }}
                   STACK: ${{ vars.DEPLOY_STACK_DIR }}
+                  SITE_DIR: ${{ vars.SITE_DIR }}
               run: |
                   ssh -i ~/.ssh/id_deploy "$DESTINATION" \
-                      "mkdir -p /opt/horsebeat/dist $STACK/caddy-conf.d" </dev/null
+                      "mkdir -p '$SITE_DIR/dist' '$STACK/caddy-conf.d'" </dev/null
 
                   # --delete so a file dropped from the build leaves the server
                   # too. The directory itself is never replaced: Caddy and nginx
                   # hold a bind mount to this inode and would keep serving the
                   # old one.
                   rsync -az --delete -e "ssh -i ~/.ssh/id_deploy" \
-                      dist/ "$DESTINATION:/opt/horsebeat/dist/"
+                      dist/ "$DESTINATION:$SITE_DIR/dist/"
 
                   scp -i ~/.ssh/id_deploy deploy/horsebeat.caddy \
                       "$DESTINATION:$STACK/caddy-conf.d/horsebeat.caddy"
@@ -75,13 +77,14 @@ jobs:
               env:
                   DESTINATION: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER_IP }}
                   STACK: ${{ vars.DEPLOY_STACK_DIR }}
+                  SITE_DIR: ${{ vars.SITE_DIR }}
                   EDGE_NETWORK: ${{ vars.EDGE_NETWORK }}
               run: |
                   ssh -i ~/.ssh/id_deploy "$DESTINATION" \
-                      "STACK='$STACK' EDGE_NETWORK='$EDGE_NETWORK' bash -s" <<'REMOTE'
+                      "STACK='$STACK' SITE_DIR='$SITE_DIR' EDGE_NETWORK='$EDGE_NETWORK' bash -s" <<'REMOTE'
                   set -e
                   cd "$STACK"
-                  export EDGE_NETWORK
+                  export EDGE_NETWORK SITE_DIR
                   docker compose -f docker-compose.horsebeat.yml up -d </dev/null
 
                   # Caddy belongs to the other stack, so it is reloaded in

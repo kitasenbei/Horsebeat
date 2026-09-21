@@ -36,18 +36,28 @@ const HERD = [
 const SPREAD = HERD[HERD.length - 1].at + WIDTH
 const TALL = HEIGHT + 5
 
-// A stride to the beat, so every beat is a hoof landing.
-const STRIDES_A_BEAT = 1
+// What a gallop wants to look like, in strides a minute. A horse at full pelt
+// is nearer 150, but a sprite reads slow at its true rate, and this is the
+// speed the gait looks like it means.
+const WANTS_A_MINUTE = 200
 
-// Above this beat rate the stride is tied to every second beat instead, and
-// then every fourth: the gait stays a gait at the fast end of the music while
-// staying in step with it.
-const MOST_A_MINUTE = 170
+// Strides to the beat, always a doubling or a halving so that a hoof lands on
+// the beat whichever way it goes: at two, one lands on the beat and one
+// between; at a half, every other beat. The one chosen is whichever puts the
+// gallop nearest the speed it wants to run at.
+const RATIOS = [0.5, 1, 2, 4]
 
-function beatsAStride(bpm: number): number {
-  let beats = 1
-  while (bpm / beats > MOST_A_MINUTE && beats < 8) beats *= 2
-  return beats
+function stridesABeat(bpm: number): number {
+  let best = RATIOS[0]
+  let closest = Infinity
+  for (const ratio of RATIOS) {
+    const off = Math.abs(Math.log((bpm * ratio) / WANTS_A_MINUTE))
+    if (off < closest) {
+      closest = off
+      best = ratio
+    }
+  }
+  return best
 }
 
 export default function Gallop({ sections, duration, positionRef, playing }: GallopProps) {
@@ -75,7 +85,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
       const at = positionRef.current
       const span = spans.find((item) => at >= item.start && at <= item.end) ?? spans[0]
       const beats = span.beat > 0 ? (at - span.start) / span.beat : 0
-      const stride = (beats / beatsAStride(60000 / span.beat)) * STRIDES_A_BEAT
+      const stride = beats * stridesABeat(60000 / span.beat)
 
       for (let index = 0; index < horses.length; index += 1) {
         const round = stride + HERD[index].lead + STRIKE

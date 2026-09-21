@@ -32,12 +32,12 @@ const SAMPLED = 4096
 
 const EDGE = 3
 
-// How many of the frames just gone are left on the strip behind the live one,
-// and how solid the freshest of them is drawn. Each older one is fainter than
-// the last, so a value that is climbing leaves a fan opening behind it and one
-// that is steady leaves nothing to see.
-const GHOSTS = 5
-const GHOST_ALPHA = 0.45
+// The frames just gone, oldest first, and how solid each is drawn. Written out
+// rather than stepped evenly: the freshest ghost sits close under the live wave
+// and the rest drop away quickly, so the trail reads as a direction of travel
+// instead of five equal lines. The length of the list is the length of the
+// trail.
+const GHOST_FADES = [0.06, 0.1, 0.16, 0.26, 0.42]
 
 function ceilingOf(envelope: Float32Array | null): number {
   if (!envelope || envelope.length === 0) return 1
@@ -101,8 +101,9 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
 
       // oldest first, so the live wave is drawn over its own trail rather than
       // under it
+      const first = GHOST_FADES.length - past.length
       for (let index = 0; index < past.length; index += 1) {
-        context.globalAlpha = (GHOST_ALPHA * (index + 1)) / (past.length + 1)
+        context.globalAlpha = GHOST_FADES[first + index]
         wave(past[index])
       }
 
@@ -110,7 +111,7 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
       wave(share)
 
       past.push(share)
-      if (past.length > GHOSTS) past.shift()
+      if (past.length > GHOST_FADES.length) past.shift()
     },
     playing,
     `${position}|${envelope?.length}`,

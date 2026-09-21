@@ -31,11 +31,14 @@ const HEIGHT = 38
 // stands clearest, and the rest trail behind it.
 const HERD = [
   { at: 0, lead: 0.31, high: 3, faded: 0.45 },
-  { at: 52, lead: 0.62, high: 0, faded: 0.6 },
-  { at: 104, lead: 0.17, high: 4, faded: 0.78 },
-  { at: 158, lead: 0, high: 1, faded: 1 },
+  { at: 21, lead: 0.62, high: 0, faded: 0.6 },
+  { at: 43, lead: 0.17, high: 4, faded: 0.78 },
+  { at: 66, lead: 0, high: 1, faded: 1 },
 ]
-const SPREAD = HERD[HERD.length - 1].at + WIDTH
+// How far they run, kept apart from how far apart they run. The two were one
+// number, so giving them more ground to cover also pulled the herd apart into
+// four horses on their own errands.
+const RUN = 214
 const TALL = HEIGHT + 5
 
 // How far a stride carries a horse. A galloping horse covers well over its own
@@ -47,7 +50,7 @@ const CARRIES = 74
 // right, and because it is the head that is furthest left it is the head that
 // arrives first. A lap is the strip plus a whole horse, so it is fully gone
 // before it is back.
-const LAP = SPREAD + WIDTH
+const LAP = RUN + WIDTH
 
 // How far in from each end a horse is faded out, so one leaving or arriving
 // thins away instead of being cut off against a straight edge.
@@ -109,7 +112,7 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
       sx={{
         position: 'relative',
         overflow: 'hidden',
-        width: SPREAD,
+        width: RUN,
         height: TALL,
         mr: 1,
         flex: '0 0 auto',

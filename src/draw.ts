@@ -1016,6 +1016,8 @@ export const CURSOR_WIDTH = 3
 
 export const GUIDE_WIDTH = 1
 
+const HUE_STRENGTH = 0.35
+
 export function drawSectionBounds(
   context: CanvasRenderingContext2D,
   bars: Bar[],
@@ -1053,6 +1055,7 @@ export function drawSectionBounds(
   // the section reads as marked without losing the shape it is showing
   context.save()
   context.globalCompositeOperation = 'hue'
+  context.globalAlpha = HUE_STRENGTH
   context.fillStyle = hue
   context.fillRect(first * column, 0, (last - first + 1) * column, height)
   context.restore()

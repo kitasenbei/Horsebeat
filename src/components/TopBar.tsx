@@ -15,6 +15,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark'
 import StraightenIcon from '@mui/icons-material/Straighten'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import GpsFixedIcon from '@mui/icons-material/GpsFixed'
+import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
 
@@ -29,6 +30,8 @@ type TopBarProps = {
   onClearMarkers: () => void
   follow: boolean
   onFollowChange: (follow: boolean) => void
+  compiled: boolean
+  onCompiledChange: (compiled: boolean) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -100,6 +103,8 @@ export default function TopBar({
   onClearMarkers,
   follow,
   onFollowChange,
+  compiled,
+  onCompiledChange,
   canUndo,
   canRedo,
   onUndo,
@@ -192,6 +197,20 @@ export default function TopBar({
             </Button>
           </Tooltip>
         </ButtonGroup>
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={compiled ? 'compiled' : null}
+          onChange={() => onCompiledChange(!compiled)}
+          sx={PILL}
+        >
+          <ToggleButton value="compiled" aria-label="Compiled view" sx={selected('info')}>
+            <Tooltip title="Compiled view">
+              <span>{segment('Compiled', <ViewHeadlineIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
 
         <ToggleButtonGroup
           size="small"

@@ -19,7 +19,6 @@ import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
 import TimingPanel from './components/TimingPanel'
-import BeatFrames from './components/BeatFrames'
 import BarGrid from './components/BarGrid'
 import BarGridControls from './components/BarGridControls'
 import {
@@ -89,7 +88,6 @@ export default function App() {
   const [anchorId, setAnchorId] = useState<string | null>(null)
   const [ghost, setGhost] = useState<number | null>(null)
   const [fallSpeed, setFallSpeed] = useState(FALL_RANGE - 0.5)
-  const [framesExpanded, setFramesExpanded] = useState(false)
   const [barGrid, setBarGrid] = useState(true)
   const [slice, setSlice] = useState<number | 'auto'>('auto')
   const [lane, setLane] = useState<number | 'all'>(0)
@@ -290,6 +288,8 @@ export default function App() {
         onRedo={history.redo}
         follow={follow}
         onFollowChange={setFollow}
+        compiled={barGrid}
+        onCompiledChange={setBarGrid}
       />
       <Box
         component="main"
@@ -314,7 +314,7 @@ export default function App() {
               minHeight: 0,
             }}
           >
-            <Box sx={{ flex: 1, minHeight: 0, display: framesExpanded ? 'none' : 'block' }}>
+            <Box sx={{ flex: 1, minHeight: 0 }}>
               <TimingPanel
                 embedded
                 sections={sections}
@@ -333,24 +333,7 @@ export default function App() {
                 onEditingChange={setEditingSection}
               />
             </Box>
-            <Box sx={{ flex: framesExpanded ? 1 : '0 0 auto', minHeight: 0 }}>
-              <BeatFrames
-                envelope={envelope}
-                loudness={loudness}
-                onsets={onsets}
-                bands={bands}
-                sections={sections}
-                duration={duration}
-                position={position}
-                positionRef={positionRef}
-                playing={playing}
-                expanded={framesExpanded}
-                onSectionsChange={setSections}
-                onExpandedChange={setFramesExpanded}
-                onCompile={() => setBarGrid((current) => !current)}
-              />
-            </Box>
-            <Box sx={{ flex: '0 0 auto', display: framesExpanded ? 'none' : 'block' }}>
+            <Box sx={{ flex: '0 0 auto' }}>
               <CurvePanel embedded curve={curve} onCurveChange={setCurve} />
             </Box>
           </Box>

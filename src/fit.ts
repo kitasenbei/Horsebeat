@@ -384,7 +384,7 @@ export function beatWithin(
   for (const parts of BAR_PARTS) {
     if (BAR_ROWS % parts !== 0) continue
     const beat = 60000 / (barMs / parts)
-    if (beat < MIN_BPM_SEARCH || beat > MAX_BPM_SEARCH) continue
+    if (beat < MIN_BPM_SEARCH || beat > MAX_BPM_COUNT) continue
 
     const size = BAR_ROWS / parts
     const folded = new Float64Array(size)
@@ -437,6 +437,11 @@ function bestPhase(
 
 const MIN_BPM_SEARCH = 60
 const MAX_BPM_SEARCH = 200
+// How fast a count of the pulse may be. The sweep looks for the pulse, which
+// sits in the ordinary range whatever the music is doing, but the beat a chart
+// is written against can be a good deal faster than the pulse that carries it,
+// and a count the search cannot name is a tempo the fitting can never report.
+const MAX_BPM_COUNT = 300
 // how far apart two readings have to be before they are two tempos
 // how far apart, as a share of the tempo, two readings have to be before they
 // are two tempos rather than two readings of one

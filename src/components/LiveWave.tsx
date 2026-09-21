@@ -74,11 +74,7 @@ const AGREED_HUE = 120
 // canvas is a red wave here. Colour pulls apart around the middle of the ramp
 // where height barely moves, so two quarters a few hundredths apart are told
 // apart by colour and their true distance is still in the height.
-//
-// Which quarter is which is then the dash: solid for the first, and on through
-// the list. Colour is spoken for, and a shape that survives two waves landing
-// on one another is what is wanted.
-const QUARTER_DASHES = [[], [7, 4], [2, 3], [9, 3, 2, 3]]
+
 
 // Beyond this the strip is a thicket rather than a reading.
 const MOST_BEATS = 8
@@ -182,11 +178,8 @@ export default function LiveWave({
         const share = readAt(envelope, lutRef.current.lut, quarter)
         shares.push(share)
         context.strokeStyle = laneColor(share, colormap)
-        context.setLineDash(QUARTER_DASHES[index % QUARTER_DASHES.length])
         wave(share)
       }
-
-      context.setLineDash([])
 
       const rows = pastRef.current
       if (shares.length > 1) {

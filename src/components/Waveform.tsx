@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import {
-  drawBackdrop,
   drawEnvelopeAmplitude,
   drawGrid,
   drawMarkers,
@@ -17,7 +16,6 @@ import { DEFAULT_CURVE, type Curve } from '../curve'
 type WaveformProps = {
   samples: Float32Array | null
   envelope: Float32Array | null
-  backdrop?: string | null
   positionRef: RefObject<number>
   playing: boolean
   markers: number[]
@@ -48,7 +46,6 @@ const CLICK_SLOP = 4
 export default function Waveform({
   samples,
   envelope,
-  backdrop = null,
   positionRef,
   playing,
   markers,
@@ -66,33 +63,11 @@ export default function Waveform({
   const theme = useTheme()
   const panRef = useRef<Pan | null>(null)
   const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
-  const imageRef = useRef<HTMLImageElement | null>(null)
-  const [imageVersion, setImageVersion] = useState(0)
-
-  useEffect(() => {
-    if (!backdrop) {
-      imageRef.current = null
-      return
-    }
-
-    const image = new Image()
-    image.onload = () => {
-      imageRef.current = image
-      setImageVersion((current) => current + 1)
-    }
-    image.src = backdrop
-
-    return () => {
-      image.onload = null
-    }
-  }, [backdrop])
   const applyRange = useRafCallback((next: Range) => onRangeChange?.(next))
   const applyGhost = useRafCallback((next: number | null) => onGhostChange?.(next))
 
   const paintStatic = (context: CanvasRenderingContext2D, width: number, height: number) => {
     if (!samples) return
-    if (imageRef.current) drawBackdrop(context, imageRef.current, width, height)
-
     const halves = envelope
       ? drawEnvelopeAmplitude(
           context,
@@ -146,8 +121,6 @@ export default function Waveform({
       samples.length,
       envelope?.length ?? 0,
       duration,
-      backdrop ?? '',
-      imageVersion,
       ghost,
       placing,
       focus ? `${focus.start}:${focus.end}` : '',

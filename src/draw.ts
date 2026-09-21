@@ -4,24 +4,6 @@ import { sectionSpans, type Section, type SectionSpan } from './timing'
 import { ENVELOPE_HOP, type PeakLevel, type Pyramid } from './audio'
 
 export const WAVE_ALPHA = 1
-export const BACKDROP_ALPHA = 0.2
-
-export function drawBackdrop(
-  context: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  width: number,
-  height: number,
-) {
-  if (!image.naturalWidth || !image.naturalHeight) return
-
-  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight)
-  const drawWidth = image.naturalWidth * scale
-  const drawHeight = image.naturalHeight * scale
-
-  context.globalAlpha = BACKDROP_ALPHA
-  context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
-  context.globalAlpha = 1
-}
 
 function pickLevel(pyramid: Pyramid | null, perPixel: number): PeakLevel | null {
   if (!pyramid) return null
@@ -1003,6 +985,8 @@ export function renderBarColumns(
 
 export const CURSOR_WIDTH = 3
 
+export const GUIDE_WIDTH = 1
+
 export function drawSliceGuides(
   context: CanvasRenderingContext2D,
   top: number,
@@ -1012,8 +996,8 @@ export function drawSliceGuides(
   divisions = 4,
 ) {
   context.strokeStyle = color
-  context.lineWidth = 1
-  context.globalAlpha = 0.45
+  context.lineWidth = GUIDE_WIDTH
+  context.globalAlpha = 0.7
 
   for (let step = 1; step < divisions; step += 1) {
     const y = Math.round(top + (step / divisions) * height) + 0.5

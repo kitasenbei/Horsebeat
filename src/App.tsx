@@ -48,6 +48,7 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
+const FULL_RANGE: Range = { start: 0, end: 1 }
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -85,12 +86,11 @@ export default function App() {
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [anchorId, setAnchorId] = useState<string | null>(null)
   const [ghost, setGhost] = useState<number | null>(null)
-  const [fallSpeed, setFallSpeed] = useState(8.5)
+  const [fallSpeed, setFallSpeed] = useState(FALL_RANGE - 0.5)
   const [framesExpanded, setFramesExpanded] = useState(false)
-  const [barGrid, setBarGrid] = useState(false)
+  const [barGrid, setBarGrid] = useState(true)
   const [slice, setSlice] = useState<number | 'auto'>('auto')
   const [follow, setFollow] = useState(false)
-  const [backdrop, setBackdrop] = useState<string | null>(null)
   const touchedRef = useRef(0)
 
   const changeRange = (next: Range | ((current: Range) => Range)) => {
@@ -117,6 +117,13 @@ export default function App() {
   const focus = editingSection
     ? (sectionSpans(sections, duration).find((item) => item.section.id === editingSection) ?? null)
     : null
+
+  const compiled = (() => {
+    const span = sectionSpans(sections, duration).find(
+      (item) => position >= item.start && position <= item.end,
+    )
+    return span ? { start: span.start, end: span.end } : FULL_RANGE
+  })()
 
   const anchorSection = (at: number) => {
     const offsetMs = at * duration * 1000
@@ -221,10 +228,6 @@ export default function App() {
       setLoudness(computeLoudness(mono))
       setBands(computeBands(mono, buffer.sampleRate))
       setRange(INITIAL_RANGE)
-      setBackdrop((current) => {
-        if (current) URL.revokeObjectURL(current)
-        return beatmap?.background ? URL.createObjectURL(beatmap.background) : null
-      })
       setDoc((current) => ({
         markers: [],
         sections: beatmap ? beatmap.sections : [],
@@ -362,7 +365,6 @@ export default function App() {
               <Waveform
                 samples={samples}
                 envelope={envelope}
-                backdrop={backdrop}
                 positionRef={positionRef}
                 playing={playing}
                 markers={markers}
@@ -415,7 +417,12 @@ export default function App() {
                 />
               </Box>
             ) : null}
-            <AnalysisLanes loudness={loudness} onsets={onsets} bands={bands} range={range} />
+            <AnalysisLanes
+              loudness={loudness}
+              onsets={onsets}
+              bands={bands}
+              range={barGrid ? compiled : range}
+            />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
             <VerticalWaveform

@@ -33,6 +33,8 @@ type BarGridProps = {
   onSliceChange: (slice: number | 'auto') => void
 }
 
+const GUIDE_COLOR = '#ffffff'
+
 export default function BarGrid({
   envelope,
   loudness,
@@ -117,7 +119,8 @@ export default function BarGrid({
     }
 
     const heights = blockHeights(height)
-    drawSliceGuides(context, tops[0], heights[0], width, theme.palette.info.dark)
+    drawSliceGuides(context, tops[0], heights[0], width, GUIDE_COLOR)
+    if (tops.length > 3) drawSliceGuides(context, tops[3], heights[3], width, GUIDE_COLOR)
 
     drawColumnCursor(
       context,

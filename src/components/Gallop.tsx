@@ -15,13 +15,21 @@ type GallopProps = {
 // lands anywhere in particular.
 const FRAMES = 6
 
-// Which frame drives the hind legs into the ground — the moment with the weight
-// behind it. Measured rather than guessed, by how low each half of the horse
-// reaches in each frame: the hind quarters bottom out in the sixth while the
-// forelegs are still six pixels clear, and it is the second frame that plants a
-// front hoof. Putting the sixth under the beat is what gives the beat its
-// shove.
-const STRIKE = 5 / FRAMES
+// How long each frame is held, in slots. The first frame is the horse at full
+// stretch and the third has it reaching with all four feet clear, and those are
+// the ones worth looking at, so they are held while the gathered frames go by
+// in one slot each. The horse then spends more than half of every beat in the
+// air with its legs spread.
+const HOLD = [3, 1, 2, 1, 1, 1]
+
+// The stride written out slot by slot, beginning with the frame that drives the
+// hind legs into the ground — the moment with the weight behind it. That frame
+// was measured rather than guessed, by how low each half of the horse reaches:
+// the hind quarters bottom out in the sixth while the forelegs are still six
+// pixels clear, and it is the second frame that plants a front hoof. Starting
+// the cycle there puts the sixth under the beat, which is what gives the beat
+// its shove.
+const CYCLE = [5, 0, 1, 2, 3, 4].flatMap((frame) => Array<number>(HOLD[frame]).fill(frame))
 const WIDTH = 56
 const HEIGHT = 38
 
@@ -83,8 +91,8 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
     const spans = sectionSpans(sections, duration)
 
     const place = (horse: HTMLElement, index: number, stride: number) => {
-      const round = stride + HERD[index].lead + STRIKE
-      const step = Math.floor((((round % 1) + 1) % 1) * FRAMES)
+      const round = (((stride + HERD[index].lead) % 1) + 1) % 1
+      const step = CYCLE[Math.floor(round * CYCLE.length)]
       horse.style.backgroundPositionX = `${-step * WIDTH}px`
 
       const gone = RUN + HERD[index].at - TRAILS - stride * CARRIES

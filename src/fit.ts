@@ -625,9 +625,13 @@ function centred(rows: Float64Array): Float64Array {
 // How far one bar sits from another, in rows. The search stops at half a beat
 // because bars look alike at beat level, and a wider one answers with a whole
 // beat of slide that never happened.
-function shiftRows(one: Float64Array, other: Float64Array, meter: number): number {
+// `beats` is how many beats a column covers, which is what sets how far the
+// search may go: half a beat either way, whatever that is in rows. Columns look
+// alike at beat level, so a wider search answers with a whole beat of slide
+// that never happened.
+function shiftRows(one: Float64Array, other: Float64Array, beats: number): number {
   const size = one.length
-  const reach = Math.max(1, Math.round(size / (2 * Math.max(1, meter))))
+  const reach = Math.max(1, Math.round(size / (2 * Math.max(1, beats))))
   let best = 0
   let bestScore = -Infinity
 
@@ -655,12 +659,19 @@ function flatnessOf(
   fit: Fit,
   meter: number,
 ): number {
-  const barMs = (60000 / fit.bpm) * Math.max(1, meter)
+  // Measured a bar at a time, not a beat at a time. A denser column shows a
+  // tempo error more plainly — the same slide is a bigger share of a shorter
+  // column, which is why a grid that looks straight at 69 draws a diagonal at
+  // 276 — but it is worse to measure from: every beat looks like every other,
+  // so there is no shape for the reading to lock onto. Bars differ from each
+  // other, and that is what makes them readable.
+  const count = Math.max(1, meter)
+  const barMs = (60000 / fit.bpm) * count
   const whole = barProfile(envelope, sampleRate, fromMs, toMs, barMs, SETTLE_ROWS)
   if (!whole) return 0
 
   const reference = centred(whole)
-  const stretch = SETTLE_BARS * barMs
+  const stretch = SETTLE_BARS * Math.max(1, meter) * (60000 / fit.bpm)
   const windows = Math.floor((toMs - fromMs) / stretch)
   if (windows < 2) return 0
 
@@ -669,7 +680,7 @@ function flatnessOf(
     const at = fromMs + index * stretch
     const rows = barProfile(envelope, sampleRate, at, at + stretch, barMs, SETTLE_ROWS)
     if (!rows) continue
-    slides.push(Math.abs((shiftRows(reference, centred(rows), meter) / SETTLE_ROWS) * barMs))
+    slides.push(Math.abs((shiftRows(reference, centred(rows), count) / SETTLE_ROWS) * barMs))
   }
 
   if (slides.length === 0) return 0

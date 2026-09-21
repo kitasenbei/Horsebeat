@@ -310,7 +310,11 @@ export default function App() {
         // then the track is halved wherever one grid cannot stay on the beat
         // across it, and each half asked the same question again
         split = splitStep(envelope, sampleRate, split)
-        publish(split.parts.map((part) => part.fit))
+
+        // the span under the knobs is published with the settled ones, so the
+        // grid is seen moving onto the music a turn at a time
+        const working = split.working
+        publish(working ? [...split.parts.map((part) => part.fit), working.fit] : split.parts.map((part) => part.fit))
       } else {
         setFitting(false)
         return

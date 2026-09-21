@@ -29,6 +29,8 @@ const SCALES = [
 ]
 
 const FIT_STEPS = SCALES.length
+// how many times the least-squares polish is repeated once the ladder is done
+const POLISH_ROUNDS = 3
 
 // The score a grid earns on this audio: the average envelope height at the
 // beats it predicts, against the average everywhere. One means the beats are
@@ -259,7 +261,7 @@ function fitWindow(
     else step += 1
   }
 
-  for (let round = 0; round < 3; round += 1) {
+  for (let round = 0; round < POLISH_ROUNDS; round += 1) {
     const polished = polishFit(envelope, sampleRate, fromMs, toMs, fit)
     if (!inBand(polished)) break
     fit = polished
@@ -783,6 +785,82 @@ type Part = {
   flat: number
 }
 
+// A span being fitted, one turn of the knobs at a time. The ladder inside
+// fitWindow already moves the two knobs a step each way and keeps whichever
+// reads better; this is the same walk, handed out a rung a frame, so the grid
+// can be watched moving onto the music instead of appearing on it.
+export type Turn = {
+  fromMs: number
+  toMs: number
+  depth: number
+  fit: Fit
+  step: number
+  round: number
+  low: number
+  high: number
+}
+
+export function newTurn(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  given: number,
+  meter: number,
+  track: Vote,
+  depth: number,
+): Turn {
+  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
+  const fit = bestPhase(envelope, sampleRate, fromMs, toMs, bpm).fit
+  return {
+    fromMs,
+    toMs,
+    depth,
+    fit,
+    step: 0,
+    round: 0,
+    low: bpm * (1 - DRIFT_BAND),
+    high: bpm * (1 + DRIFT_BAND),
+  }
+}
+
+export function turned(turn: Turn): boolean {
+  return turn.step >= FIT_STEPS && turn.round >= POLISH_ROUNDS
+}
+
+// One rung, or one round of the polish once the ladder has run out.
+export function turnStep(envelope: Float32Array, sampleRate: number, turn: Turn): Turn {
+  const inBand = (candidate: Fit) => candidate.bpm >= turn.low && candidate.bpm <= turn.high
+
+  if (turn.step < FIT_STEPS) {
+    const result = refineFit(envelope, sampleRate, turn.fromMs, turn.toMs, turn.fit, turn.step)
+    if (result.moved && inBand(result.fit)) return { ...turn, fit: result.fit }
+    return { ...turn, step: turn.step + 1 }
+  }
+
+  const polished = polishFit(envelope, sampleRate, turn.fromMs, turn.toMs, turn.fit)
+  if (!inBand(polished)) return { ...turn, round: POLISH_ROUNDS }
+  return { ...turn, fit: polished, round: turn.round + 1 }
+}
+
+// What a turn leaves behind: the grid on the beat, and the bar on a downbeat.
+export function turnDone(
+  envelope: Float32Array,
+  sampleRate: number,
+  turn: Turn,
+  meter: number,
+): Part {
+  const anchored = { bpm: turn.fit.bpm, offsetMs: beatNear(turn.fit, turn.fromMs) }
+  const barred = alignDownbeat(envelope, sampleRate, turn.fromMs, turn.toMs, anchored, meter)
+  const fit = anchorBeat(envelope, sampleRate, turn.fromMs, turn.toMs, barred)
+  return {
+    fromMs: turn.fromMs,
+    toMs: turn.toMs,
+    fit,
+    flat: flatnessOf(envelope, sampleRate, turn.fromMs, turn.toMs, fit, meter),
+  }
+}
+
 function settleSpan(
   envelope: Float32Array,
   sampleRate: number,
@@ -806,6 +884,8 @@ type Span = { fromMs: number; toMs: number; bpm: number; depth: number }
 export type Split = {
   parts: Part[]
   pending: Span[]
+  // the span whose knobs are being turned right now, shown while it moves
+  working: Turn | null
   meter: number
   done: boolean
   // what the whole track polled, kept so a span cannot take a tempo the song
@@ -817,6 +897,7 @@ export function newSplit(durationMs: number, bpm: number, vote: Vote): Split {
   return {
     parts: [],
     pending: [{ fromMs: 0, toMs: durationMs, bpm, depth: 0 }],
+    working: null,
     meter: vote.meter,
     done: durationMs <= 0,
     track: vote,
@@ -838,50 +919,71 @@ export function splitStep(
   sampleRate: number,
   split: Split,
 ): Split {
-  const span = split.pending[0]
-  if (!span) return { ...split, done: true }
-
-  const pending = split.pending.slice(1)
   const meter = split.meter
-  const keep = (parts: Part[]) => ({
-    ...split,
-    parts: [...split.parts, ...parts].sort((one, other) => one.fromMs - other.fromMs),
-    pending,
-    done: pending.length === 0,
+
+  // a span that is not yet under the knobs is put under them
+  if (!split.working) {
+    const span = split.pending[0]
+    if (!span) return { ...split, done: true }
+
+    return {
+      ...split,
+      pending: split.pending.slice(1),
+      working: newTurn(
+        envelope,
+        sampleRate,
+        span.fromMs,
+        span.toMs,
+        span.bpm,
+        meter,
+        split.track,
+        span.depth,
+      ),
+    }
+  }
+
+  // one turn of the knobs, which is what the compiled view redraws against
+  if (!turned(split.working)) {
+    return { ...split, working: turnStep(envelope, sampleRate, split.working) }
+  }
+
+  const span = split.working
+  const whole = turnDone(envelope, sampleRate, span, meter)
+  const rest = { ...split, working: null }
+  const keep = () => ({
+    ...rest,
+    parts: [...split.parts, whole].sort((one, other) => one.fromMs - other.fromMs),
+    done: rest.pending.length === 0,
   })
 
-  const whole = settleSpan(envelope, sampleRate, span.fromMs, span.toMs, span.bpm, meter, split.track)
-  if (span.toMs - span.fromMs < MIN_SPAN_MS * 2 || span.depth >= MAX_DEPTH) return keep([whole])
+  if (span.toMs - span.fromMs < MIN_SPAN_MS * 2 || span.depth >= MAX_DEPTH) return keep()
 
   const barMs = (60000 / whole.fit.bpm) * Math.max(1, meter)
   const bars = Math.floor((span.toMs - span.fromMs) / barMs)
-  if (bars < SETTLE_BARS) return keep([whole])
+  if (bars < SETTLE_BARS) return keep()
 
   const middle = span.fromMs + Math.floor(bars / 2) * barMs
   const left = tempoOf(envelope, sampleRate, span.fromMs, middle, whole.fit.bpm, meter, split.track)
   const right = tempoOf(envelope, sampleRate, middle, span.toMs, whole.fit.bpm, meter, split.track)
   const agreed = left === whole.fit.bpm && right === whole.fit.bpm
-  if (agreed && whole.flat <= FLAT_OK_MS) return keep([whole])
+  if (agreed && whole.flat <= FLAT_OK_MS) return keep()
 
   if (agreed) {
-    // drifting rather than changing: worth halving only if it comes out
-    // straighter, which a section that is already as straight as the audio
-    // allows will not
     const under = [
       settleSpan(envelope, sampleRate, span.fromMs, middle, left, meter, split.track),
       settleSpan(envelope, sampleRate, middle, span.toMs, right, meter, split.track),
     ]
     let weighted = 0
     for (const part of under) weighted += part.flat * (part.toMs - part.fromMs)
-    if (weighted / (span.toMs - span.fromMs) >= whole.flat * SPLIT_KEEPS) return keep([whole])
+    if (weighted / (span.toMs - span.fromMs) >= whole.flat * SPLIT_KEEPS) return keep()
   }
 
   return {
-    ...split,
+    ...rest,
     pending: [
       { fromMs: span.fromMs, toMs: middle, bpm: left, depth: span.depth + 1 },
       { fromMs: middle, toMs: span.toMs, bpm: right, depth: span.depth + 1 },
-      ...pending,
+      ...rest.pending,
     ],
     done: false,
   }

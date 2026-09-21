@@ -5,7 +5,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import { yellow } from '@mui/material/colors'
 import { useTheme } from '@mui/material/styles'
-import { drawPeaksAmplitude, drawPlayhead, drawWindow } from '../draw'
+import { curveSignature, drawPeaksAmplitude, drawPlayhead, drawWindow } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { clampRange, MIN_SPAN, type Range } from '../range'
@@ -13,6 +13,7 @@ import type { Curve } from '../curve'
 
 type OverviewProps = {
   peaks: Float32Array | null
+  position: number
   positionRef: RefObject<number>
   playing: boolean
   curve: Curve
@@ -31,6 +32,7 @@ const HANDLE = 22
 
 export default function Overview({
   peaks,
+  position,
   positionRef,
   playing,
   curve,
@@ -47,7 +49,7 @@ export default function Overview({
     drawPeaksAmplitude(context, peaks, FULL, width, height, theme.palette.primary.main, curve)
     drawPlayhead(context, positionRef.current, FULL, width, height, theme.palette.error.main)
     drawWindow(context, range, width, height, yellow[700])
-  }, playing)
+  }, playing, `${range.start}|${range.end}|${peaks?.length}|${hovered}|${position}|${curveSignature(curve)}`)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current

@@ -109,7 +109,7 @@ export default function CurvePanel({
       context.arc(point.x * width, height - point.y * height, POINT_RADIUS, 0, Math.PI * 2)
       context.fill()
     }
-  })
+  }, false, curve.points.map((point) => `${point.x}:${point.y}`).join(','))
 
   const spotAt = (event: React.PointerEvent<HTMLCanvasElement> | React.MouseEvent<HTMLCanvasElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()

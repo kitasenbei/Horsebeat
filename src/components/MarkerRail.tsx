@@ -62,7 +62,7 @@ export default function MarkerRail({
       drawPlayheadHandle(context, ghost, range, width, height, color)
       context.globalAlpha = 1
     }
-  })
+  }, false, `${range.start}|${range.end}|${markers.join(',')}|${ghost}|${selected}|${hovered}|${focus?.start}|${focus?.end}`)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current

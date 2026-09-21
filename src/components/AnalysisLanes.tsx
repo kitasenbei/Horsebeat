@@ -34,7 +34,7 @@ export default function AnalysisLanes({ loudness, onsets, bands, range }: Analys
     context.translate(0, HEAT_HEIGHT + GAP)
     if (bands) drawBands(context, bands, range, width, SPECTRUM_HEIGHT)
     context.restore()
-  })
+  }, false, `${range.start}|${range.end}|${loudness?.length}|${onsets?.length}|${bands?.length}`)
 
   return (
     <Box

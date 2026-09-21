@@ -48,6 +48,7 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
+const DEFAULT_BPM = 120
 
 export default function App() {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -249,7 +250,9 @@ export default function App() {
       setRange(INITIAL_RANGE)
       setDoc((current) => ({
         markers: [],
-        sections: beatmap ? beatmap.sections : [],
+        // a plain audio file arrives with no timing at all, so it opens on a
+        // grid that can be dragged into place rather than on an empty view
+        sections: beatmap ? beatmap.sections : [createSection(0, DEFAULT_BPM)],
         curve: current.curve,
       }))
       history.reset()
@@ -335,6 +338,7 @@ export default function App() {
                 bands={bands}
                 sections={sections}
                 duration={duration}
+                position={position}
                 positionRef={positionRef}
                 playing={playing}
                 expanded={framesExpanded}
@@ -372,6 +376,7 @@ export default function App() {
                   onMarkersChange={changeMarkers}
                 />
                 <PlayheadRail
+                  position={position}
                   positionRef={positionRef}
                   playing={playing}
                   range={range}
@@ -384,6 +389,7 @@ export default function App() {
               <Waveform
                 samples={samples}
                 envelope={envelope}
+                position={position}
                 positionRef={positionRef}
                 playing={playing}
                 markers={markers}
@@ -425,15 +431,16 @@ export default function App() {
                   loudness={loudness}
                   onsets={onsets}
                   bands={bands}
-                  position={position}
                   sections={sections}
                   duration={duration}
+                  position={position}
                   positionRef={positionRef}
                   playing={playing}
                   curve={curve}
                   range={range}
                   onRangeChange={changeRange}
                   onSectionsChange={setSections}
+                  onSeek={seek}
                   slice={slice}
                   onSliceChange={setSlice}
                 />
@@ -451,6 +458,7 @@ export default function App() {
               samples={samples}
               envelope={envelope}
               sections={sections}
+              position={position}
               positionRef={positionRef}
               playing={playing}
               duration={duration}
@@ -623,11 +631,13 @@ export default function App() {
           <SectionBlocks
             sections={sections}
             duration={duration}
+            position={position}
             positionRef={positionRef}
             playing={playing}
             onRangeChange={changeRange}
           />
           <PlayheadRail
+            position={position}
             positionRef={positionRef}
             playing={playing}
             enabled={Boolean(peaks)}
@@ -636,6 +646,7 @@ export default function App() {
           <Box sx={{ height: 96 }}>
             <Overview
               peaks={peaks}
+              position={position}
               positionRef={positionRef}
               playing={playing}
               curve={curve}

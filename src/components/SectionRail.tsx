@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
-import { drawPlayheadHandle, HANDLE_WIDTH } from '../draw'
+import { drawPlayheadHandle, HANDLE_WIDTH, sectionSignature } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { RAIL_HEIGHT } from './PlayheadRail'
@@ -42,7 +42,7 @@ export default function SectionRail({
         hovered === section.id ? hoverColor : color,
       )
     }
-  })
+  }, false, `${range.start}|${range.end}|${duration}|${hovered}|${sectionSignature(sections)}`)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current

@@ -2,10 +2,12 @@ import { useEffect, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import {
+  curveSignature,
   drawEnvelopeAmplitude,
   drawGrid,
   drawMarkers,
   drawPlayhead,
+  sectionSignature,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
@@ -16,6 +18,7 @@ import { DEFAULT_CURVE, type Curve } from '../curve'
 type WaveformProps = {
   samples: Float32Array | null
   envelope: Float32Array | null
+  position: number
   positionRef: RefObject<number>
   playing: boolean
   markers: number[]
@@ -46,6 +49,7 @@ const CLICK_SLOP = 4
 export default function Waveform({
   samples,
   envelope,
+  position,
   positionRef,
   playing,
   markers,
@@ -145,7 +149,7 @@ export default function Waveform({
 
     context.drawImage(cache.canvas, 0, 0, width, height)
     drawPlayhead(context, positionRef.current, range, width, height, theme.palette.error.main, true)
-  }, playing)
+  }, playing, `${range.start}|${range.end}|${position}|${markers.join(',')}|${sectionSignature(sections)}|${ghost}|${placing}|${curveSignature(curve)}|${focus?.start}|${focus?.end}`)
 
   const zoomRef = useRef({ range, onRangeChange, enabled: Boolean(samples) })
   useEffect(() => {

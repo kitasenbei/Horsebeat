@@ -86,7 +86,7 @@ export default function RulerSlider({
     context.moveTo(Math.round(middle) + 0.5, 0)
     context.lineTo(Math.round(middle) + 0.5, baseline)
     context.stroke()
-  })
+  }, false, `${value}|${min}|${max}|${step}|${pixelsPerStep}|${disabled}`)
 
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (disabled) return

@@ -2,10 +2,14 @@ import { useCallback, useEffect, useRef } from 'react'
 
 type Draw = (context: CanvasRenderingContext2D, width: number, height: number) => void
 
-export function useCanvas(draw: Draw, animate = false) {
+// `signature` is a cheap summary of everything the draw depends on. Without it
+// a canvas repaints on every render of the app, which during a drag is every
+// canvas on screen, sixty times a second, for one that actually changed.
+export function useCanvas(draw: Draw, animate = false, signature?: string | number) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawRef = useRef(draw)
   const frameRef = useRef(0)
+  const paintedRef = useRef<string | number | undefined>(undefined)
 
   const render = useCallback(() => {
     const canvas = canvasRef.current
@@ -28,6 +32,8 @@ export function useCanvas(draw: Draw, animate = false) {
     drawRef.current(context, width, height)
   }, [])
 
+  const signatureRef = useRef(signature)
+
   const schedule = useCallback(() => {
     cancelAnimationFrame(frameRef.current)
     frameRef.current = requestAnimationFrame(render)
@@ -36,7 +42,10 @@ export function useCanvas(draw: Draw, animate = false) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const observer = new ResizeObserver(schedule)
+    const observer = new ResizeObserver(() => {
+      paintedRef.current = undefined
+      schedule()
+    })
     observer.observe(canvas)
     return () => {
       cancelAnimationFrame(frameRef.current)
@@ -46,10 +55,13 @@ export function useCanvas(draw: Draw, animate = false) {
 
   useEffect(() => {
     drawRef.current = draw
+    signatureRef.current = signature
   })
 
   useEffect(() => {
     if (animate) return
+    if (signature !== undefined && signature === paintedRef.current) return
+    paintedRef.current = signature
     schedule()
   })
 
@@ -58,6 +70,7 @@ export function useCanvas(draw: Draw, animate = false) {
 
     let frame = requestAnimationFrame(function tick() {
       render()
+      paintedRef.current = signatureRef.current
       frame = requestAnimationFrame(tick)
     })
 

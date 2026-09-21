@@ -1,7 +1,7 @@
 import { useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
-import { drawSectionBlocks } from '../draw'
+import { drawSectionBlocks, sectionSignature } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
 import { clampRange, type Range } from '../range'
@@ -9,6 +9,7 @@ import { clampRange, type Range } from '../range'
 type SectionBlocksProps = {
   sections: Section[]
   duration: number
+  position: number
   positionRef: RefObject<number>
   playing: boolean
   onRangeChange: (range: Range) => void
@@ -20,6 +21,7 @@ const LIVE_COLOR = '#e07c0a'
 export default function SectionBlocks({
   sections,
   duration,
+  position,
   positionRef,
   playing,
   onRangeChange,
@@ -45,7 +47,7 @@ export default function SectionBlocks({
       hovered,
       `600 10px ${theme.typography.fontFamily}`,
     )
-  }, playing)
+  }, playing, `${duration}|${hovered}|${position}|${sectionSignature(sections)}`)
 
   const spanAt = (clientX: number) => {
     const canvas = canvasRef.current

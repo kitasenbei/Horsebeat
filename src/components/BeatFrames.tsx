@@ -8,7 +8,7 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import { useTheme } from '@mui/material/styles'
-import { drawBands, drawEnvelopeStrip, drawHeatmap, drawLevels } from '../draw'
+import { drawBands, drawEnvelopeStrip, drawHeatmap, drawLevels, sectionSignature } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { sortSections, sectionSpans, type Section } from '../timing'
@@ -21,6 +21,7 @@ type BeatFramesProps = {
   bands: Float32Array | null
   sections: Section[]
   duration: number
+  position: number
   positionRef: RefObject<number>
   playing: boolean
   expanded: boolean
@@ -47,6 +48,7 @@ export default function BeatFrames({
   bands,
   sections,
   duration,
+  position,
   positionRef,
   playing,
   expanded,
@@ -161,7 +163,7 @@ export default function BeatFrames({
         context.stroke()
       }
     }
-  }, playing)
+  }, playing, `${position}|${duration}|${sectionSignature(sections)}`)
 
   return (
     <Paper

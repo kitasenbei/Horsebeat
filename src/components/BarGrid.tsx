@@ -1,19 +1,30 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import {
   autoSliceBeats,
+  curveSignature,
   collectBars,
   drawColumnCursor,
+  drawSectionBounds,
   drawSliceGuides,
   renderBarLayers,
   SLICE_STEPS,
 } from '../draw'
 import { useCanvas } from '../useCanvas'
-import { MAX_BPM, MIN_BPM, sectionSpans, sortSections, type Section } from '../timing'
+import {
+  createSection,
+  MAX_BPM,
+  MIN_BPM,
+  sectionSpans,
+  sortSections,
+  type Section,
+} from '../timing'
 import { clampRange } from '../range'
 import { useRafCallback } from '../useRafCallback'
 import type { Curve } from '../curve'
@@ -24,15 +35,16 @@ type BarGridProps = {
   loudness: Float32Array | null
   onsets: Float32Array | null
   bands: Float32Array | null
-  position: number
   sections: Section[]
   duration: number
+  position: number
   positionRef: RefObject<number>
   playing: boolean
   curve: Curve
   range: Range
   onRangeChange: (range: Range) => void
   onSectionsChange: (sections: Section[]) => void
+  onSeek: (position: number) => void
   slice: number | 'auto'
   onSliceChange: (slice: number | 'auto') => void
 }
@@ -48,22 +60,21 @@ export default function BarGrid({
   loudness,
   onsets,
   bands,
-  position,
   sections,
   duration,
+  position,
   positionRef,
   playing,
   curve,
   range,
   onRangeChange,
   onSectionsChange,
+  onSeek,
   slice,
   onSliceChange,
 }: BarGridProps) {
   const theme = useTheme()
   const spans = sectionSpans(sections, duration)
-  const active =
-    spans.find((span) => position >= span.start && position <= span.end) ?? spans[0] ?? null
   const wrapRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
 
@@ -77,16 +88,20 @@ export default function BarGrid({
     return () => observer.disconnect()
   }, [])
 
-  const beats = active
-    ? slice === 'auto'
-      ? autoSliceBeats(active, width)
-      : slice
-    : 4
-  // the bars stay anchored to the section, so the window only decides how many
-  // of them are on screen: narrow it and the columns get wider
-  const all = active ? collectBars(active, beats) : []
-  const inside = all.filter((bar) => bar.end > range.start && bar.start < range.end)
-  const bars = inside.length > 0 ? inside : all
+  // every section the window touches contributes its own slices, so the view is
+  // continuous across tempo changes rather than one section at a time
+  const visible = spans.filter((span) => span.end > range.start && span.start < range.end)
+  const window = Math.max(1e-9, range.end - range.start)
+
+  const bars = (visible.length > 0 ? visible : spans.slice(0, 1))
+    .flatMap((span) => {
+      const share = (Math.min(span.end, range.end) - Math.max(span.start, range.start)) / window
+      const beats =
+        slice === 'auto' ? autoSliceBeats(span, Math.max(120, width * share)) : slice
+      return collectBars(span, beats)
+    })
+    .filter((bar) => bar.end > range.start && bar.start < range.end)
+    .sort((left, right) => left.start - right.start)
 
   const sources = { envelope, loudness, onsets, bands }
   const cacheRef = useRef<{
@@ -97,6 +112,9 @@ export default function BarGrid({
   const applyRange = useRafCallback(onRangeChange)
   const applySections = useRafCallback(onSectionsChange)
   const sliceHeightRef = useRef(1)
+  const [hovered, setHovered] = useState<string | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; at: number; id: string } | null>(null)
+  const layoutRef = useRef<{ tops: number[]; heights: number[] }>({ tops: [], heights: [] })
   const dragRef = useRef<{
     clientX: number
     clientY: number
@@ -122,7 +140,6 @@ export default function BarGrid({
       Math.round(width),
       Math.round(height),
       bars.length,
-      beats,
       bars[0]?.start ?? 0,
       bars[bars.length - 1]?.end ?? 0,
       envelope?.length ?? 0,
@@ -155,11 +172,22 @@ export default function BarGrid({
     }
 
     const heights = cache.canvases.map((layer) => layer.height)
-    sliceHeightRef.current = Math.max(1, heights[0] ?? 1)
     const tops = cache.canvases.map((layer) => layer.top)
+    sliceHeightRef.current = Math.max(1, heights[0] ?? 1)
+    layoutRef.current = { tops, heights }
 
     if (tops.length > 0) drawSliceGuides(context, tops[0], heights[0], width, GUIDE_COLOR)
     if (tops.length > 3) drawSliceGuides(context, tops[3], heights[3], width, GUIDE_COLOR)
+
+    drawSectionBounds(
+      context,
+      bars,
+      width,
+      height,
+      theme.palette.info.dark,
+      hovered,
+      theme.palette.info.main,
+    )
 
     drawColumnCursor(
       context,
@@ -170,7 +198,7 @@ export default function BarGrid({
       width,
       theme.palette.error.main,
     )
-  }, playing)
+  }, playing, `${bars.length}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${hovered}|${position}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -196,14 +224,78 @@ export default function BarGrid({
 
   // one block is one slice tall, so a pixel of drag is a known number of
   // milliseconds: the same gesture means the same thing at any zoom or density
+  const sectionAt = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (bounds.width === 0 || bars.length === 0) return null
+
+    const ratio = Math.min(0.999, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+    const bar = bars[Math.floor(ratio * bars.length)]
+    const span = spans.find((item) => item.section.id === bar.section)
+    return span ? { span, bar } : null
+  }
+
+  // a column is one slice and its rows are that slice's time, so the pointer
+  // lands on an exact moment rather than on a bar boundary
+  const timeAt = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const target = sectionAt(event as React.PointerEvent<HTMLCanvasElement>)
+    if (!target) return null
+
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const y = event.clientY - bounds.top
+    const { tops, heights } = layoutRef.current
+
+    let block = tops.findIndex((top, index) => y >= top && y < top + heights[index])
+    if (block < 0) block = 0
+
+    const fraction = Math.min(
+      1,
+      Math.max(0, (y - (tops[block] ?? 0)) / Math.max(1, heights[block] ?? 1)),
+    )
+    const at = target.bar.start + fraction * (target.bar.end - target.bar.start)
+    return { at, id: target.span.section.id, bpm: target.span.section.bpm }
+  }
+
+  const openMenu = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault()
+    const spot = timeAt(event)
+    if (!spot) return
+
+    // held modifiers skip the menu and move the playhead straight to the
+    // moment under the pointer
+    if (event.ctrlKey && event.shiftKey) {
+      onSeek(spot.at)
+      return
+    }
+
+    setMenu({ x: event.clientX, y: event.clientY, at: spot.at, id: spot.id })
+  }
+
+  const addSection = () => {
+    if (!menu) return
+    const inherited = sections.find((section) => section.id === menu.id)?.bpm ?? 120
+    onSectionsChange(
+      sortSections([...sections, createSection(menu.at * duration * 1000, inherited)]),
+    )
+    setMenu(null)
+  }
+
+  const removeSection = () => {
+    if (!menu) return
+    onSectionsChange(sections.filter((section) => section.id !== menu.id))
+    setMenu(null)
+  }
+
   const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!active) return
+    // whichever section is under the pointer is the one the drag edits
+    const target = sectionAt(event)
+    if (!target) return
+    const active = target.span
 
     dragRef.current = {
       clientX: event.clientX,
       clientY: event.clientY,
       offsetMs: active.section.offsetMs,
-      perPixel: ((60000 / active.section.bpm) * beats) / sliceHeightRef.current,
+      perPixel: ((target.bar.end - target.bar.start) * duration * 1000) / sliceHeightRef.current,
       id: active.section.id,
       bpm: active.section.bpm,
       // held at the press, not read while moving: picking up a modifier
@@ -219,7 +311,13 @@ export default function BarGrid({
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current
-    if (!drag) return
+
+    if (!drag) {
+      const target = sectionAt(event)
+      const next = target?.span.section.id ?? null
+      setHovered((current) => (current === next ? current : next))
+      return
+    }
 
     const dx = event.clientX - drag.clientX
     const dy = event.clientY - drag.clientY
@@ -271,6 +369,8 @@ export default function BarGrid({
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
+        onPointerLeave={() => setHovered(null)}
+        onContextMenu={openMenu}
         sx={{
           display: 'block',
           width: '100%',
@@ -279,6 +379,28 @@ export default function BarGrid({
           cursor: 'move',
         }}
       />
+      <Menu
+        open={menu !== null}
+        onClose={() => setMenu(null)}
+        anchorReference="anchorPosition"
+        anchorPosition={menu ? { top: menu.y, left: menu.x } : undefined}
+      >
+        <MenuItem
+          dense
+          onClick={() => {
+            if (menu) onSeek(menu.at)
+            setMenu(null)
+          }}
+        >
+          Move playhead here
+        </MenuItem>
+        <MenuItem dense onClick={addSection}>
+          Add tempo section here
+        </MenuItem>
+        <MenuItem dense disabled={sections.length <= 1} onClick={removeSection}>
+          Remove this section
+        </MenuItem>
+      </Menu>
       <Paper
         elevation={3}
         sx={{

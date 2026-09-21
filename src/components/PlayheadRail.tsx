@@ -7,6 +7,7 @@ import { useRafCallback } from '../useRafCallback'
 import type { Range } from '../range'
 
 type PlayheadRailProps = {
+  position: number
   positionRef: RefObject<number>
   playing: boolean
   enabled: boolean
@@ -20,6 +21,7 @@ const WHEEL_STEP = 0.02
 const FULL: Range = { start: 0, end: 1 }
 
 export default function PlayheadRail({
+  position,
   positionRef,
   playing,
   enabled,
@@ -33,7 +35,7 @@ export default function PlayheadRail({
   const canvasRef = useCanvas((context, width, height) => {
     if (!enabled) return
     drawPlayheadHandle(context, positionRef.current, range, width, height, theme.palette.error.main)
-  }, playing)
+  }, playing, `${range.start}|${range.end}|${position}|${enabled}`)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current

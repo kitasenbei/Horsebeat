@@ -824,6 +824,7 @@ export function autoSliceBeats(span: SectionSpan, width: number): number {
 export type Bar = {
   start: number
   end: number
+  section: string
 }
 
 export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar[] {
@@ -831,11 +832,13 @@ export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar
   if (span.beat <= 0 || available <= 0) return []
 
   const length = span.beat * beats
-  if (length > available + 1e-9) return [{ start: span.start, end: span.end }]
+  if (length > available + 1e-9) {
+    return [{ start: span.start, end: span.end, section: span.section.id }]
+  }
 
   const bars: Bar[] = []
   for (let at = span.start; at + length <= span.end + 1e-9 && bars.length < limit; at += length) {
-    bars.push({ start: at, end: Math.min(1, at + length * SLICE_SPAN) })
+    bars.push({ start: at, end: Math.min(1, at + length * SLICE_SPAN), section: span.section.id })
   }
 
   return bars
@@ -999,6 +1002,45 @@ export const CURSOR_WIDTH = 3
 
 export const GUIDE_WIDTH = 1
 
+export function drawSectionBounds(
+  context: CanvasRenderingContext2D,
+  bars: Bar[],
+  width: number,
+  height: number,
+  color: string,
+  highlight: string | null,
+  highlightColor: string,
+) {
+  if (bars.length === 0) return
+
+  const column = width / bars.length
+
+  context.strokeStyle = color
+  context.lineWidth = 1
+  context.globalAlpha = 0.8
+  for (let index = 1; index < bars.length; index += 1) {
+    if (bars[index].section === bars[index - 1].section) continue
+    const x = Math.round(index * column) + 0.5
+    context.beginPath()
+    context.moveTo(x, 0)
+    context.lineTo(x, height)
+    context.stroke()
+  }
+  context.globalAlpha = 1
+
+  if (!highlight) return
+
+  const first = bars.findIndex((bar) => bar.section === highlight)
+  if (first < 0) return
+  let last = first
+  while (last + 1 < bars.length && bars[last + 1].section === highlight) last += 1
+
+  context.fillStyle = highlightColor
+  context.globalAlpha = 0.12
+  context.fillRect(first * column, 0, (last - first + 1) * column, height)
+  context.globalAlpha = 1
+}
+
 export function drawSliceGuides(
   context: CanvasRenderingContext2D,
   top: number,
@@ -1053,4 +1095,14 @@ export function drawColumnCursor(
       context.fillRect(left, y - CURSOR_WIDTH / 2, column, CURSOR_WIDTH)
     }
   })
+}
+
+// Signatures for useCanvas. They have to cover everything a draw reads, or the
+// canvas keeps a stale picture: cheap to build, and wrong only if incomplete.
+export function curveSignature(curve: Curve): string {
+  return curve.points.map((point) => `${point.x}:${point.y}`).join(',')
+}
+
+export function sectionSignature(sections: Section[]): string {
+  return sections.map((section) => `${section.offsetMs}:${section.bpm}`).join(',')
 }

@@ -74,29 +74,16 @@ function shapeLut(curve: Curve): Float32Array {
   return lut
 }
 
-// A quarter is a stretch of the bar, not an instant in it: the block of rows
-// the compiled view paints between one beat and the next. Read as the average
-// of that stretch, so what the wave stands for is the same thing the eye reads
-// off those rows, and moving the playhead within a quarter leaves it alone.
-function readSpan(
-  envelope: Float32Array | null,
-  lut: Float32Array,
-  from: number,
-  to: number,
-): number {
+// One row of the compiled view, arrived at the way that view arrives at it: the
+// frame the position lands on, held at one, levelled and looked up. What is
+// read is a moment, not a stretch, and which moment is the playhead's own way
+// into a beat carried across to the same way into each of the other quarters.
+function readAt(envelope: Float32Array | null, lut: Float32Array, at: number): number {
   if (!envelope || envelope.length === 0) return 0
-  const last = envelope.length - 1
-  const first = Math.min(last, Math.max(0, (from * envelope.length) | 0))
-  const after = Math.min(envelope.length, Math.max(first + 1, (to * envelope.length) | 0))
-
-  let total = 0
-  for (let frame = first; frame < after; frame += 1) {
-    const value = envelope[frame]
-    if (!Number.isFinite(value)) continue
-    total += lut[((value < 1 ? Math.max(0, value) : 1) * (LEVELS - 1) + 0.5) | 0]
-  }
-
-  return total / Math.max(1, after - first)
+  const frame = Math.min(envelope.length - 1, Math.max(0, (at * envelope.length) | 0))
+  const value = envelope[frame]
+  if (!Number.isFinite(value)) return 0
+  return lut[((value < 1 ? Math.max(0, value) : 1) * (LEVELS - 1) + 0.5) | 0]
 }
 
 export default function LiveWave({
@@ -158,6 +145,7 @@ export default function LiveWave({
       const into = beat > 0 ? at - span.start : 0
       const bar = beat * beats
       const opens = beat > 0 ? span.start + Math.floor(into / bar) * bar : at
+      const offset = beat > 0 ? into - Math.floor(into / beat) * beat : 0
 
       context.lineWidth = 1.5
       context.lineJoin = 'round'
@@ -168,11 +156,11 @@ export default function LiveWave({
       const shares: number[] = []
       for (let step = beats - 1; step >= 0; step -= 1) {
         const index = (standing + step) % beats
-        const from = opens + beat * index
+        const quarter = opens + beat * index + offset
         // past the end there is nothing to read, and drawing it would repeat
-        // the last frames of the track as though they were a beat
-        if (from > 1) continue
-        const share = readSpan(envelope, lutRef.current.lut, from, Math.min(1, from + beat))
+        // the last frame of the track as though it were a beat
+        if (quarter > 1) continue
+        const share = readAt(envelope, lutRef.current.lut, quarter)
         shares.push(share)
         const colour = BEAT_COLOURS[index % BEAT_COLOURS.length]
         context.strokeStyle = theme.palette[colour].main

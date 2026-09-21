@@ -51,7 +51,7 @@ const LAP = SPREAD + WIDTH
 
 // How far in from each end a horse is faded out, so one leaving or arriving
 // thins away instead of being cut off against a straight edge.
-const HAZE = 16
+const HAZE = 34
 
 // One stride to the beat, and only ever that: each beat is the hind legs going
 // into the ground and nothing comes between. Two strides to a beat smash twice

@@ -74,6 +74,19 @@ const CARRIES = LAP / BEATS_A_LAP
 // thins away instead of being cut off against a straight edge.
 const HAZE = 18
 
+// The tempo the herd stands at as it is drawn. Faster music opens the gaps and
+// slower music closes them: a horse at speed leaves the one behind it further
+// back, and a group running hard strings out. The spacing is read off the
+// section the playhead is in, so it changes with the music rather than once.
+const EVEN_BPM = 150
+const SPREAD_LEAST = 0.6
+const SPREAD_MOST = 1.8
+
+function spreadOf(bpm: number): number {
+  if (!(bpm > 0)) return 1
+  return Math.min(SPREAD_MOST, Math.max(SPREAD_LEAST, bpm / EVEN_BPM))
+}
+
 // One stride to the beat, and only ever that: each beat is the hind legs going
 // into the ground and nothing comes between. Two strides to a beat smash twice
 // as often and four smash four times, and a landing that happens on the beat
@@ -90,16 +103,17 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
     const horses = Array.from(node.children) as HTMLElement[]
     const spans = sectionSpans(sections, duration)
 
-    const place = (horse: HTMLElement, index: number, stride: number) => {
+    const place = (horse: HTMLElement, index: number, stride: number, spread: number) => {
       const round = (((stride + HERD[index].lead) % 1) + 1) % 1
       const step = CYCLE[Math.floor(round * CYCLE.length)]
       horse.style.backgroundPositionX = `${-step * WIDTH}px`
 
-      const gone = RUN + HERD[index].at - TRAILS - stride * CARRIES
+      const gone = RUN - (TRAILS - HERD[index].at) * spread - stride * CARRIES
       horse.style.transform = `translateX(${(((gone % LAP) + LAP) % LAP) - WIDTH}px)`
     }
 
-    const park = () => horses.forEach((horse, index) => place(horse, index, 0))
+    const resting = spreadOf(spans[0]?.section.bpm ?? 0)
+    const park = () => horses.forEach((horse, index) => place(horse, index, 0, resting))
 
     if (!playing || spans.length === 0) {
       park()
@@ -112,7 +126,11 @@ export default function Gallop({ sections, duration, positionRef, playing }: Gal
       const beats = span.beat > 0 ? (at - span.start) / span.beat : 0
       const stride = beats * STRIDES_A_BEAT
 
-      for (let index = 0; index < horses.length; index += 1) place(horses[index], index, stride)
+      const spread = spreadOf(span.section.bpm)
+
+      for (let index = 0; index < horses.length; index += 1) {
+        place(horses[index], index, stride, spread)
+      }
 
       frame = requestAnimationFrame(tick)
     })

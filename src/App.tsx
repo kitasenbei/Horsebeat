@@ -335,7 +335,7 @@ export default function App() {
       const buffer = await context.decodeAudioData(await next.arrayBuffer())
       const mono = toMono(buffer)
       setSamples(mono)
-      setEnvelope(computeEnvelope(mono))
+      setEnvelope(computeEnvelope(mono, buffer.sampleRate))
       setPeaks(computePeaks(mono))
       setOnsets(computeOnsets(mono))
       setLoudness(computeLoudness(mono))

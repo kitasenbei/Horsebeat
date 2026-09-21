@@ -1,7 +1,7 @@
 import type { Range } from './range'
 import { applyCurve, type Curve } from './curve'
 import { sectionSpans, type Section, type SectionSpan } from './timing'
-import { ENVELOPE_HOP, type PeakLevel, type Pyramid } from './audio'
+import { type PeakLevel, type Pyramid } from './audio'
 
 export const WAVE_ALPHA = 1
 
@@ -526,13 +526,16 @@ export function drawSamplesVertical(
 
   const rows = Math.ceil(height)
   const widths = new Float32Array(rows)
+  // however many samples a bin covers, taken from the two lengths rather than
+  // assumed, so the drawing follows whatever rate the file decoded at
+  const hop = total / envelope.length
 
   for (let y = 0; y < rows; y += 1) {
     const at = position + ((lineY - y) / height) * span
     const index = at * total
     if (index < 0 || index >= total) continue
 
-    const bin = Math.min(envelope.length - 1, Math.max(0, index / ENVELOPE_HOP - 0.5))
+    const bin = Math.min(envelope.length - 1, Math.max(0, index / hop - 0.5))
     const low = Math.floor(bin)
     const high = Math.min(envelope.length - 1, low + 1)
     const fraction = bin - low

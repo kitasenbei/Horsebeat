@@ -1,4 +1,4 @@
-import { ENVELOPE_HOP, ENVELOPE_RADIUS } from './audio'
+import { envelopeHop } from './audio'
 
 export type Fit = {
   bpm: number
@@ -8,7 +8,16 @@ export type Fit = {
 // How wide the ladder starts and how fine it ends. The last rung is the
 // resolution the app displays, so fitting can reach a value you can read.
 const RISE_SPREAD = 0.25
-const BEAT_FRAMES = 3
+// A hit is an edge rather than a single sample, so a beat is read over a little
+// either side of itself. In milliseconds, not frames: a frame is however long
+// the hop lasts at whatever rate the file decoded to, and the fitting has to
+// mean the same thing whether that was 44.1 or 48 kHz.
+const BEAT_REACH_MS = 4.4
+
+// How far ahead of the hit the envelope's climb peaks. The envelope averages a
+// window either side of each sample, and the climb peaks about half that window
+// ahead of the hit.
+const ENVELOPE_LAG_MS = 11.6
 const COARSE_BPM_STEP = 0.5
 const COARSE_PHASES = 64
 // how far a polish may move from the tempo it was given: wide enough for a
@@ -87,7 +96,9 @@ function scoreFit(
   const frames = envelope.length
   if (frames === 0 || fit.bpm <= 0 || toMs <= fromMs) return 0
 
-  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const perMs = sampleRate / 1000 / envelopeHop(sampleRate)
+  const reach = Math.max(1, Math.round(BEAT_REACH_MS * perMs))
+  const lag = Math.round(ENVELOPE_LAG_MS * perMs)
   const beatMs = 60000 / fit.bpm
   const first = Math.ceil((fromMs - fit.offsetMs) / beatMs)
   const last = Math.floor((toMs - fit.offsetMs) / beatMs)
@@ -97,23 +108,18 @@ function scoreFit(
   let count = 0
 
   for (let beat = first; beat <= last; beat += 1) {
-    // Sampled at the beat itself and interpolated between frames, so a grid is
-    // judged by where it falls rather than by which side of a frame boundary it
-    // landed on. A window of whole frames makes the score jump as the offset
-    // crosses one, which the search then chases.
     // The envelope reads a window either side of each sample, so it starts
-    // climbing before the hit that causes it, and the climb peaks about a
-    // radius early. An offset names the hit, so a radius comes off it to reach
-    // the climb the hit made. Without this the grid the app carries always
-    // scored worse than one searched fresh, and the sweep cut a section every
-    // time it tried to chase the difference.
-    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
+    // climbing before the hit that causes it. An offset names the hit, so the
+    // lag comes off it to reach the climb that hit made. Without this the grid
+    // the app carries always scored worse than one searched fresh, and the fit
+    // cut a section every time it tried to chase the difference.
+    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - lag
     if (centre < 0 || centre >= frames) continue
 
     // the sharpest climb within a few milliseconds, because a hit is an edge
     // with a soft start rather than a single sample
     let peak = 0
-    for (let at = centre - BEAT_FRAMES; at <= centre + BEAT_FRAMES; at += 1) {
+    for (let at = centre - reach; at <= centre + reach; at += 1) {
       if (at >= 0 && at < frames && envelope[at] > peak) peak = envelope[at]
     }
 
@@ -142,7 +148,8 @@ function polishFit(
   fit: Fit,
 ): Fit {
   const frames = envelope.length
-  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const perMs = sampleRate / 1000 / envelopeHop(sampleRate)
+  const lag = Math.round(ENVELOPE_LAG_MS * perMs)
   const beatMs = 60000 / fit.bpm
   const reach = Math.max(1, Math.round((beatMs / 6) * perMs))
 
@@ -157,7 +164,7 @@ function polishFit(
 
   for (let beat = first; beat <= last; beat += 1) {
     // where the climb this beat made should sit, a radius ahead of the hit
-    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
+    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - lag
     if (centre - reach < 0 || centre + reach >= frames) continue
 
     // The middle of the climb. Smoothing turns an attack into a ramp, so the
@@ -176,7 +183,7 @@ function polishFit(
 
     // a rise at one bin reports the energy that entered the smoothing window,
     // which sits half a window ahead of it
-    const at = moment / peak + ENVELOPE_RADIUS
+    const at = moment / peak + lag
 
     // loud beats are better evidence of where the grid belongs than quiet ones
     const ms = at / perMs
@@ -317,7 +324,7 @@ function patternScore(
   bpm: number,
   meter: number,
 ): number {
-  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const perMs = sampleRate / 1000 / envelopeHop(sampleRate)
   const barMs = (60000 / bpm) * Math.max(1, meter)
   const bars = Math.floor((toMs - fromMs) / barMs)
   if (bars < MIN_BARS) return 0
@@ -360,7 +367,7 @@ function barProfile(
   barMs: number,
   rows: number,
 ): Float64Array | null {
-  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const perMs = sampleRate / 1000 / envelopeHop(sampleRate)
   const bars = Math.floor((toMs - fromMs) / barMs)
   if (bars < MIN_BARS) return null
 
@@ -746,7 +753,7 @@ function anchorBeat(
   toMs: number,
   fit: Fit,
 ): Fit {
-  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const perMs = sampleRate / 1000 / envelopeHop(sampleRate)
   const beatMs = 60000 / fit.bpm
   const beats = Math.floor((toMs - fromMs) / beatMs)
   if (beats < MIN_BARS) return fit
@@ -1004,7 +1011,8 @@ function alignDownbeat(
   const bar = Math.max(1, Math.round(meter))
   if (bar < 2) return fit
 
-  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const perMs = sampleRate / 1000 / envelopeHop(sampleRate)
+  const lag = Math.round(ENVELOPE_LAG_MS * perMs)
   const beatMs = 60000 / fit.bpm
   const first = Math.ceil((fromMs - fit.offsetMs) / beatMs)
   const last = Math.floor((toMs - fit.offsetMs) / beatMs)
@@ -1014,7 +1022,7 @@ function alignDownbeat(
 
   for (let beat = first; beat <= last; beat += 1) {
     // where the climb this beat made should sit, a radius ahead of the hit
-    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
+    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - lag
     if (centre < 1 || centre >= envelope.length) continue
 
     let peak = 0

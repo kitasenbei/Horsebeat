@@ -204,17 +204,27 @@ export function buildPyramid(samples: Float32Array): Pyramid {
   return levels
 }
 
-export const ENVELOPE_HOP = 64
+// A frame of the envelope is a length of time, not a count of samples. The
+// browser decodes to whatever its audio clock runs at, usually 48 kHz but 44.1
+// on some machines, and a hop fixed in samples makes the same song a different
+// signal on each. Everything that reads the envelope is written in
+// milliseconds, so the hop is chosen to keep a frame the same length of time.
+const ENVELOPE_FRAMES_A_SECOND = 44100 / 64
 export const ENVELOPE_RADIUS = 8
 const ENVELOPE_GAIN = 1.4
 
-export function computeEnvelope(samples: Float32Array): Float32Array {
-  const bins = Math.max(1, Math.floor(samples.length / ENVELOPE_HOP))
+export function envelopeHop(sampleRate: number): number {
+  return Math.max(1, Math.round(sampleRate / ENVELOPE_FRAMES_A_SECOND))
+}
+
+export function computeEnvelope(samples: Float32Array, sampleRate: number): Float32Array {
+  const hop = envelopeHop(sampleRate)
+  const bins = Math.max(1, Math.floor(samples.length / hop))
   const energy = new Float32Array(bins)
 
   for (let bin = 0; bin < bins; bin += 1) {
-    const start = bin * ENVELOPE_HOP
-    const end = Math.min(samples.length, start + ENVELOPE_HOP)
+    const start = bin * hop
+    const end = Math.min(samples.length, start + hop)
     let sum = 0
     for (let index = start; index < end; index += 1) sum += samples[index] * samples[index]
     energy[bin] = sum / Math.max(1, end - start)

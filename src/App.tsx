@@ -44,7 +44,7 @@ import {
   type Section,
 } from './timing'
 import type { EditMode } from './mode'
-import { DEFAULT_CURVE, type Curve } from './curve'
+import { DEFAULT_CURVE, applyCurve, type Curve } from './curve'
 import { useHistory } from './useHistory'
 
 const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
@@ -58,6 +58,16 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
+// The envelope read through the curve, clamped first because the curve is drawn
+// over nought to one and a loud master runs past it.
+function throughCurve(envelope: Float32Array, curve: Curve): Float32Array {
+  const out = new Float32Array(envelope.length)
+  for (let at = 0; at < envelope.length; at += 1) {
+    out[at] = applyCurve(Math.min(1, envelope[at]), curve)
+  }
+  return out
+}
+
 // How long a frame may spend stepping the fit. Chosen by measurement: at eight
 // the fit takes 10.4 seconds and holds a median frame of 10ms, at fourteen it
 // takes 6.2 but spends half its frames over budget. Eleven keeps the median
@@ -109,6 +119,8 @@ export default function App() {
   const [divisions, setDivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
+  // whether the next fit reads the envelope through the amplitude curve
+  const [curved, setCurved] = useState(false)
   const fitRef = useRef({ meter: DEFAULT_METER })
   const [follow, setFollow] = useState(false)
   const touchedRef = useRef(0)
@@ -267,7 +279,14 @@ export default function App() {
     const durationMs = duration * 1000
     // the meter the counting is done under; publish re-reads it so a change
     // mid-fit still reaches the sections
-    const run = fitTrack(envelope, sampleRate, durationMs, fitRef.current.meter)
+    // The amplitude curve shapes what the fitting reads, the same way it shapes
+    // what the compiled view draws. Measured on four tracks it costs accuracy —
+    // a steady song goes from one section to eight, and a live take from 12.1 ms
+    // to 38.7 — because the curve flattens both ends and the ends carry what
+    // tells one grid from another. It is here to be tried on material where
+    // that is wrong.
+    const read = curved ? throughCurve(envelope, curve) : envelope
+    const run = fitTrack(read, sampleRate, durationMs, fitRef.current.meter)
 
     const publish = (found: Fit[]) => {
       const meter = fitRef.current.meter
@@ -308,7 +327,7 @@ export default function App() {
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [fitting, envelope, duration, sampleRate])
+  }, [fitting, envelope, duration, sampleRate, curved, curve])
 
   const load = async (source: File) => {
     setLoadingName(source.name)
@@ -370,6 +389,8 @@ export default function App() {
         fitting={fitting}
         onFittingChange={setFitting}
         canFit={Boolean(envelope) && sections.length > 0}
+        curved={curved}
+        onCurvedChange={setCurved}
       />
       <Box
         component="main"

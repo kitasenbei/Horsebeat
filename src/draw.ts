@@ -939,6 +939,14 @@ function waveRgb(value: number, colormap = 0) {
 
 const LUT_SIZE = 256
 
+// The curve as a plain table, so the projections read the same shaped value the
+// pixels beside them are painted from rather than the raw source.
+function shapeLut(curve: Curve): Float32Array {
+  const lut = new Float32Array(LUT_SIZE)
+  for (let step = 0; step < LUT_SIZE; step += 1) lut[step] = applyCurve(step / (LUT_SIZE - 1), curve)
+  return lut
+}
+
 function buildLut(curve: Curve, color: (value: number) => [number, number, number]): Uint32Array {
   const lut = new Uint32Array(LUT_SIZE)
 
@@ -986,6 +994,7 @@ export function renderBarLayers(
   if (bars.length === 0) return []
 
   const heights = blockHeights(height, blocks)
+  const shaped = shapeLut(curve)
   const luts = [
     buildLut(curve, (value) => waveRgb(value, colormap)),
     buildLut(curve, levelRgb),
@@ -1039,9 +1048,11 @@ export function renderBarLayers(
         for (let row = 0; row < rows; row += 1) {
           const frame = Math.min(last, Math.max(0, (base + row * step) | 0))
           const value = source[frame * stride + band]
-          profile[row] += value
-          squares[row] += value * value
-          pixels[row * columns + column] = lut[((value < 1 ? value : 1) * top255 + 0.5) | 0]
+          const level = ((value < 1 ? value : 1) * top255 + 0.5) | 0
+          const curved = shaped[level]
+          profile[row] += curved
+          squares[row] += curved * curved
+          pixels[row * columns + column] = lut[level]
         }
       }
     }

@@ -17,6 +17,7 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import GpsFixedIcon from '@mui/icons-material/GpsFixed'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import TuneIcon from '@mui/icons-material/Tune'
 import BeatLights from './BeatLights'
 import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
@@ -37,6 +38,8 @@ type TopBarProps = {
   fitting: boolean
   canFit: boolean
   onFittingChange: (fitting: boolean) => void
+  curved: boolean
+  onCurvedChange: (curved: boolean) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -112,6 +115,8 @@ export default function TopBar({
   onCompiledChange,
   fitting,
   canFit,
+  curved,
+  onCurvedChange,
   onFittingChange,
   canUndo,
   canRedo,
@@ -231,6 +236,24 @@ export default function TopBar({
           <ToggleButton value="fit" aria-label="Fit the grid to the audio" sx={selected('info')}>
             <Tooltip title="Fit the grid to the audio">
               <span>{segment('Fit', <AutoFixHighIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={curved ? 'curved' : null}
+          onChange={() => onCurvedChange(!curved)}
+          sx={PILL}
+        >
+          <ToggleButton
+            value="curved"
+            aria-label="Read the audio through the amplitude curve when fitting"
+            sx={selected('secondary')}
+          >
+            <Tooltip title="Fit through the amplitude curve">
+              <span>{segment('Fit Apply', <TuneIcon fontSize="small" />)}</span>
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>

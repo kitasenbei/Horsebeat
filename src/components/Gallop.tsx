@@ -38,7 +38,7 @@ const HERD = [
 // How far they run, kept apart from how far apart they run. The two were one
 // number, so giving them more ground to cover also pulled the herd apart into
 // four horses on their own errands.
-const RUN = 214
+const RUN = 428
 const TALL = HEIGHT + 5
 
 // The horse runs to the left, so it leaves by the left and comes back at the

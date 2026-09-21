@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react'
+import { useState, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
@@ -18,9 +18,20 @@ const TALL = 64
 
 // The wave is counted in half turns rather than whole ones, and in a whole
 // number of them, which is what pins both ends to the middle: a half turn
-// starts and finishes level whatever it does in between. The count is fixed, so
-// the value shows in the height and nowhere else.
+// starts and finishes level whatever it does in between.
+//
+// Which of the two the value is allowed to move is a click on the strip. Read
+// as height the waves are easy to rank at a glance; read as period they are
+// easier to tell apart where several land on the same height, which is what a
+// bar sitting square on the music looks like. The one not being read is held
+// at a fixed figure so nothing else moves with it.
+const READINGS = ['amplitude', 'period'] as const
+type Reading = (typeof READINGS)[number]
+
 const HALVES = 12
+const HALVES_QUIET = 4
+const HALVES_LOUD = 28
+const STEADY_REACH = 0.7
 
 // What the strip counts as full, taken from the track itself rather than fixed.
 // The envelope is left unclamped where it is measured, and where it lands
@@ -75,6 +86,7 @@ export default function LiveWave({
   playing,
 }: LiveWaveProps) {
   const theme = useTheme()
+  const [reading, setReading] = useState<Reading>('amplitude')
   const sourceRef = useRef<Float32Array | null>(null)
   const ceilingRef = useRef(1)
 
@@ -89,11 +101,16 @@ export default function LiveWave({
       const middle = height / 2
 
       const wave = (share: number) => {
-        const reach = (middle - EDGE) * share
+        const full = middle - EDGE
+        const reach = reading === 'period' ? full * STEADY_REACH : full * share
+        const halves =
+          reading === 'period'
+            ? Math.round(HALVES_QUIET + (HALVES_LOUD - HALVES_QUIET) * share)
+            : HALVES
 
         context.beginPath()
         for (let x = 0; x <= width; x += 1) {
-          const turn = (x / width) * HALVES * Math.PI
+          const turn = (x / width) * halves * Math.PI
           const y = middle - Math.sin(turn) * reach
           if (x === 0) context.moveTo(x, y)
           else context.lineTo(x, y)
@@ -124,19 +141,23 @@ export default function LiveWave({
       }
     },
     playing,
-    `${position}|${envelope?.length}|${sectionSignature(sections)}`,
+    `${position}|${reading}|${envelope?.length}|${sectionSignature(sections)}`,
   )
 
   return (
     <Box
       component="canvas"
       ref={canvasRef}
+      title={`Reading the value as ${reading}`}
+      onClick={() =>
+        setReading((current) => READINGS[(READINGS.indexOf(current) + 1) % READINGS.length])
+      }
       sx={{
         display: 'block',
         width: '100%',
         height: TALL,
         flex: '0 0 auto',
-        pointerEvents: 'none',
+        cursor: 'pointer',
         borderLeft: 1,
         borderBottom: 1,
         borderColor: 'divider',

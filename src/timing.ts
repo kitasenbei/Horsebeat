@@ -7,8 +7,8 @@ export type Section = {
   meter: number
 }
 
-export const MIN_BPM = 20
-export const MAX_BPM = 400
+export const MIN_BPM = 1
+export const MAX_BPM = 1200
 
 export const DEFAULT_METER = 4
 

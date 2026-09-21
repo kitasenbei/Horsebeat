@@ -30,6 +30,18 @@ export const FIT_STEPS = SCALES.length
 // The score a grid earns on this audio: the average envelope height at the
 // beats it predicts, against the average everywhere. One means the beats are
 // no louder than the gaps; higher means the grid is landing on the music.
+const totals = new WeakMap<Float32Array, Float64Array>()
+
+function runningTotal(envelope: Float32Array): Float64Array {
+  const cached = totals.get(envelope)
+  if (cached) return cached
+
+  const sums = new Float64Array(envelope.length + 1)
+  for (let at = 0; at < envelope.length; at += 1) sums[at + 1] = sums[at] + envelope[at]
+  totals.set(envelope, sums)
+  return sums
+}
+
 export function scoreFit(
   envelope: Float32Array,
   sampleRate: number,
@@ -66,12 +78,10 @@ export function scoreFit(
 
   if (count === 0) return 0
 
-  let background = 0
   const from = Math.max(0, Math.round(fromMs * perMs))
   const to = Math.min(frames, Math.round(toMs * perMs))
-  for (let at = from; at < to; at += 1) background += envelope[at]
-
-  const mean = background / Math.max(1, to - from)
+  const sums = runningTotal(envelope)
+  const mean = (sums[to] - sums[from]) / Math.max(1, to - from)
   return mean > 0 ? total / count / mean : 0
 }
 
@@ -241,7 +251,7 @@ export function searchTempo(
   toMs: number,
   minBpm: number,
   maxBpm: number,
-): Fit {
+): { fit: Fit; score: number } {
   let best: Fit = { bpm: minBpm, offsetMs: fromMs }
   let bestScore = 0
 
@@ -284,7 +294,7 @@ export function searchTempo(
     }
   }
 
-  return best
+  return { fit: best, score: bestScore }
 }
 
 // Where a grid stops describing the audio: the first moment its score over a
@@ -365,7 +375,16 @@ export function scanBlock(
   const boundary = previous ? findBoundary(envelope, sampleRate, previous, fromMs, toMs) : fromMs
   const until = Math.min(durationMs, boundary + BLOCK_MS * 2)
   const coarse = searchTempo(envelope, sampleRate, boundary, until, MIN_BPM_SEARCH, MAX_BPM_SEARCH)
-  const local = fitWindow(envelope, sampleRate, boundary, until, coarse)
+
+  // An outro, a fade or a held chord gives the search nothing to lock onto, and
+  // every candidate scores alike: the winner is then whatever the sweep started
+  // at. Carrying the grid on is the honest answer, not a section at 60 bpm.
+  if (coarse.score < WORTH_SPLITTING) return next
+
+  const local = fitWindow(envelope, sampleRate, boundary, until, coarse.fit)
+  if (previous && scoreFit(envelope, sampleRate, boundary, until, previous) >= coarse.score) {
+    return next
+  }
 
   return { ...next, found: [...found, { bpm: local.bpm, offsetMs: beatNear(local, boundary) }] }
 }

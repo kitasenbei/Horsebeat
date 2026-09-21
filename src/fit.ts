@@ -361,12 +361,34 @@ export function findBoundary(
 export const BLOCK_MS = 6000
 const MIN_BPM_SEARCH = 60
 const MAX_BPM_SEARCH = 200
-const SAME_TEMPO = 0.2
+// how far apart two readings have to be before they are two tempos
+// how far apart, as a share of the tempo, two readings have to be before they
+// are two tempos rather than two readings of one
+const SAME_TEMPO = 0.01
+const COUNTED_BAND = 0.04
 const HOLDS_UP = 2
-// how much better a local refit has to be before the tempo is called changed
-const CARRY_RATIO = 0.9
+// how much of its own best refit a running grid has to still be worth
+const CARRY_RATIO = 0.7
 // below this a block has too little to say, so the grid carries on
 const WORTH_SPLITTING = 1.6
+
+// Whether a tempo is the one already running: the same number, or that number
+// counted against two, three or four of its beats. Half a tempo lands on every
+// other beat and scores well wherever the music plays every other beat, which a
+// quiet passage does, and that is the same tempo read slowly rather than a new
+// one.
+function runsAlready(bpm: number, against: number): boolean {
+  if (Math.abs(bpm - against) < against * SAME_TEMPO) return true
+
+  // A count of the same tempo is read off fewer beats and over a stretch that
+  // is playing fewer of them, so it lands further from the arithmetic than a
+  // reading of the tempo itself does.
+  for (const times of [2, 3, 4]) {
+    if (Math.abs(bpm - against * times) < against * times * COUNTED_BAND) return true
+    if (Math.abs(bpm * times - against) < against * COUNTED_BAND) return true
+  }
+  return false
+}
 
 export type Scan = {
   fromMs: number
@@ -396,13 +418,11 @@ export function scanBlock(
     const nudged = fitWindow(envelope, sampleRate, fromMs, toMs, previous)
     const nudgedScore = scoreFit(envelope, sampleRate, fromMs, toMs, nudged)
 
-    // Played music wanders: a block refit moves by a fraction of a beat per
-    // minute even when the tempo has not changed, so asking the refit to stay
-    // put splits a section every block. What matters is whether the grid it
-    // has still explains this stretch nearly as well as the best one would.
-    const settled =
-      Math.abs(nudged.bpm - previous.bpm) < SAME_TEMPO || held >= nudgedScore * CARRY_RATIO
-    if (held > HOLDS_UP && settled) return next
+    // The only question asked of a block is whether the grid already running
+    // still lands on it. Played music wanders, and a refit of any six seconds
+    // finds a slightly better bpm than the one before it, so comparing the two
+    // numbers cuts a section every block and calls a steady song eight tempos.
+    if (held > HOLDS_UP && held >= nudgedScore * CARRY_RATIO) return next
 
     // a fade, a break or a spoken passage is not a tempo change
     if (nudgedScore < WORTH_SPLITTING) return next
@@ -421,6 +441,12 @@ export function scanBlock(
   if (previous && scoreFit(envelope, sampleRate, boundary, until, previous) >= coarse.score) {
     return next
   }
+
+  // A refit of any stretch of a played song comes back a fraction of a beat
+  // from the one before it. Opening a section for that reading turns one tempo
+  // into a list of readings of it, so a section is only worth cutting for a
+  // tempo the grid does not already carry.
+  if (previous && runsAlready(local.bpm, previous.bpm)) return next
 
   return { ...next, found: [...found, { bpm: local.bpm, offsetMs: beatNear(local, boundary) }] }
 }
@@ -449,10 +475,14 @@ const MERGE_KEEPS = 0.94
 // played performance drifting, far short of the half or double that scores well
 const DRIFT_BAND = 0.06
 
-// One merge attempt: if a single grid covers two neighbouring sections about as
-// well as the two cover themselves, they were one section that the scan split.
-// A quiet passage or a fill is enough to make the scan hesitate, and this is
-// what takes those back out.
+// One merge attempt: if the grid of a section runs on through the next one
+// still landing on its beats, the two were one section that the scan cut in
+// half at a quiet passage or a fill.
+//
+// It deliberately does not ask whether some grid could cover both. Refit over a
+// long enough window, one grid covers almost any pair well enough to look like
+// an answer, and a song with three tempos comes back with one. The question is
+// only whether the tempo already running kept its alignment.
 export function mergeStep(
   envelope: Float32Array,
   sampleRate: number,
@@ -465,26 +495,19 @@ export function mergeStep(
     const endMs = index + 2 < found.length ? found[index + 2].offsetMs : durationMs
     if (endMs - startMs < 4000) continue
 
-    const first = scoreFit(envelope, sampleRate, startMs, middleMs, found[index])
-    const second = scoreFit(envelope, sampleRate, middleMs, endMs, found[index + 1])
-    const apart =
-      (first * (middleMs - startMs) + second * (endMs - middleMs)) / (endMs - startMs)
+    // two readings of the same tempo, or two tempos?
+    if (Math.abs(found[index].bpm - found[index + 1].bpm) > found[index].bpm * SAME_TEMPO) continue
 
-    // seeded from either neighbour, because whichever tempo is right for the
-    // pair is usually right for one of them already
-    let best = fitWindow(envelope, sampleRate, startMs, endMs, found[index])
-    let bestScore = scoreFit(envelope, sampleRate, startMs, endMs, best)
-    const other = fitWindow(envelope, sampleRate, startMs, endMs, found[index + 1])
-    const otherScore = scoreFit(envelope, sampleRate, startMs, endMs, other)
-    if (otherScore > bestScore) {
-      best = other
-      bestScore = otherScore
-    }
+    // The same bpm starting on a different beat is still a cut worth keeping,
+    // so this asks the earlier grid to explain the later stretch as well as
+    // that stretch explains itself.
+    const carried = scoreFit(envelope, sampleRate, middleMs, endMs, found[index])
+    const own = scoreFit(envelope, sampleRate, middleMs, endMs, found[index + 1])
+    if (carried < own * MERGE_KEEPS) continue
 
-    if (bestScore < apart * MERGE_KEEPS) continue
-
+    const joined = fitWindow(envelope, sampleRate, startMs, endMs, found[index])
     const merged = [...found]
-    merged.splice(index, 2, { bpm: best.bpm, offsetMs: beatNear(best, startMs) })
+    merged.splice(index, 2, { bpm: joined.bpm, offsetMs: beatNear(joined, startMs) })
     return { found: merged, merged: true }
   }
 

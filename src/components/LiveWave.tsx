@@ -12,13 +12,11 @@ type LiveWaveProps = {
 
 const TALL = 64
 
-// The wave is counted in half turns rather than whole ones, and in whole
-// numbers of them, which is what pins both ends to the middle: a half turn
-// starts and finishes level whatever else it does in between. The value picks
-// how many, so a loud moment is a tall tight wave and a quiet one a low slack
-// one, tied down at the left and the right either way.
-const HALVES_QUIET = 4
-const HALVES_LOUD = 28
+// The wave is counted in half turns rather than whole ones, and in a whole
+// number of them, which is what pins both ends to the middle: a half turn
+// starts and finishes level whatever it does in between. The count is fixed, so
+// the value shows in the height and nowhere else.
+const HALVES = 12
 
 // What the strip counts as full, taken from the track itself rather than fixed.
 // The envelope is left unclamped where it is measured, and where it lands
@@ -79,11 +77,10 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
 
       const wave = (share: number) => {
         const reach = (middle - EDGE) * share
-        const halves = Math.round(HALVES_QUIET + (HALVES_LOUD - HALVES_QUIET) * share)
 
         context.beginPath()
         for (let x = 0; x <= width; x += 1) {
-          const turn = (x / width) * halves * Math.PI
+          const turn = (x / width) * HALVES * Math.PI
           const y = middle - Math.sin(turn) * reach
           if (x === 0) context.moveTo(x, y)
           else context.lineTo(x, y)

@@ -37,7 +37,7 @@ const EDGE = 3
 // and the rest drop away quickly, so the trail reads as a direction of travel
 // instead of five equal lines. The length of the list is the length of the
 // trail.
-const GHOST_FADES = [0.06, 0.1, 0.16, 0.26, 0.42]
+const GHOST_FADES = [0.18, 0.28, 0.4, 0.55, 0.72]
 
 function ceilingOf(envelope: Float32Array | null): number {
   if (!envelope || envelope.length === 0) return 1

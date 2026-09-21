@@ -797,6 +797,59 @@ function tempoOf(
   return mine > theirs * TAKES_OVER ? found : given
 }
 
+// How finely the averaged beat is read when the offset is placed, and where on
+// the climb onto it the beat is taken to be.
+const BEAT_ROWS = 512
+const CLIMB_SHARE = 0.55
+
+// Where the beat sits, read off every beat of the section at once.
+//
+// A fit lands on whatever the scoring liked, and on real instruments that is
+// late: the envelope averages a window either side of each sample, so a soft
+// attack reaches its loudest well after the note began, and a grid placed there
+// sits behind the music. What a player hears as the beat, and what a charter
+// marks, is the climb onto the note rather than the top of it. So every beat of
+// the section is averaged into one, the strongest climb in it is found, and the
+// offset is moved to partway up that climb.
+export function anchorBeat(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+  fit: Fit,
+): Fit {
+  const perMs = sampleRate / 1000 / ENVELOPE_HOP
+  const beatMs = 60000 / fit.bpm
+  const beats = Math.floor((toMs - fromMs) / beatMs)
+  if (beats < MIN_BARS) return fit
+
+  const rows = new Float64Array(BEAT_ROWS)
+  for (let beat = 0; beat < beats; beat += 1) {
+    for (let row = 0; row < BEAT_ROWS; row += 1) {
+      const at = (fit.offsetMs + (beat + row / BEAT_ROWS) * beatMs) * perMs
+      const low = Math.floor(at)
+      if (low < 1 || low + 1 >= envelope.length) continue
+
+      const part = at - low
+      const here = envelope[low] + (envelope[low + 1] - envelope[low]) * part
+      const behind = envelope[low - 1] + (envelope[low] - envelope[low - 1]) * part
+      if (here > behind) rows[row] += here - behind
+    }
+  }
+
+  let peak = 0
+  for (let row = 0; row < BEAT_ROWS; row += 1) if (rows[row] > rows[peak]) peak = row
+  if (rows[peak] <= 0) return fit
+
+  let start = peak
+  while (start > 0 && rows[start] > rows[peak] * CLIMB_SHARE) start -= 1
+
+  // a climb found late in the averaged beat belongs to the beat after it
+  const moved = (start / BEAT_ROWS) * beatMs
+  const shift = moved > beatMs / 2 ? moved - beatMs : moved
+  return { bpm: fit.bpm, offsetMs: Math.max(0, fit.offsetMs + shift) }
+}
+
 export type Part = {
   fromMs: number
   toMs: number
@@ -818,7 +871,8 @@ function settleSpan(
   const polished = fitWindow(envelope, sampleRate, fromMs, toMs, phased.fit)
   const settled = settleFit(envelope, sampleRate, fromMs, toMs, polished, meter)
   const anchored = { bpm: settled.bpm, offsetMs: beatNear(settled, fromMs) }
-  const fit = alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
+  const barred = alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
+  const fit = anchorBeat(envelope, sampleRate, fromMs, toMs, barred)
   return { fromMs, toMs, fit, flat: flatnessOf(envelope, sampleRate, fromMs, toMs, fit, meter) }
 }
 

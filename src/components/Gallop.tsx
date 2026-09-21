@@ -36,16 +36,17 @@ const HERD = [
 const SPREAD = HERD[HERD.length - 1].at + WIDTH
 const TALL = HEIGHT + 5
 
-// What a gallop wants to look like, in strides a minute. A horse at full pelt
-// is nearer 150, but a sprite reads slow at its true rate, and this is the
-// speed the gait looks like it means.
-const WANTS_A_MINUTE = 200
+// What the gallop wants to look like, in strides a minute. A horse at full pelt
+// is nearer 150, but six frames read slow at any honest rate, and this is the
+// speed the gait looks like it means. At the top of it the sprite is turning
+// over fifty frames a second, which is as much as a screen can show.
+const WANTS_A_MINUTE = 400
 
 // Strides to the beat, always a doubling or a halving so that a hoof lands on
 // the beat whichever way it goes: at two, one lands on the beat and one
 // between; at a half, every other beat. The one chosen is whichever puts the
 // gallop nearest the speed it wants to run at.
-const RATIOS = [0.5, 1, 2, 4]
+const RATIOS = [0.5, 1, 2, 4, 8]
 
 function stridesABeat(bpm: number): number {
   let best = RATIOS[0]

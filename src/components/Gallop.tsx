@@ -41,16 +41,21 @@ const HERD = [
 const RUN = 214
 const TALL = HEIGHT + 5
 
-// How far a stride carries a horse. A galloping horse covers well over its own
-// length in a stride; going much past this starts to look like the legs are
-// sliding under a body that is going somewhere on its own.
-const CARRIES = 74
-
 // The horse runs to the left, so it leaves by the left and comes back at the
 // right, and because it is the head that is furthest left it is the head that
 // arrives first. A lap is the strip plus a whole horse, so it is fully gone
 // before it is back.
 const LAP = RUN + WIDTH
+
+// A lap to the bar. The herd crosses, leaves, and is back where it started on
+// the next downbeat, so where a horse stands is as much a reading of the music
+// as which frame it is showing.
+const BEATS_A_LAP = 4
+
+// What that leaves for a stride to carry: near enough its own length, which is
+// what keeps the feet looking like they are driving the horse rather than
+// sliding under it.
+const CARRIES = LAP / BEATS_A_LAP
 
 // How far in from each end a horse is faded out, so one leaving or arriving
 // thins away instead of being cut off against a straight edge.

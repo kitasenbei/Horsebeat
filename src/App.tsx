@@ -33,7 +33,7 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
-import { refineScan, scanBlock, type Fit, type Scan } from './fit'
+import { mergeStep, refineScan, scanBlock, type Fit, type Scan } from './fit'
 import {
   createSection,
   DEFAULT_METER,
@@ -285,8 +285,20 @@ export default function App() {
         polish += 1
         publish(found)
       } else {
-        setFitting(false)
-        return
+        // a quiet passage or a fill can make the scan split one section in two,
+        // so neighbours that a single grid covers are put back together, and
+        // whatever comes out of a merge is re-fitted over its new span
+        const result = mergeStep(envelope, sampleRate, durationMs, scan.found)
+        if (!result.merged) {
+          setFitting(false)
+          return
+        }
+
+        const found = result.found.map((_, index) =>
+          refineScan(envelope, sampleRate, durationMs, result.found, index),
+        )
+        scan = { ...scan, found }
+        publish(found)
       }
 
       frame = requestAnimationFrame(tick)

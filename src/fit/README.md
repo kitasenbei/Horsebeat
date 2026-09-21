@@ -1,6 +1,6 @@
-# HorseBeat tempo fitting
+# Tempo fitting
 
-Status: working, incomplete. Describes what the code in `src/fit/` does as of
+Status: working, incomplete. Describes what the code in this folder does as of
 this commit, and what is known not to work.
 
 ## 1. The problem
@@ -30,7 +30,7 @@ different signal on each.
 
 ## 3. What a grid is worth
 
-Four readings, in `src/fit/score.ts`. None of them settles what a beat is on its
+Four readings, in `score.ts`. None of them settles what a beat is on its
 own, and the rest of the system exists to arbitrate between them.
 
 **`scoreFit`** — the comb. Walk the beats a grid predicts, take the sharpest

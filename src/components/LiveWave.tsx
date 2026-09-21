@@ -46,10 +46,20 @@ const STRIPE = 10
 const GAP = 4
 const POINT = 16
 
-// How together the quarters were, drawn as a colour: the spread between the
-// tallest and the shortest of them, which is nought when they land on one
-// another and one when a beat is full while another is empty. Green where they
-// agree, red where they do not, by way of the hues between.
+// How together the quarters were, drawn as a colour. The spread between the
+// tallest and the shortest is read against their average rather than on its
+// own: a loud bar differs by more than a quiet one without being any less
+// together, and taken raw the reading is green almost everywhere, since on real
+// music half of all bars sit inside a spread of 0.14 out of a possible 1 and
+// ninety-nine in a hundred stay under 0.74.
+//
+// Against the average the same measurements run 0.22 at the middle and 0.77 at
+// the ninetieth, so a relative spread near four fifths is what a scattered bar
+// actually looks like and is where the band is fully red. The floor keeps a
+// silent stretch, where every quarter is nothing and the average is nothing
+// too, from dividing its way to a false alarm.
+const SCATTERED = 0.8
+const QUIET_FLOOR = 0.02
 const AGREED_HUE = 120
 
 // One wave a quarter of the bar, and always the bar the playhead is standing
@@ -181,7 +191,9 @@ export default function LiveWave({
       const rows = pastRef.current
       if (shares.length > 1) {
         const spread = Math.max(...shares) - Math.min(...shares)
-        rows.unshift(Math.max(0, 1 - spread))
+        const mean = shares.reduce((sum, share) => sum + share, 0) / shares.length
+        const apart = spread / Math.max(mean, QUIET_FLOOR)
+        rows.unshift(Math.max(0, 1 - Math.min(1, apart / SCATTERED)))
       }
       const kept = Math.max(1, Math.ceil(width / POINT))
       if (rows.length > kept) rows.length = kept

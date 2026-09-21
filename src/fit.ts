@@ -190,14 +190,25 @@ export function fitWindow(
 ): Fit {
   let fit = seed
 
+  // The ladder repeats a rung while it keeps improving, so left alone it can
+  // walk a beat at a time from the tempo all the way down to half of it: a
+  // sparser grid keeps only the strong beats and scores better for it. This is
+  // a correction, not a search, so it stays within a few per cent of the seed
+  // and anything further has to come from searchTempo.
+  const low = seed.bpm * (1 - DRIFT_BAND)
+  const high = seed.bpm * (1 + DRIFT_BAND)
+  const inBand = (candidate: Fit) => candidate.bpm >= low && candidate.bpm <= high
+
   for (let step = 0; step < FIT_STEPS; ) {
     const result = refineFit(envelope, sampleRate, fromMs, toMs, fit, step)
-    if (result.moved) fit = result.fit
+    if (result.moved && inBand(result.fit)) fit = result.fit
     else step += 1
   }
 
   for (let round = 0; round < 3; round += 1) {
-    fit = polishFit(envelope, sampleRate, fromMs, toMs, fit)
+    const polished = polishFit(envelope, sampleRate, fromMs, toMs, fit)
+    if (!inBand(polished)) break
+    fit = polished
   }
 
   return fit
@@ -379,6 +390,9 @@ export function refineScan(
 }
 
 const MERGE_KEEPS = 0.94
+// how far a refit may move from the tempo it was given: wide enough for a
+// played performance drifting, far short of the half or double that scores well
+const DRIFT_BAND = 0.06
 
 // One merge attempt: if a single grid covers two neighbouring sections about as
 // well as the two cover themselves, they were one section that the scan split.

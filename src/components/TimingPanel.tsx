@@ -11,6 +11,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import CheckIcon from '@mui/icons-material/Check'
 import { writeTimingPoints } from '../osu'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
@@ -188,6 +189,16 @@ export default function TimingPanel({
         <Typography variant="caption" sx={{ flex: 1 }}>
           Tempo sections
         </Typography>
+        <IconButton
+          size="small"
+          title="Remove every section"
+          aria-label="Remove every section"
+          disabled={sections.length === 0}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onSectionsChange([])}
+        >
+          <DeleteSweepIcon fontSize="small" />
+        </IconButton>
         <IconButton
           size="small"
           title="Copy timing points"

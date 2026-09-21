@@ -1,9 +1,9 @@
 # Builds the bundle and copies it to a host that already terminates TLS with a
 # shared Caddy container.
 #
-# DEPLOY_STACK_DIR is that stack's directory on the host and DEPLOY_PROJECT its
-# compose project name, both repository variables, so no host of ours is named
-# in this file.
+# DEPLOY_STACK_DIR is the directory on the host holding that stack's site block
+# directory, and EDGE_NETWORK is the docker network its Caddy sits on. Both are
+# repository variables, so no host of ours is named in this file.
 #
 # Every docker call over ssh ends in `</dev/null`. The script arrives on
 # standard input, and a docker command that attaches stdin eats the rest of it,
@@ -72,19 +72,18 @@ jobs:
               env:
                   DESTINATION: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER_IP }}
                   STACK: ${{ vars.DEPLOY_STACK_DIR }}
-                  COMPOSE_PROJECT: ${{ vars.DEPLOY_PROJECT }}
+                  EDGE_NETWORK: ${{ vars.EDGE_NETWORK }}
               run: |
-                  # Only our own service is named, so everything else on the
-                  # host is left alone. Caddy is reloaded rather than recreated
-                  # for the same reason: a recreate from these two files would
-                  # lose the settings its own stack gives it.
                   ssh -i ~/.ssh/id_deploy "$DESTINATION" \
-                      "STACK='$STACK' COMPOSE_PROJECT='$COMPOSE_PROJECT' bash -s" <<'REMOTE'
+                      "STACK='$STACK' EDGE_NETWORK='$EDGE_NETWORK' bash -s" <<'REMOTE'
                   set -e
                   cd "$STACK"
-                  export COMPOSE_PROJECT
-                  docker compose -f docker-compose.yml -f docker-compose.horsebeat.yml \
-                      up -d horsebeat-web </dev/null
-                  docker compose exec -T caddy \
+                  export EDGE_NETWORK
+                  docker compose -f docker-compose.horsebeat.yml up -d </dev/null
+
+                  # Caddy belongs to the other stack, so it is reloaded in
+                  # place. Recreating it from this file would lose everything
+                  # that stack gives it.
+                  docker exec -i "$(docker ps -qf name=caddy | head -n1)" \
                       caddy reload --config /etc/caddy/Caddyfile </dev/null
                   REMOTE

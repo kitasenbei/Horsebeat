@@ -33,7 +33,20 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz } from './osu'
-import { mergeStep, refineScan, scanBlock, type Fit, type Scan } from './fit'
+import {
+  beatNear,
+  bestPhase,
+  fitWindow,
+  mergeStep,
+  newVote,
+  pickTempo,
+  refineScan,
+  scanBlock,
+  voteStep,
+  type Fit,
+  type Scan,
+  type Vote,
+} from './fit'
 import {
   createSection,
   DEFAULT_METER,
@@ -58,6 +71,8 @@ type Doc = {
 const FOLLOW_EDGE = 0.8
 const FOLLOW_LEAD = 0.2
 const FOLLOW_GRACE = 2000
+// how much of the start the voted tempo is given to find its phase against
+const SEED_MS = 30000
 const DEFAULT_BPM = 120
 
 export default function App() {
@@ -260,6 +275,7 @@ export default function App() {
     if (!fitting || !envelope || duration <= 0) return
 
     const durationMs = duration * 1000
+    let vote: Vote | null = newVote()
     let scan: Scan = { fromMs: 0, found: [], done: false }
     let polish = 0
 
@@ -275,7 +291,24 @@ export default function App() {
     }
 
     let frame = requestAnimationFrame(function tick() {
-      if (!scan.done) {
+      // First the track is counted end to end, a window a frame. Every stretch
+      // of a song reads as several tempos and a slow count of a busy stretch
+      // often reads best of all, so the tempo is the one the whole track keeps
+      // voting for rather than whatever the opening seconds fit.
+      if (vote) {
+        if (!vote.done) {
+          vote = voteStep(envelope, sampleRate, durationMs, vote)
+        } else {
+          const voted = pickTempo(vote)
+          if (voted !== null) {
+            const until = Math.min(durationMs, SEED_MS)
+            const seed = fitWindow(envelope, sampleRate, 0, until, bestPhase(envelope, sampleRate, 0, until, voted).fit)
+            scan = { ...scan, voted, found: [{ bpm: seed.bpm, offsetMs: beatNear(seed, 0) }] }
+            publish(scan.found)
+          }
+          vote = null
+        }
+      } else if (!scan.done) {
         scan = scanBlock(envelope, sampleRate, durationMs, scan)
         publish(scan.found)
       } else if (polish < scan.found.length) {

@@ -14,6 +14,8 @@ const COARSE_PHASES = 64
 const BOUNDARY_STEP_MS = 250
 const BOUNDARY_DROP = 0.6
 const DENSER_KEEPS = 0.78
+// how well the running tempo has to poll on a stretch to keep it
+const VOTE_KEEPS = 0.6
 
 const SCALES = [
   { bpm: 1, ms: 40 },
@@ -98,7 +100,14 @@ export function scoreFit(
     // judged by where it falls rather than by which side of a frame boundary it
     // landed on. A window of whole frames makes the score jump as the offset
     // crosses one, which the search then chases.
-    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs)
+    // The envelope reads a window either side of each sample, so it starts
+    // climbing before the hit that causes it and the climb peaks about a radius
+    // early. polishFit adds that radius back when it reports an offset, and
+    // this takes it off again, so the grid the app shows is the one that scores
+    // best here. Without it every fit the app carries scored worse than a grid
+    // searched fresh, and the sweep cut a section trying to chase the
+    // difference.
+    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
     if (centre < 0 || centre >= frames) continue
 
     // the sharpest climb within a few milliseconds, because a hit is an edge
@@ -147,7 +156,14 @@ export function polishFit(
   let sumKT = 0
 
   for (let beat = first; beat <= last; beat += 1) {
-    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs)
+    // The envelope reads a window either side of each sample, so it starts
+    // climbing before the hit that causes it and the climb peaks about a radius
+    // early. polishFit adds that radius back when it reports an offset, and
+    // this takes it off again, so the grid the app shows is the one that scores
+    // best here. Without it every fit the app carries scored worse than a grid
+    // searched fresh, and the sweep cut a section trying to chase the
+    // difference.
+    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
     if (centre - reach < 0 || centre + reach >= frames) continue
 
     // The middle of the climb. Smoothing turns an attack into a ramp, so the
@@ -280,53 +296,24 @@ export function beatNear(fit: Fit, atMs: number): number {
 // can only walk a beat or two from where it starts, so anything that is not a
 // small correction has to begin here or it lands on a harmonic: at 96 bpm a
 // grid at 144 hits two beats in three and scores well enough to look right.
-export function searchTempo(
+// The best this tempo can do on this stretch, over every phase of one beat.
+export function bestPhase(
   envelope: Float32Array,
   sampleRate: number,
   fromMs: number,
   toMs: number,
-  minBpm: number,
-  maxBpm: number,
+  bpm: number,
 ): { fit: Fit; score: number } {
-  let best: Fit = { bpm: minBpm, offsetMs: fromMs }
+  const beatMs = 60000 / bpm
+  let best: Fit = { bpm, offsetMs: fromMs }
   let bestScore = 0
 
-  for (let bpm = minBpm; bpm <= maxBpm; bpm += COARSE_BPM_STEP) {
-    const beatMs = 60000 / bpm
-
-    for (let phase = 0; phase < COARSE_PHASES; phase += 1) {
-      const candidate = { bpm, offsetMs: fromMs + (phase / COARSE_PHASES) * beatMs }
-      const score = scoreFit(envelope, sampleRate, fromMs, toMs, candidate)
-      if (score > bestScore) {
-        bestScore = score
-        best = candidate
-      }
-    }
-  }
-
-  // A grid at half the tempo hits every other beat, and every one of those is
-  // a real hit, so it scores as well as the truth or better. Whenever a denser
-  // grid holds up nearly as well, it is the honest answer.
-  for (const multiple of [2, 3, 2]) {
-    const faster = best.bpm * multiple
-    if (faster > maxBpm) continue
-
-    const beatMs = 60000 / faster
-    let bestPhase = best
-    let phaseScore = 0
-
-    for (let phase = 0; phase < COARSE_PHASES; phase += 1) {
-      const candidate = { bpm: faster, offsetMs: fromMs + (phase / COARSE_PHASES) * beatMs }
-      const score = scoreFit(envelope, sampleRate, fromMs, toMs, candidate)
-      if (score > phaseScore) {
-        phaseScore = score
-        bestPhase = candidate
-      }
-    }
-
-    if (phaseScore >= bestScore * DENSER_KEEPS) {
-      best = bestPhase
-      bestScore = phaseScore
+  for (let phase = 0; phase < COARSE_PHASES; phase += 1) {
+    const candidate = { bpm, offsetMs: fromMs + (phase / COARSE_PHASES) * beatMs }
+    const score = scoreFit(envelope, sampleRate, fromMs, toMs, candidate)
+    if (score > bestScore) {
+      bestScore = score
+      best = candidate
     }
   }
 
@@ -394,6 +381,114 @@ export type Scan = {
   fromMs: number
   found: Fit[]
   done: boolean
+  // what the track as a whole reads as, if it has been counted yet
+  voted?: number
+}
+
+// How long a stretch each vote is cast over. Long enough that a bar or two of
+// something else does not decide it, short enough that a song with two tempos
+// still votes for both.
+export const VOTE_WINDOW_MS = 12000
+
+export type Vote = {
+  fromMs: number
+  totals: Float64Array
+  done: boolean
+}
+
+function votedBpms(): number[] {
+  const bpms: number[] = []
+  for (let bpm = MIN_BPM_SEARCH; bpm <= MAX_BPM_SEARCH; bpm += COARSE_BPM_STEP) bpms.push(bpm)
+  return bpms
+}
+
+export function newVote(): Vote {
+  return { fromMs: 0, totals: new Float64Array(votedBpms().length), done: false }
+}
+
+// One window's vote on what the whole track is. Every tempo is scored over the
+// window and the window's own best is called one vote, so a loud chorus and a
+// quiet verse count the same and no stretch decides the track by being louder
+// than the rest of it.
+export function voteStep(
+  envelope: Float32Array,
+  sampleRate: number,
+  durationMs: number,
+  vote: Vote,
+): Vote {
+  const fromMs = vote.fromMs
+  const toMs = Math.min(durationMs, fromMs + VOTE_WINDOW_MS)
+  const next = { ...vote, fromMs: toMs, done: toMs >= durationMs }
+  if (toMs - fromMs < VOTE_WINDOW_MS / 2) return { ...next, done: true }
+
+  const bpms = votedBpms()
+  const scores = bpms.map((bpm) => bestPhase(envelope, sampleRate, fromMs, toMs, bpm).score)
+  const top = Math.max(...scores)
+  if (top <= 0) return next
+
+  const totals = vote.totals.slice()
+  for (let index = 0; index < bpms.length; index += 1) totals[index] += scores[index] / top
+  return { ...next, totals }
+}
+
+// What the track reads as. The count that wins outright is often half or a
+// third of the tempo, because a sparser grid is asked about fewer beats and
+// they are the ones certain to be played; where the denser count holds up
+// nearly as well over the whole track, that is the tempo.
+// What a stretch reads as, counted the same way the whole track is counted.
+// A single window's best is not enough to open a section on: where the music
+// thins out, one loose slow grid wins one window and the next window picks
+// something else again, while a vote asks several and keeps what they agree on.
+export function voteTempo(
+  envelope: Float32Array,
+  sampleRate: number,
+  fromMs: number,
+  toMs: number,
+): { bpm: number | null; vote: Vote } {
+  let vote: Vote = { fromMs, totals: new Float64Array(votedBpms().length), done: false }
+  while (!vote.done && vote.fromMs < toMs) vote = voteStep(envelope, sampleRate, toMs, vote)
+  return { bpm: pickTempo(vote), vote }
+}
+
+// How well one tempo polled. Tempos are compared by this rather than by their
+// score, because a score is read off however many beats that tempo has and a
+// slow grid is asked about fewer of them; a vote is taken against the same
+// field of candidates every time.
+// How well a tempo polled, counted its own way or as any of the counts it
+// shares a pulse with. A stretch that plays every other beat polls for half the
+// tempo, and that is a vote for the same pulse, not against it.
+export function polledAs(vote: Vote, bpm: number): number {
+  let best = voteFor(vote, bpm)
+  for (const times of [2, 3, 4]) {
+    best = Math.max(best, voteFor(vote, bpm / times), voteFor(vote, bpm * times))
+  }
+  return best
+}
+
+export function topVote(vote: Vote): number {
+  let top = 0
+  for (const total of vote.totals) if (total > top) top = total
+  return top
+}
+
+export function voteFor(vote: Vote, bpm: number): number {
+  const index = Math.round((bpm - MIN_BPM_SEARCH) / COARSE_BPM_STEP)
+  return index >= 0 && index < vote.totals.length ? vote.totals[index] : 0
+}
+
+export function pickTempo(vote: Vote): number | null {
+  const bpms = votedBpms()
+  const voteOf = (bpm: number) => voteFor(vote, bpm)
+
+  let top = 0
+  for (const bpm of bpms) if (voteOf(bpm) > voteOf(top)) top = bpm
+  if (voteOf(top) <= 0) return null
+
+  let picked = top
+  for (const times of [2, 3, 4]) {
+    if (voteOf(top * times) >= voteOf(top) * DENSER_KEEPS) picked = top * times
+  }
+  return picked
 }
 
 // One block of the scan: carry the previous grid on if it still describes this
@@ -411,7 +506,7 @@ export function scanBlock(
 
   const found = scan.found
   const previous = found[found.length - 1]
-  const next = { fromMs: toMs, found, done: toMs >= durationMs }
+  const next = { ...scan, fromMs: toMs, found, done: toMs >= durationMs }
 
   if (previous) {
     const held = scoreFit(envelope, sampleRate, fromMs, toMs, previous)
@@ -423,32 +518,43 @@ export function scanBlock(
     // finds a slightly better bpm than the one before it, so comparing the two
     // numbers cuts a section every block and calls a steady song eight tempos.
     if (held > HOLDS_UP && held >= nudgedScore * CARRY_RATIO) return next
-
-    // a fade, a break or a spoken passage is not a tempo change
-    if (nudgedScore < WORTH_SPLITTING) return next
   }
 
+  // Past here the grid has stopped describing the block, and the question is
+  // what replaced it. Everything the block is judged by is re-read over the
+  // stretch after the break rather than over the block that noticed it.
   const boundary = previous ? findBoundary(envelope, sampleRate, previous, fromMs, toMs) : fromMs
-  const until = Math.min(durationMs, boundary + BLOCK_MS * 2)
-  const coarse = searchTempo(envelope, sampleRate, boundary, until, MIN_BPM_SEARCH, MAX_BPM_SEARCH)
+  const until = Math.min(durationMs, boundary + BLOCK_MS * 4)
+  const local = voteTempo(envelope, sampleRate, boundary, until)
+  if (local.bpm === null) return next
 
-  // An outro, a fade or a held chord gives the search nothing to lock onto, and
-  // every candidate scores alike: the winner is then whatever the sweep started
-  // at. Carrying the grid on is the honest answer, not a section at 60 bpm.
+  const coarse = bestPhase(envelope, sampleRate, boundary, until, local.bpm)
+
+  // An outro, a fade or a held chord gives the vote nothing to lock onto, and
+  // every candidate reads alike. Carrying the grid on is the honest answer
+  // there, not a section at 60 bpm.
   if (coarse.score < WORTH_SPLITTING) return next
 
-  const local = fitWindow(envelope, sampleRate, boundary, until, coarse.fit)
-  if (previous && scoreFit(envelope, sampleRate, boundary, until, previous) >= coarse.score) {
-    return next
-  }
+  const winner = topVote(local.vote)
+
+  // The tempo already running is put back on the ballot. If it polls nearly as
+  // well over this stretch as anything else does, the stretch has not changed
+  // tempo, it has only gone quiet enough for something else to edge ahead.
+  if (previous && polledAs(local.vote, previous.bpm) >= winner * VOTE_KEEPS) return next
+
+  // and so is what the whole track reads as, so a thin passage cannot open a
+  // section at a tempo the song never plays
+  if (scan.voted !== undefined && polledAs(local.vote, scan.voted) >= winner * VOTE_KEEPS) return next
+
+  const fit = fitWindow(envelope, sampleRate, boundary, until, coarse.fit)
 
   // A refit of any stretch of a played song comes back a fraction of a beat
   // from the one before it. Opening a section for that reading turns one tempo
   // into a list of readings of it, so a section is only worth cutting for a
   // tempo the grid does not already carry.
-  if (previous && runsAlready(local.bpm, previous.bpm)) return next
+  if (previous && runsAlready(fit.bpm, previous.bpm)) return next
 
-  return { ...next, found: [...found, { bpm: local.bpm, offsetMs: beatNear(local, boundary) }] }
+  return { ...next, found: [...found, { bpm: fit.bpm, offsetMs: beatNear(fit, boundary) }] }
 }
 
 // Once the spans are known, fit each one over its own audio rather than over
@@ -538,7 +644,14 @@ export function alignDownbeat(
   const counts = new Float64Array(bar)
 
   for (let beat = first; beat <= last; beat += 1) {
-    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs)
+    // The envelope reads a window either side of each sample, so it starts
+    // climbing before the hit that causes it and the climb peaks about a radius
+    // early. polishFit adds that radius back when it reports an offset, and
+    // this takes it off again, so the grid the app shows is the one that scores
+    // best here. Without it every fit the app carries scored worse than a grid
+    // searched fresh, and the sweep cut a section trying to chase the
+    // difference.
+    const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
     if (centre < 1 || centre >= envelope.length) continue
 
     let peak = 0

@@ -19,6 +19,7 @@ import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import TuneIcon from '@mui/icons-material/Tune'
 import BeatLights from './BeatLights'
+import Gallop from './Gallop'
 import type { EditMode } from '../mode'
 import { sectionSpans, type Section } from '../timing'
 
@@ -273,6 +274,13 @@ export default function TopBar({
         </ToggleButtonGroup>
 
         <Box sx={{ flex: 1 }} />
+
+        <Gallop
+          sections={sections}
+          duration={duration}
+          positionRef={positionRef}
+          playing={playing}
+        />
 
         <BeatLights
           sections={sections}

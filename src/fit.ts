@@ -243,41 +243,6 @@ function refineFit(
   return { fit: best, score: bestScore, moved }
 }
 
-// Fit a window from a seed, running the whole ladder and polish at once. Used
-// by the scan, where a window is a frame's worth of work rather than a gesture
-// to watch.
-function fitWindow(
-  envelope: Float32Array,
-  sampleRate: number,
-  fromMs: number,
-  toMs: number,
-  seed: Fit,
-): Fit {
-  let fit = seed
-
-  // The ladder repeats a rung while it keeps improving, so left alone it can
-  // walk a beat at a time from the tempo all the way down to half of it: a
-  // sparser grid keeps only the strong beats and scores better for it. This is
-  // a correction, not a search, so it stays within a few per cent of the seed
-  // and anything further has to come from searchTempo.
-  const low = seed.bpm * (1 - DRIFT_BAND)
-  const high = seed.bpm * (1 + DRIFT_BAND)
-  const inBand = (candidate: Fit) => candidate.bpm >= low && candidate.bpm <= high
-
-  for (let step = 0; step < FIT_STEPS; ) {
-    const result = refineFit(envelope, sampleRate, fromMs, toMs, fit, step)
-    if (result.moved && inBand(result.fit)) fit = result.fit
-    else step += 1
-  }
-
-  for (let round = 0; round < POLISH_ROUNDS; round += 1) {
-    const polished = polishFit(envelope, sampleRate, fromMs, toMs, fit)
-    if (!inBand(polished)) break
-    fit = polished
-  }
-
-  return fit
-}
 
 // The beat of a grid nearest a moment, never negative: where a section that
 // takes over there should be anchored. Nearest rather than next, so refitting
@@ -722,20 +687,29 @@ function flatnessOf(
   // other, and that is what makes them readable.
   const count = Math.max(1, meter)
   const barMs = (60000 / fit.bpm) * count
-  const whole = barProfile(envelope, sampleRate, fromMs, toMs, barMs, SETTLE_ROWS)
-  if (!whole) return 0
-
-  const reference = centred(whole)
-  const stretch = SETTLE_BARS * Math.max(1, meter) * (60000 / fit.bpm)
+  const stretch = SETTLE_BARS * barMs
   const windows = Math.floor((toMs - fromMs) / stretch)
   if (windows < 2) return 0
 
+  // Each stretch against the one before it, not against the average of the
+  // whole section. A section that is drifting has no average worth the name —
+  // its bars land all over each other and come out a smear, which every stretch
+  // then matches equally badly at no offset at all, and the section reads as
+  // perfectly straight at the moment it is least straight. Neighbours do not
+  // have that problem: whatever the grid is doing, two stretches side by side
+  // are doing nearly the same thing, and how far apart they sit is how fast it
+  // is slipping.
   const slides: number[] = []
+  let last: Float64Array | null = null
+
   for (let index = 0; index < windows; index += 1) {
     const at = fromMs + index * stretch
     const rows = barProfile(envelope, sampleRate, at, at + stretch, barMs, SETTLE_ROWS)
     if (!rows) continue
-    slides.push(Math.abs((shiftRows(reference, centred(rows), count) / SETTLE_ROWS) * barMs))
+
+    const here = centred(rows)
+    if (last) slides.push(Math.abs((shiftRows(last, here, count) / SETTLE_ROWS) * barMs))
+    last = here
   }
 
   if (slides.length === 0) return 0
@@ -755,8 +729,6 @@ function flatnessOf(
 const MIN_SPAN_MS = 12000
 // how straight a section has to run before it is left alone
 const FLAT_OK_MS = 8
-// how much straighter a split has to come out to be worth its sections
-const SPLIT_KEEPS = 0.9
 const MAX_DEPTH = 6
 // how much better a span has to read at its own tempo to leave its parent's
 const TAKES_OVER = 1.15
@@ -934,23 +906,6 @@ export function turnDone(
   }
 }
 
-function settleSpan(
-  envelope: Float32Array,
-  sampleRate: number,
-  fromMs: number,
-  toMs: number,
-  given: number,
-  meter: number,
-  track: Vote,
-): Part {
-  const bpm = tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track)
-  const phased = bestPhase(envelope, sampleRate, fromMs, toMs, bpm)
-  const polished = fitWindow(envelope, sampleRate, fromMs, toMs, phased.fit)
-  const anchored = { bpm: polished.bpm, offsetMs: beatNear(polished, fromMs) }
-  const barred = alignDownbeat(envelope, sampleRate, fromMs, toMs, anchored, meter)
-  const fit = anchorBeat(envelope, sampleRate, fromMs, toMs, barred)
-  return { fromMs, toMs, fit, flat: flatnessOf(envelope, sampleRate, fromMs, toMs, fit, meter) }
-}
 
 type Span = { fromMs: number; toMs: number; bpm: number; depth: number }
 
@@ -1040,16 +995,6 @@ export function splitStep(
   const right = tempoOf(envelope, sampleRate, middle, span.toMs, whole.fit.bpm, meter, split.track)
   const agreed = left === whole.fit.bpm && right === whole.fit.bpm
   if (agreed && whole.flat <= FLAT_OK_MS) return keep()
-
-  if (agreed) {
-    const under = [
-      settleSpan(envelope, sampleRate, span.fromMs, middle, left, meter, split.track),
-      settleSpan(envelope, sampleRate, middle, span.toMs, right, meter, split.track),
-    ]
-    let weighted = 0
-    for (const part of under) weighted += part.flat * (part.toMs - part.fromMs)
-    if (weighted / (span.toMs - span.fromMs) >= whole.flat * SPLIT_KEEPS) return keep()
-  }
 
   return {
     ...rest,

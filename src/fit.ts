@@ -731,7 +731,12 @@ function flatnessOf(
 
 // A span shorter than this is not split again: two of them is the least a
 // section can be asked to cover.
-const MIN_SPAN_MS = 12000
+// A span shorter than this is not split again. It is not what stops the
+// cutting on a long track — straightness is judged over eight bars and needs
+// two of them, so a stretch of about half a minute is the shortest that can be
+// read at all — but lowering it from twelve seconds to eight let the last
+// couple of cuts through on a live recording.
+const MIN_SPAN_MS = 8000
 // how straight a section has to run before it is left alone
 const FLAT_OK_MS = 8
 const MAX_DEPTH = 6

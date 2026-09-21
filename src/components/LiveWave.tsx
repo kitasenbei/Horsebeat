@@ -46,10 +46,13 @@ const SAMPLED = 4096
 const EDGE = 3
 
 // The band under the wave and the gap that keeps it off it. One column of it is
-// one frame, newest at the right, so it holds as many frames as the strip is
-// wide and runs the way time does.
+// one frame, newest at the right, so it runs the way time does. A column is
+// several pixels across, which is what makes a single bad frame among good ones
+// something you can see rather than a hairline; the width of the strip divided
+// by it is how many frames are held.
 const STRIPE = 10
 const GAP = 4
+const POINT = 4
 
 // How together the quarters were, drawn as a colour: the spread between the
 // tallest and the shortest of them, which is nought when they land on one
@@ -171,12 +174,12 @@ export default function LiveWave({
         const spread = Math.max(...shares) - Math.min(...shares)
         rows.unshift(Math.max(0, 1 - spread))
       }
-      const kept = Math.max(1, Math.round(width))
+      const kept = Math.max(1, Math.ceil(width / POINT))
       if (rows.length > kept) rows.length = kept
 
       for (let row = 0; row < rows.length; row += 1) {
         context.fillStyle = `hsl(${AGREED_HUE * rows[row]} 70% 45%)`
-        context.fillRect(width - 1 - row, height - STRIPE, 1, STRIPE)
+        context.fillRect(width - (row + 1) * POINT, height - STRIPE, POINT, STRIPE)
       }
     },
     playing,

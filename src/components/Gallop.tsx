@@ -79,12 +79,18 @@ const HAZE = 18
 // back, and a group running hard strings out. The spacing is read off the
 // section the playhead is in, so it changes with the music rather than once.
 const EVEN_BPM = 150
-const SPREAD_LEAST = 0.6
-const SPREAD_MOST = 1.8
+const SPREAD_LEAST = 0.45
+const SPREAD_MOST = 2.6
+
+// Bent rather than straight, so the gaps answer the tempo by more than the
+// tempo moved: a tenth over is a sixth wider, and the far ends of the range
+// read as a different herd rather than the same one shifted a little.
+const SPREAD_BEND = 1.6
 
 function spreadOf(bpm: number): number {
   if (!(bpm > 0)) return 1
-  return Math.min(SPREAD_MOST, Math.max(SPREAD_LEAST, bpm / EVEN_BPM))
+  const opened = (bpm / EVEN_BPM) ** SPREAD_BEND
+  return Math.min(SPREAD_MOST, Math.max(SPREAD_LEAST, opened))
 }
 
 // One stride to the beat, and only ever that: each beat is the hind legs going

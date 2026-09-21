@@ -8,10 +8,10 @@ lands on the music for the whole track.
 
 ## 1. Conventions
 
-**Time** is milliseconds from the start of the track, as a float. Never frames,
-never samples: an envelope frame is a different length of time depending on what
-the browser decoded to, and every constant in this folder that is a duration is
-written in milliseconds for that reason.
+**Time** is milliseconds from the start of the track, as a float, everywhere —
+arguments, constants, thresholds. An envelope frame lasts a different length of
+time depending on what the browser decoded to, so milliseconds are the one unit
+that means the same thing on every machine.
 
 **A `Fit`** is `{ bpm: number, offsetMs: number }` — one uniform grid. Beat `k`
 falls at `offsetMs + k × 60000 / bpm`.
@@ -19,7 +19,7 @@ falls at `offsetMs + k × 60000 / bpm`.
 **`meter`** is beats per bar. A bar is `meter × 60000 / bpm` milliseconds.
 
 **A stretch** is a half-open interval `[fromMs, toMs)`. Every measurement takes
-one, so nothing implicitly reads the whole track.
+one explicitly, so each reading states the audio it was made from.
 
 **`sampleRate`** is passed to anything that converts time to frames, because the
 envelope's hop is derived from it (`envelopeHop`, in `../audio.ts`) so that a
@@ -27,7 +27,7 @@ frame is ~1.451 ms at any rate.
 
 ## 2. Signal layer — `signal.ts`
 
-Turns the envelope into shapes. Knows nothing about tempo.
+Turns the envelope into shapes. Works on shapes alone.
 
 ### `riseOf(envelope) → Float32Array`
 
@@ -55,14 +55,14 @@ Turns the envelope into shapes. Knows nothing about tempo.
 - **in** two profiles of equal length, and how many beats a profile covers
 - **out** the circular shift in rows, in `[−rows/(2×beats), +rows/(2×beats)]`,
   that best aligns them by dot product
-- **why bounded** the search stops at half a beat: columns look alike at beat
-  level, and a wider search answers with a whole beat of slide that never
-  happened
+- **why bounded** the search spans half a beat either way. Columns look alike at
+  beat level, so a wider search reports a whole beat of slide as though it were
+  real drift.
 
 ### `centred(rows) → Float64Array`, `runningTotal(envelope) → Float64Array`
 
 Mean removal, and a prefix-sum (cached) so a stretch's mean is `O(1)`. The
-prefix sum is not an optimisation only: a running window sum accumulates
+the prefix sum is exactness as much as speed: a running window sum accumulates
 rounding across a long track until a quiet stretch takes it below zero, and the
 square root of that is `NaN`.
 
@@ -79,8 +79,8 @@ Four readings of one grid over one stretch. None settles what a beat is alone.
   `BEAT_REACH_MS = 4.4` of `offset + k × beatMs − ENVELOPE_LAG_MS`
 - **the lag is load-bearing.** The envelope averages a window either side of each
   sample, so it climbs before the hit that causes it. Measured: a correct grid
-  scores **6.16** without the correction and **137.68** with it. Without it no
-  grid the fitting reports can score well against its own offset.
+  scores **6.16** uncorrected and **137.68** corrected. The correction is what
+  lets a grid score well against the offset the fitting reports for it.
 - **bias** favours sparse grids — a slow grid is asked about fewer beats and
   those are the ones certain to be played. Never compare two different tempos by
   this number alone.
@@ -89,9 +89,9 @@ Four readings of one grid over one stretch. None settles what a beat is alone.
 
 - **out** `[0, 1]` — variance of the bar-average over total variance
 - **method** `barProfile` at `BAR_ROWS = 840`, then between-row variance ÷ total
-- **properties** reads every frame, not only the beats, so it has none of the
-  comb's sparse bias; and it is invariant to where the bar starts, which frees it
-  to answer about tempo alone. It cannot say anything about phase.
+- **properties** reads every frame in the stretch, which makes it immune to the
+  comb's sparse bias; and it is invariant to where the bar starts, which makes it
+  an answer about tempo alone. Phase must come from elsewhere.
 
 ### `bestPhase(envelope, sampleRate, fromMs, toMs, bpm) → { fit, score }`
 
@@ -105,12 +105,12 @@ Four readings of one grid over one stretch. None settles what a beat is alone.
   bar stretches, measured by `shiftRows`
 - **`0` means the grid holds its place.** `FLAT_OK_MS = 8` is the threshold the
   split uses.
-- **each stretch is compared with the one before it, not with the section
-  average.** A drifting section has no average worth the name: its bars land all
+- **each stretch is compared with the one before it.** A drifting section has no average worth the name: its bars land all
   over each other and come out a smear, and a smear matches every stretch equally
   at no offset at all, so the measurement reads a section as perfectly straight
   at the moment it is least straight.
-- **median, not mean** — one fill throws a single stretch a whole beat out.
+- **median** — one fill throws a single stretch a whole beat out, and the middle
+  reading ignores it.
 
 ## 4. Stage 1 — counting the track
 
@@ -125,21 +125,21 @@ call per animation frame until `done`.
   that window's own best, and adds the result into `totals`
 - **normalising per window is the point.** A loud chorus and a quiet verse then
   count the same, and no stretch decides the track by being louder.
-- **why not just search each window** a slow grid outscores the truth locally. On
+- **why a vote rather than a search** a slow grid outscores the truth locally. On
   one track the true 150 scored **2.8** per window against a 61 bpm grid's
   **7.47**. The vote is what survives that.
 - **cost** `O(windows × 281 × bars × BAR_ROWS)`, ~1.4 s for a 169-second track
 
 ### `bestTempo(envelope, sampleRate, durationMs, vote) → number | null`
 
-- **out** one tempo for the whole track, or `null` if nothing polled
+- **out** one tempo for the whole track, or `null` when the track polled empty
 - **method** take the vote's winner and `beatWithin` it; separately sweep
   `patternScore` over the whole track and `beatWithin` that; if the swept answer
-  is not merely another count of the voted one and reads `OVERRULES = 1.2` times
-  better, take it
+  is a genuinely different tempo from the voted one and reads `OVERRULES = 1.2`
+  times better, take it
 - **why both** the vote follows a song that changes tempo but is misled on a
-  short track with few windows to ask; the whole-track read cannot follow a
-  change but is far more certain when there is one tempo.
+  short track with few windows to ask; the whole-track read is the more certain
+  of the two wherever the track holds one tempo.
 
 ## 5. Stage 2 — which count is the beat
 
@@ -155,28 +155,30 @@ mechanisms, because no one of them covers the cases.
   `[60, MAX_BPM_COUNT = 300]`, fold the profile into that many parts and measure
   the share of variance kept; take the largest divisor keeping
   `DENSER_KEEPS = 0.78` of the best
-- **840 rows so that seven divides it.** A bar of seven is rare; a phrase of
-  seven beats is not, and a count the rows cannot divide by is a tempo the
-  fitting can never reach. Measured on a 7-beat track: dividing by seven keeps
+- **840 rows so that seven divides it.** Phrases of seven beats are common
+  enough to matter, and the divisors the rows admit are exactly the tempos the
+  fitting can reach. Measured on a 7-beat track: dividing by seven keeps
   **0.991**, every other division under **0.13**.
 - **then a check.** A denser count always reads a little worse than the pulse it
   divides. Reading *far* worse means the bar was cut into a number of parts it is
-  not made of, so the result must keep `FOLD_KEEPS = 0.6` of the pulse's own
-  `patternScore` or it is discarded.
+  made of only by accident, so the result must keep `FOLD_KEEPS = 0.6` of the
+  pulse's own `patternScore` to stand.
 
 ### `counted(envelope, sampleRate, fromMs, toMs, bpm) → number` (internal)
 
-Handles what the fold structurally cannot. Where the beat is twice the pulse,
-the bar at the pulse is really *two* bars, and two bars are never alike enough to
-divide into eight — the evidence is not in that measurement at all.
+Covers the case the fold is structurally blind to. Where the beat is twice the
+pulse, the bar at the pulse is really *two* bars; two bars differ from each other
+enough that dividing them into eight loses the shape, so the evidence for the
+faster count lives somewhere else entirely.
 
 - **method** ask the audio directly, by `bestPhase`: are the beats in between
   played? Up to `COUNT_ROUNDS = 3` promotions, each opening the next.
 - **×2** when the count is below `DOUBLE_BELOW = 130` *and* the faster grid keeps
   `DOUBLE_KEEPS = 0.9`
 - **×1.5** when the faster grid keeps `DOTTED_KEEPS = 0.95` — the dotted reading,
-  where a bar divides evenly into a tempo that is not the beat (a bar of four at
-  150 is also six beats of 225). Stricter, because a count two thirds of the beat
+  where a bar divides evenly into a tempo one and a half times the beat (a bar of
+  four at 150 is also six beats of 225). Stricter, because a count two thirds of
+  the beat
   lands on every other one of its beats and so keeps more than half a tempo
   would.
 
@@ -190,8 +192,8 @@ Both halves of the ×2 rule are needed. Measured:
 | 150 → 300 | 0.849 | do not |
 | 180 → 360 | 0.840 | do not |
 
-Ratio alone cannot separate these — 0.922 sits between the two that should
-double. Speed alone cannot either. Together they do.
+Separating these takes both readings: 0.922 sits between the two that should
+double, so the ratio needs the speed of the count beside it.
 
 ### `runsAlready(bpm, against)`, `readsAsDotted(bpm, against)` (internal)
 
@@ -223,27 +225,28 @@ Each call does **one** of:
      as its tempo
    - otherwise push two halves onto `pending`
 
-   Straightness alone is not enough to stop: a half playing a different tempo is
-   not drifting, it is somewhere else, and its own picture can be as straight as
-   any other.
+   Both tests are needed to stop: a half playing a different tempo is somewhere
+   else rather than drifting, and its own picture can be as straight as any
+   other.
 
-- **no improvement test.** One cut into a still-drifting half measures *worse*
-  than the whole; requiring the cut to improve things immediately leaves the
-  whole thing uncut. The recursion fixes the half on the next pass.
-- **bounds** `MIN_SPAN_MS = 8000`, `MAX_DEPTH = 6`. Neither is usually what
-  stops it — straightness is judged over eight bars and needs two of them, so
-  nothing under roughly half a minute can be assessed at all. Shortening that
-  window does not help: at four bars a live recording goes from 12.1 ms to 17.8,
-  at two bars to 60.1.
+- **the cut is made on straightness alone.** One cut into a still-drifting half
+  measures *worse* than the whole, so requiring an immediate improvement would
+  leave the whole thing uncut. The recursion straightens the half on the next
+  pass.
+- **bounds** `MIN_SPAN_MS = 8000`, `MAX_DEPTH = 6`. In practice the binding
+  limit is `SETTLE_BARS`: straightness is judged over eight bars and needs two of
+  them, so roughly half a minute is the shortest span that can be assessed.
+  Widening the window is what helps; shortening it costs accuracy — at four bars
+  a live recording goes from 12.1 ms to 17.8, at two bars to 60.1.
 
 ### `tempoOf(envelope, sampleRate, fromMs, toMs, given, meter, track) → number` (internal)
 
 - **in** the tempo a span inherited from its parent
 - **out** that tempo, or one the span earns
-- a span may differ from its parent only if the candidate is not merely another
-  count of it, polled at least `POLLED_ENOUGH = 0.4` of the top on the
-  whole-track vote, sits within `NEAREST = 0.65` either way, and reads
-  `TAKES_OVER = 1.15` times better
+- a span earns its own tempo by meeting all four: the candidate is a different
+  tempo rather than another count of the parent's, it polled at least
+  `POLLED_ENOUGH = 0.4` of the top on the whole-track vote, it sits within
+  `NEAREST = 0.65` either way, and it reads `TAKES_OVER = 1.15` times better
 
 ## 7. Stage 4 — placing the offset
 
@@ -253,17 +256,18 @@ Each call does **one** of:
 - **method** average every beat of the section into one at `BEAT_ROWS = 512`,
   find the strongest climb, walk back to `CLIMB_SHARE = 0.55` of its height, and
   put the offset there
-- **not the peak.** A piano or an upright bass reaches its loudest well after the
-  note began, and a grid placed there sits behind the music. Measured against a
+- **partway up the climb, at 55% of its height.** A piano or an upright bass
+  reaches its loudest well after the note began, so the climb is where the beat
+  is heard. Measured against a
   charted live recording: median distance from the charter's beats **50.6 ms →
-  16.9 ms**, systematic bias **24.7 ms late → 1.9 ms early**. Where on the climb
-  was measured, not guessed — top of the climb gives 26.1 ms, a fifth of the way
+  16.9 ms**, systematic bias **24.7 ms late → 1.9 ms early**. The height was
+  chosen by measurement: the top of the climb gives 26.1 ms, a fifth of the way
   up gives 51.7, the half-to-60% point gives 16.8.
 
 ### `alignDownbeat(...) → Fit` (internal)
 
-Chooses which beat of the bar carries the weight, so a section starts a bar
-rather than an arbitrary beat.
+Chooses which beat of the bar carries the weight, so a section starts on a
+downbeat.
 
 ## 8. Driving it
 
@@ -304,16 +308,15 @@ evidence, using an eighth as many sections.
   junk sections elsewhere.
 - **Boundary placement** lags a real tempo change by 10–20 seconds.
 - **Free time** produces arbitrary sections.
-- **Absolute offset on live material** — 43% within 10 ms is usable for charting,
-  not good enough to trust unchecked.
+- **Absolute offset on live material** — 43% within 10 ms is usable for
+  charting, and wants checking by ear before it is trusted.
 
 ## 11. Notes for whoever changes this
 
 **The fitting is sensitive below the threshold of hearing.** Rewriting a landmark
-as `round((t − 11.6ms) × perMs)` instead of `round(t × perMs) − 8` —
+as `round((t − 11.6ms) × perMs)` in place of `round(t × perMs) − 8` —
 arithmetically a fraction of a frame — moved a live recording from 13 sections to
-7 and doubled its error. Two configurations measuring 15.5 ms and 16.9 ms are not
-reliably distinguishable.
+7 and doubled its error. Treat 15.5 ms and 16.9 ms as the same measurement.
 
 **There are 36 tuned constants**, each chosen by sweeping against a handful of
 tracks. Treat any of them as provisional.
@@ -326,7 +329,7 @@ component in this folder has been measured with it removed: the split is worth
 within 10 ms, the tempo guards the difference between finding three tempos and
 two.
 
-**The panels beside the compiled view see what the algorithm cannot.** They
+**The panels beside the compiled view carry shape the algorithm reduces away.** They
 project each block onto its rows — the sum on the right, how alike the bars are
 at each row on the left, the two multiplied over the sum. Counting the humps
 distinguishes four beats from eight, which no single number here can. Two

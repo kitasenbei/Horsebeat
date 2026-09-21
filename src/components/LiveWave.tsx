@@ -2,9 +2,13 @@ import { useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
+import { sectionSignature } from '../draw'
+import { sectionSpans, type Section } from '../timing'
 
 type LiveWaveProps = {
   envelope: Float32Array | null
+  sections: Section[]
+  duration: number
   position: number
   positionRef: RefObject<number>
   playing: boolean
@@ -30,14 +34,16 @@ const SAMPLED = 4096
 
 const EDGE = 3
 
-// The frames just gone, oldest first, and how solid each is drawn. Written out
-// rather than stepped evenly: the freshest ghost sits close under the live wave
-// and the rest drop away quickly, so the trail reads as a direction of travel
-// instead of five equal lines. The length of the list is the length of the
-// trail.
-const GHOST_FADES = [
-  0.02, 0.03, 0.05, 0.07, 0.1, 0.14, 0.2, 0.28, 0.4, 0.55,
-]
+// One wave a beat, each in its own colour, the first being the beat the
+// playhead is standing in and the rest the beats after it in the bar. A bar of
+// four draws four. The grid says where those beats are, so the four heights are
+// what the music is doing at the four places the grid claims a beat: four alike
+// means the bar is sitting on the music, and one tall among three flat means it
+// is not.
+const BEAT_COLOURS = ['error', 'warning', 'info', 'success'] as const
+
+// Beyond this the strip is a thicket rather than a reading.
+const MOST_BEATS = 8
 
 function ceilingOf(envelope: Float32Array | null): number {
   if (!envelope || envelope.length === 0) return 1
@@ -60,11 +66,17 @@ function readAt(envelope: Float32Array | null, at: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0
 }
 
-export default function LiveWave({ envelope, position, positionRef, playing }: LiveWaveProps) {
+export default function LiveWave({
+  envelope,
+  sections,
+  duration,
+  position,
+  positionRef,
+  playing,
+}: LiveWaveProps) {
   const theme = useTheme()
   const sourceRef = useRef<Float32Array | null>(null)
   const ceilingRef = useRef(1)
-  const pastRef = useRef<number[]>([])
 
   const canvasRef = useCanvas(
     (context, width, height) => {
@@ -72,7 +84,6 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
       if (sourceRef.current !== envelope) {
         sourceRef.current = envelope
         ceilingRef.current = ceilingOf(envelope)
-        pastRef.current = []
       }
 
       const middle = height / 2
@@ -90,30 +101,30 @@ export default function LiveWave({ envelope, position, positionRef, playing }: L
         context.stroke()
       }
 
-      const value = readAt(envelope, positionRef.current)
-      const share = Math.min(1, value / ceilingRef.current)
-      const past = pastRef.current
+      const at = positionRef.current
+      const spans = sectionSpans(sections, duration)
+      const span = spans.find((item) => at >= item.start && at <= item.end) ?? spans[0]
+      const beat = span && span.beat > 0 ? span.beat : 0
+      const beats = beat > 0 ? Math.min(MOST_BEATS, Math.max(1, span.section.meter)) : 1
 
-      context.strokeStyle = theme.palette.primary.main
       context.lineWidth = 1.5
       context.lineJoin = 'round'
 
-      // oldest first, so the live wave is drawn over its own trail rather than
-      // under it
-      const first = GHOST_FADES.length - past.length
-      for (let index = 0; index < past.length; index += 1) {
-        context.globalAlpha = GHOST_FADES[first + index]
-        wave(past[index])
+      // drawn back to front, so the beat the playhead is standing in is the one
+      // on top rather than the one buried
+      for (let index = beats - 1; index >= 0; index -= 1) {
+        const ahead = at + beat * index
+        // past the end there is nothing to read, and drawing it would repeat
+        // the last frame of the track as though it were a beat
+        if (ahead > 1) continue
+        const value = readAt(envelope, ahead)
+        const colour = BEAT_COLOURS[index % BEAT_COLOURS.length]
+        context.strokeStyle = theme.palette[colour].main
+        wave(Math.min(1, value / ceilingRef.current))
       }
-
-      context.globalAlpha = 1
-      wave(share)
-
-      past.push(share)
-      if (past.length > GHOST_FADES.length) past.shift()
     },
     playing,
-    `${position}|${envelope?.length}`,
+    `${position}|${envelope?.length}|${sectionSignature(sections)}`,
   )
 
   return (

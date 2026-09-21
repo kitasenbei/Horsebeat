@@ -509,6 +509,8 @@ export default function App() {
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <LiveWave
               envelope={envelope}
+              sections={sections}
+              duration={duration}
               position={position}
               positionRef={positionRef}
               playing={playing}

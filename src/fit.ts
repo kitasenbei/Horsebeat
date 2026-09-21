@@ -302,9 +302,12 @@ function beatNear(fit: Fit, atMs: number): number {
 // How many rows the averaged bar is read at. The compiled view draws a bar as
 // a column of pixels; this reads the same bar at a fixed resolution so tempos
 // are compared against the same picture.
-// divisible by every count a bar is likely to be cut into
-const BAR_ROWS = 240
-const BAR_PARTS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16]
+// Divisible by every count a bar is likely to be cut into, seven included. A
+// bar of seven is rare, but a phrase of seven beats is not, and the reading
+// that wins is often the phrase rather than the bar: a count the rows cannot
+// divide by is a tempo the fitting can never reach.
+const BAR_ROWS = 840
+const BAR_PARTS = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16]
 // too few bars and the average is one bar, which agrees with itself
 const MIN_BARS = 4
 

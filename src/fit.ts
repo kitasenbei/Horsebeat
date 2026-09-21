@@ -104,12 +104,11 @@ export function scoreFit(
     // landed on. A window of whole frames makes the score jump as the offset
     // crosses one, which the search then chases.
     // The envelope reads a window either side of each sample, so it starts
-    // climbing before the hit that causes it and the climb peaks about a radius
-    // early. polishFit adds that radius back when it reports an offset, and
-    // this takes it off again, so the grid the app shows is the one that scores
-    // best here. Without it every fit the app carries scored worse than a grid
-    // searched fresh, and the sweep cut a section trying to chase the
-    // difference.
+    // climbing before the hit that causes it, and the climb peaks about a
+    // radius early. An offset names the hit, so a radius comes off it to reach
+    // the climb the hit made. Without this the grid the app carries always
+    // scored worse than one searched fresh, and the sweep cut a section every
+    // time it tried to chase the difference.
     const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
     if (centre < 0 || centre >= frames) continue
 
@@ -159,13 +158,7 @@ export function polishFit(
   let sumKT = 0
 
   for (let beat = first; beat <= last; beat += 1) {
-    // The envelope reads a window either side of each sample, so it starts
-    // climbing before the hit that causes it and the climb peaks about a radius
-    // early. polishFit adds that radius back when it reports an offset, and
-    // this takes it off again, so the grid the app shows is the one that scores
-    // best here. Without it every fit the app carries scored worse than a grid
-    // searched fresh, and the sweep cut a section trying to chase the
-    // difference.
+    // where the climb this beat made should sit, a radius ahead of the hit
     const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
     if (centre - reach < 0 || centre + reach >= frames) continue
 
@@ -678,13 +671,7 @@ export function alignDownbeat(
   const counts = new Float64Array(bar)
 
   for (let beat = first; beat <= last; beat += 1) {
-    // The envelope reads a window either side of each sample, so it starts
-    // climbing before the hit that causes it and the climb peaks about a radius
-    // early. polishFit adds that radius back when it reports an offset, and
-    // this takes it off again, so the grid the app shows is the one that scores
-    // best here. Without it every fit the app carries scored worse than a grid
-    // searched fresh, and the sweep cut a section trying to chase the
-    // difference.
+    // where the climb this beat made should sit, a radius ahead of the hit
     const centre = Math.round((fit.offsetMs + beat * beatMs) * perMs) - ENVELOPE_RADIUS
     if (centre < 1 || centre >= envelope.length) continue
 

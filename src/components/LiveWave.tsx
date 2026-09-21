@@ -45,6 +45,18 @@ const SAMPLED = 4096
 
 const EDGE = 3
 
+// The band down the right edge and the gap that keeps it off the wave. One row
+// of it is one frame, newest at the top, so it holds as many frames as the
+// strip is tall.
+const STRIPE = 10
+const GAP = 4
+
+// How together the quarters were, drawn as a colour: the spread between the
+// tallest and the shortest of them, which is nought when they land on one
+// another and one when a beat is full while another is empty. Green where they
+// agree, red where they do not, by way of the hues between.
+const AGREED_HUE = 120
+
 // One wave a quarter of the bar, each in its own colour, and always the bar the
 // playhead is standing in: the first is its first beat, the last its last. What
 // is read in each is the playhead's own offset into a beat, carried across to
@@ -90,6 +102,7 @@ export default function LiveWave({
   const [reading, setReading] = useState<Reading>('amplitude')
   const sourceRef = useRef<Float32Array | null>(null)
   const ceilingRef = useRef(1)
+  const pastRef = useRef<number[]>([])
 
   const canvasRef = useCanvas(
     (context, width, height) => {
@@ -97,9 +110,11 @@ export default function LiveWave({
       if (sourceRef.current !== envelope) {
         sourceRef.current = envelope
         ceilingRef.current = ceilingOf(envelope)
+        pastRef.current = []
       }
 
       const middle = height / 2
+      const plot = Math.max(1, width - STRIPE - GAP)
 
       const wave = (share: number) => {
         const full = middle - EDGE
@@ -110,8 +125,8 @@ export default function LiveWave({
             : HALVES
 
         context.beginPath()
-        for (let x = 0; x <= width; x += 1) {
-          const turn = (x / width) * halves * Math.PI
+        for (let x = 0; x <= plot; x += 1) {
+          const turn = (x / plot) * halves * Math.PI
           const y = middle - Math.sin(turn) * reach
           if (x === 0) context.moveTo(x, y)
           else context.lineTo(x, y)
@@ -136,6 +151,7 @@ export default function LiveWave({
       // drawn back to front, so the quarter the playhead is standing in is the
       // one on top rather than the one buried
       const standing = beat > 0 ? Math.floor((at - opens) / beat) : 0
+      const shares: number[] = []
       for (let step = beats - 1; step >= 0; step -= 1) {
         const index = (standing + step) % beats
         const quarter = opens + beat * index + offset
@@ -143,9 +159,24 @@ export default function LiveWave({
         // the last frame of the track as though it were a beat
         if (quarter > 1) continue
         const value = readAt(envelope, quarter)
+        const share = Math.min(1, value / ceilingRef.current)
+        shares.push(share)
         const colour = BEAT_COLOURS[index % BEAT_COLOURS.length]
         context.strokeStyle = theme.palette[colour].main
-        wave(Math.min(1, value / ceilingRef.current))
+        wave(share)
+      }
+
+      const rows = pastRef.current
+      if (shares.length > 1) {
+        const spread = Math.max(...shares) - Math.min(...shares)
+        rows.unshift(Math.max(0, 1 - spread))
+      }
+      const kept = Math.max(1, Math.round(height))
+      if (rows.length > kept) rows.length = kept
+
+      for (let row = 0; row < rows.length; row += 1) {
+        context.fillStyle = `hsl(${AGREED_HUE * rows[row]} 70% 45%)`
+        context.fillRect(width - STRIPE, row, STRIPE, 1)
       }
     },
     playing,

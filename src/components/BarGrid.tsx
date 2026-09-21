@@ -8,6 +8,7 @@ import {
   autoSliceBeats,
   curveSignature,
   collectBars,
+  columnProfile,
   drawColumnCursor,
   drawProjection,
   drawSectionBounds,
@@ -134,6 +135,7 @@ export default function BarGrid({
       canvas: HTMLCanvasElement
       top: number
       height: number
+      block: number
       profile: Float32Array
       steady: Float32Array
       both: Float32Array
@@ -204,6 +206,7 @@ export default function BarGrid({
           canvas.getContext('2d')?.putImageData(layer.image, 0, 0)
           return {
             canvas,
+            block: layer.block,
             top: layer.top,
             height: layer.height,
             profile: layer.profile,
@@ -307,6 +310,30 @@ export default function BarGrid({
         layer.height,
         theme.palette.primary.main,
       )
+    }
+
+    // and the one column the playhead is in, drawn as an outline over the rest:
+    // the shape of this bar against the shape of all of them
+    const atColumn = bars.findIndex(
+      (bar) => positionRef.current >= bar.start && positionRef.current < bar.end,
+    )
+    if (atColumn >= 0) {
+      for (const layer of cache.canvases) {
+        const values = columnProfile(sources, layer.block, bars[atColumn], layer.canvas.height)
+        if (!values) continue
+
+        drawProjection(
+          context,
+          values,
+          PROJECTION_WIDTH + width,
+          layer.top,
+          PROJECTION_WIDTH,
+          layer.height,
+          theme.palette.error.main,
+          false,
+          false,
+        )
+      }
     }
 
   }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${curveSignature(curve)}`)

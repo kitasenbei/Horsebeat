@@ -963,6 +963,9 @@ function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
 // whole stretch. A grid on the music makes this a row of humps, one to a beat;
 // a grid off it smears them into one another.
 export type BlockLayer = {
+  // which block this is, because a block with nothing to draw leaves no layer
+  // and the two stop lining up by position
+  block: number
   profile: Float32Array
   steady: Float32Array
   both: Float32Array
@@ -1098,7 +1101,7 @@ export function renderBarLayers(
     const both = new Float32Array(rows)
     for (let row = 0; row < rows; row += 1) both[row] = shape[row] * steady[row]
 
-    layers.push({ image, top, height: blockHeight, profile: shape, steady, both })
+    layers.push({ block, image, top, height: blockHeight, profile: shape, steady, both })
     top += blockHeight + BLOCK_GAP
   }
 
@@ -1117,6 +1120,43 @@ const PROJECTION_PAD = 6
 // The projection drawn as a graph lying on its side, so its rows line up with
 // the rows of the block it belongs to and a hump sits level with the beat that
 // made it.
+// The one column the playhead is in, read straight off the source at the rows
+// the block is drawn at, so it can be laid over the average of them all.
+export function columnProfile(
+  sources: BarSources,
+  block: number,
+  bar: Bar,
+  rows: number,
+): Float32Array | null {
+  const source = block === 3 ? sources.bands : [sources.envelope, sources.loudness, sources.onsets][block]
+  if (!source || rows <= 0) return null
+
+  const stride = block === 3 ? 3 : 1
+  const frames = source.length / stride
+  const span = bar.end - bar.start
+  const base = bar.start * frames
+  const step = (span * frames) / rows
+  const last = frames - 1
+
+  const values = new Float32Array(rows)
+  let least = Infinity
+  let most = -Infinity
+  for (let row = 0; row < rows; row += 1) {
+    const frame = Math.min(last, Math.max(0, (base + row * step) | 0))
+    const value = source[frame * stride]
+    values[row] = value
+    if (value < least) least = value
+    if (value > most) most = value
+  }
+
+  // read between its own ends, like the graphs it is drawn over, so the shape
+  // of this one bar can be compared with the shape of all of them
+  if (most > least) {
+    for (let row = 0; row < rows; row += 1) values[row] = (values[row] - least) / (most - least)
+  }
+  return values
+}
+
 export function drawProjection(
   context: CanvasRenderingContext2D,
   profile: Float32Array,
@@ -1127,6 +1167,8 @@ export function drawProjection(
   color: string,
   // which edge the graph stands on, so a pair of them lean away from the bars
   mirrored = false,
+  // an outline only, for a graph laid over another
+  filled = true,
 ) {
   if (profile.length === 0 || height <= 0) return
 
@@ -1146,15 +1188,17 @@ export function drawProjection(
     const y = top + ((row + 0.5) / profile.length) * height
     context.lineTo(from + profile[row] * reach, y)
   }
-  context.lineTo(from, top + height)
-  context.closePath()
+  if (filled) {
+    context.lineTo(from, top + height)
+    context.closePath()
+    context.fillStyle = color
+    context.globalAlpha = 0.22
+    context.fill()
+    context.globalAlpha = 1
+  }
 
-  context.fillStyle = color
-  context.globalAlpha = 0.22
-  context.fill()
-  context.globalAlpha = 1
   context.strokeStyle = color
-  context.lineWidth = 1
+  context.lineWidth = filled ? 1 : 1.5
   context.stroke()
   context.restore()
 }

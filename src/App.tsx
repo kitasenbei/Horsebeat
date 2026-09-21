@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import TopBar from './components/TopBar'
+import Mascot from './components/Mascot'
 import StatusBar from './components/StatusBar'
 import Transport from './components/Transport'
 import Volume from './components/Volume'
@@ -778,6 +779,12 @@ export default function App() {
         positionRef={positionRef}
         position={position}
         duration={duration}
+        playing={playing}
+      />
+      <Mascot
+        sections={sections}
+        duration={duration}
+        positionRef={positionRef}
         playing={playing}
       />
       <input

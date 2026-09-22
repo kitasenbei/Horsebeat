@@ -16,6 +16,7 @@ import type { Section } from '../timing'
 import { DEFAULT_CURVE, type Curve } from '../curve'
 import { measure, tick } from '../trace'
 import { useLiveRangeEdit } from '../liveRange'
+import { useLiveSectionsValue } from '../liveSections'
 
 type WaveformProps = {
   samples: Float32Array | null
@@ -58,7 +59,7 @@ export default function Waveform({
   playing,
   markers,
   focus = null,
-  sections,
+  sections: givenSections,
   duration,
   curve = DEFAULT_CURVE,
   range: givenRange,
@@ -68,6 +69,7 @@ export default function Waveform({
   onGhostChange,
   onPlace,
 }: WaveformProps) {
+  const sections = useLiveSectionsValue(givenSections)
   tick('Waveform render')
   const theme = useTheme()
   const panRef = useRef<Pan | null>(null)

@@ -49,7 +49,7 @@ import {
   type SectionSpan,
 } from '../timing'
 import { clampRange } from '../range'
-import { useLiveEdit } from '../useLiveEdit'
+import { useLiveSectionsEdit } from '../liveSections'
 import { useRafCallback } from '../useRafCallback'
 import {
   canRenderLanesGl,
@@ -314,7 +314,7 @@ export default function BarGrid({
   tick('BarGrid render')
   const theme = useTheme()
 
-  const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
+  const [live, editSections, settleSections] = useLiveSectionsEdit(sections, onSectionsChange)
   // the wheel fires faster than the app can usefully re-render, so the window
   // is kept here during a gesture and handed over once it stops
   const [range, editRange, settleRange] = useLiveRangeEdit(givenRange, onRangeChange)

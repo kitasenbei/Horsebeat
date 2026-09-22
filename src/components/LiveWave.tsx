@@ -4,6 +4,7 @@ import { useCanvas } from '../useCanvas'
 import { curveSignature, laneColor, sectionSignature } from '../draw'
 import { applyCurve, type Curve } from '../curve'
 import { sectionSpans, type Section } from '../timing'
+import { useLiveSectionsValue } from '../liveSections'
 
 type LiveWaveProps = {
   envelope: Float32Array | null
@@ -94,12 +95,13 @@ export default function LiveWave({
   envelope,
   curve,
   colormap,
-  sections,
+  sections: givenSections,
   duration,
   position,
   positionRef,
   playing,
 }: LiveWaveProps) {
+  const sections = useLiveSectionsValue(givenSections)
   const [reading, setReading] = useState<Reading>('amplitude')
   const lutRef = useRef({ signature: '', lut: shapeLut(curve) })
   // a sine of each number of half turns, at unit height across the strip,

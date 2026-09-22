@@ -15,6 +15,7 @@ import type { Range } from '../range'
 import type { Section } from '../timing'
 import { tick } from '../trace'
 import { useLiveRangeValue } from '../liveRange'
+import { useLiveSectionsValue } from '../liveSections'
 
 type RangeStripProps = {
   envelope: Float32Array | null
@@ -35,7 +36,7 @@ export const STRIP_HEIGHT = 96
 // show it: as audio laid out in time.
 export default function RangeStrip({
   envelope,
-  sections,
+  sections: givenSections,
   duration,
   curve,
   range: givenRange,
@@ -44,6 +45,7 @@ export default function RangeStrip({
   playing,
   onSeek,
 }: RangeStripProps) {
+  const sections = useLiveSectionsValue(givenSections)
   const range = useLiveRangeValue(givenRange)
   const theme = useTheme()
   const draggingRef = useRef(false)

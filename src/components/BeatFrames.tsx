@@ -7,6 +7,7 @@ import { drawBands, drawEnvelopeStrip, drawHeatmap, drawLevels, sectionSignature
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { sortSections, sectionSpans, type Section } from '../timing'
+import { useLiveSectionsValue } from '../liveSections'
 import type { Range } from '../range'
 
 type BeatFramesProps = {
@@ -38,13 +39,14 @@ export default function BeatFrames({
   loudness,
   onsets,
   bands,
-  sections,
+  sections: givenSections,
   duration,
   position,
   positionRef,
   playing,
   onSectionsChange,
 }: BeatFramesProps) {
+  const sections = useLiveSectionsValue(givenSections)
   const theme = useTheme()
   const spans = sectionSpans(sections, duration)
   const dragRef = useRef<{ clientX: number; id: string; offsetMs: number; msPerBeat: number } | null>(

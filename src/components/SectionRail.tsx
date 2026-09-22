@@ -3,7 +3,7 @@ import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle, HANDLE_WIDTH, sectionSignature } from '../draw'
 import { useCanvas } from '../useCanvas'
-import { useLiveEdit } from '../useLiveEdit'
+import { useLiveSectionsEdit } from '../liveSections'
 import { RAIL_HEIGHT } from './PlayheadRail'
 import { sortSections, type Section } from '../timing'
 import type { Range } from '../range'
@@ -25,7 +25,7 @@ export default function SectionRail({
 }: SectionRailProps) {
   const range = useLiveRangeValue(givenRange)
   const dragRef = useRef<string | null>(null)
-  const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
+  const [live, editSections, settleSections] = useLiveSectionsEdit(sections, onSectionsChange)
   const [hovered, setHovered] = useState<string | null>(null)
   const theme = useTheme()
   const color = theme.palette.info.main

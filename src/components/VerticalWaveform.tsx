@@ -11,6 +11,7 @@ import { useCanvas } from '../useCanvas'
 import { DEFAULT_CURVE } from '../curve'
 import type { Section } from '../timing'
 import { GRID_PURPLE } from '../theme'
+import { useLiveSectionsValue } from '../liveSections'
 
 type VerticalWaveformProps = {
   samples: Float32Array | null
@@ -26,13 +27,14 @@ type VerticalWaveformProps = {
 export default function VerticalWaveform({
   samples,
   envelope,
-  sections,
+  sections: givenSections,
   position,
   positionRef,
   playing,
   duration,
   seconds = 2,
 }: VerticalWaveformProps) {
+  const sections = useLiveSectionsValue(givenSections)
   const theme = useTheme()
   const span = duration > 0 ? Math.min(1, seconds / duration) : 0
 

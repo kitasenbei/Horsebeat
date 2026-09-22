@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
 import PauseIcon from '@mui/icons-material/Pause'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import StopIcon from '@mui/icons-material/Stop'
@@ -40,36 +40,45 @@ export default function Transport({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 0.5,
-        minHeight: left ? 60 : 34,
+        minHeight: left ? 60 : 48,
       }}
     >
       <IconButton
-        size="small"
         disabled={disabled}
         onClick={onToggle}
         aria-label={playing ? 'Pause' : 'Play'}
+        sx={{
+          width: 44,
+          height: 44,
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          '&:hover': { bgcolor: 'primary.dark' },
+          '&.Mui-disabled': { bgcolor: 'action.disabledBackground' },
+        }}
       >
-        {playing ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
+        {playing ? <PauseIcon fontSize="medium" /> : <PlayArrowIcon fontSize="medium" />}
       </IconButton>
       <IconButton size="small" disabled={disabled} onClick={onReset} aria-label="Reset">
         <StopIcon fontSize="small" />
       </IconButton>
-      <ToggleButtonGroup
+      <Select
         size="small"
-        exclusive
         value={rate}
         disabled={disabled}
-        onChange={(_, next) => {
-          if (next !== null) onRateChange(next as number)
+        onChange={(event) => onRateChange(event.target.value as number)}
+        inputProps={{ 'aria-label': 'Playback rate' }}
+        sx={{
+          ml: 0.5,
+          fontSize: 13,
+          '& .MuiSelect-select': { py: 0.25, pl: 1 },
         }}
-        sx={{ ml: 0.5 }}
       >
         {RATES.map((entry) => (
-          <ToggleButton key={entry} value={entry} sx={{ px: 0.5, py: 0.25, textTransform: 'none' }}>
+          <MenuItem key={entry} value={entry}>
             {entry}x
-          </ToggleButton>
+          </MenuItem>
         ))}
-      </ToggleButtonGroup>
+      </Select>
       {left ? (
         <Box
           sx={{

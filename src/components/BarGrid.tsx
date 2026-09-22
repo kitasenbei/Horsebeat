@@ -699,7 +699,33 @@ export default function BarGrid({
       strips = { canvas, key: stripKey }
       stripsRef.current = strips
     }
-    context.drawImage(strips.canvas, 0, 0, full, height)
+    // only the two strips are copied, not the plot between them
+    {
+      const ratio = strips.canvas.width / full
+      const right = PROJECTION_WIDTH + width
+      context.drawImage(
+        strips.canvas,
+        0,
+        0,
+        PROJECTION_WIDTH * ratio,
+        strips.canvas.height,
+        0,
+        0,
+        PROJECTION_WIDTH,
+        height,
+      )
+      context.drawImage(
+        strips.canvas,
+        right * ratio,
+        0,
+        (full - right) * ratio,
+        strips.canvas.height,
+        right,
+        0,
+        full - right,
+        height,
+      )
+    }
 
     // and the one column the playhead is in, drawn as an outline over the rest:
     // the shape of this bar against the shape of all of them

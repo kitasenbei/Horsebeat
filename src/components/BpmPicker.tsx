@@ -11,7 +11,6 @@ import { MAX_BPM, MIN_BPM } from '../timing'
 
 type BpmPickerProps = {
   value: number
-  active?: boolean
   onChange: (value: number) => void
   onEditingChange?: (editing: boolean) => void
 }
@@ -34,7 +33,6 @@ const MULTIPLIERS = [
 
 export default function BpmPicker({
   value,
-  active = false,
   onChange,
   onEditingChange,
 }: BpmPickerProps) {
@@ -59,9 +57,13 @@ export default function BpmPicker({
           py: 0.75,
           borderRadius: 999,
           border: 0,
-          bgcolor: active ? BPM_LIVE : BPM_COLOR,
-          color: active ? BPM_LIVE_INK : BPM_INK,
-          '&:hover': { bgcolor: active ? BPM_LIVE_HOVER : BPM_HOVER },
+          bgcolor: BPM_COLOR,
+          color: BPM_INK,
+          '&:hover': { bgcolor: BPM_HOVER },
+          // the card under the playhead says so with an attribute, and the
+          // look follows from the stylesheet rather than from a render
+          '[data-live="true"] &': { bgcolor: BPM_LIVE, color: BPM_LIVE_INK },
+          '[data-live="true"] &:hover': { bgcolor: BPM_LIVE_HOVER },
         }}
       >
         <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>

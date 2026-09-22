@@ -44,12 +44,18 @@ export default function Overview({
   const theme = useTheme()
   const [hovered, setHovered] = useState(false)
 
-  const canvasRef = useCanvas((context, width, height) => {
+  // the song and the window on one canvas, painted when either changes; the
+  // playhead on another over it, painted every frame while playing
+  const stillRef = useCanvas((context, width, height) => {
     if (!peaks) return
     drawPeaksAmplitude(context, peaks, FULL, width, height, theme.palette.primary.main, curve)
-    drawPlayhead(context, positionRef.current, FULL, width, height, theme.palette.error.main)
     drawWindow(context, range, width, height, yellow[700])
-  }, playing, `${range.start}|${range.end}|${peaks?.length}|${hovered}|${position}|${curveSignature(curve)}`)
+  }, false, `${range.start}|${range.end}|${peaks?.length}|${curveSignature(curve)}`)
+
+  const canvasRef = useCanvas((context, width, height) => {
+    if (!peaks) return
+    drawPlayhead(context, positionRef.current, FULL, width, height, theme.palette.error.main)
+  }, playing, `${peaks?.length}|${position}`)
 
   const positionAt = (clientX: number) => {
     const canvas = canvasRef.current
@@ -149,13 +155,21 @@ export default function Overview({
     >
       <Box
         component="canvas"
+        ref={stillRef}
+        data-trace="Overview"
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+      />
+      <Box
+        component="canvas"
         ref={canvasRef}
-      data-trace="Overview"
+        data-trace="Overview playhead"
         onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
         sx={{
+          position: 'absolute',
+          inset: 0,
           display: 'block',
           width: '100%',
           height: '100%',

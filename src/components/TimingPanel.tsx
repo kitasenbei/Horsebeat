@@ -18,7 +18,6 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 import { tick } from '../trace'
-import { useLivePosition } from '../useLivePosition'
 
 type TimingPanelProps = {
   sections: Section[]
@@ -57,18 +56,17 @@ const LIVE_PILL = '#fff3e2'
 const LIVE_PILL_HOVER = '#ffe6c7'
 const LIVE_INK = '#8a4b02'
 
-function actionPill(live: boolean) {
-  return {
-    width: 34,
-    height: 34,
-    borderRadius: 999,
-    bgcolor: live ? LIVE_PILL : ACTION_COLOR,
-    color: live ? LIVE_INK : ACTION_INK,
-    '&:hover': {
-      bgcolor: live ? LIVE_PILL_HOVER : ACTION_HOVER,
-      color: live ? LIVE_INK : ACTION_INK,
-    },
-  }
+const LIVE_POLL_MS = 250
+
+const actionPill = {
+  width: 34,
+  height: 34,
+  borderRadius: 999,
+  bgcolor: ACTION_COLOR,
+  color: ACTION_INK,
+  '&:hover': { bgcolor: ACTION_HOVER, color: ACTION_INK },
+  '[data-live="true"] &': { bgcolor: LIVE_PILL, color: LIVE_INK },
+  '[data-live="true"] &:hover': { bgcolor: LIVE_PILL_HOVER, color: LIVE_INK },
 }
 
 export default function TimingPanel({
@@ -85,7 +83,39 @@ export default function TimingPanel({
   embedded = false,
 }: TimingPanelProps) {
   tick('TimingPanel render')
-  const positionMs = useLivePosition(position, positionRef, playing) * durationMs
+  // the card under the playhead is marked with an attribute on its element
+  // and styled from that, so following the playhead is a poll that sets an
+  // attribute on a few nodes rather than a render of every card on screen
+  const liveIdRef = useRef<string | null>(null)
+  const liveIdAt = (at: number) => {
+    const ms = at * durationMs
+    const sorted = sortSections(sections)
+    const index = sorted.findIndex((section, order) => {
+      const next = sorted[order + 1]
+      return ms >= section.offsetMs && (!next || ms < next.offsetMs)
+    })
+    return index >= 0 ? sorted[index].id : null
+  }
+  // rendered from the app's position, which is right while paused; playing,
+  // the poll below marks the cards again straight after every render
+  const activeId = liveIdAt(position)
+
+  useEffect(() => {
+    if (!playing) return
+    const mark = () => {
+      const id = liveIdAt(positionRef.current)
+      if (id === liveIdRef.current) return
+      liveIdRef.current = id
+      const list = listRef.current
+      if (!list) return
+      for (const card of list.querySelectorAll<HTMLElement>('[data-section]')) {
+        card.dataset.live = String(card.dataset.section === id)
+      }
+    }
+    mark()
+    const timer = window.setInterval(mark, LIVE_POLL_MS)
+    return () => window.clearInterval(timer)
+  })
   const moveRef = useRef<Move | null>(null)
   const [spot, setSpot] = useState({ left: 320, top: 96 })
   const [editingOffset, setEditingOffset] = useState<string | null>(null)
@@ -252,11 +282,13 @@ export default function TimingPanel({
           const index = sections.indexOf(section)
           const next = sections[index + 1]
           const endMs = next ? next.offsetMs : durationMs
-          const active = positionMs >= section.offsetMs && (!next || positionMs < next.offsetMs)
+          const active = section.id === activeId
 
           return (
             <Box
               key={section.id}
+              data-section={section.id}
+              data-live={String(active)}
               onClick={() => onJump(section.offsetMs, endMs)}
               sx={{
                 position: 'absolute',
@@ -271,11 +303,16 @@ export default function TimingPanel({
                 p: 1,
                 borderRadius: 2,
                 border: 1,
-                borderColor: active ? CARD_LIVE_BORDER : CARD_IDLE,
-                bgcolor: active ? CARD_LIVE : 'info.main',
-                color: active ? 'info.contrastText' : 'text.primary',
+                borderColor: CARD_IDLE,
+                bgcolor: 'info.main',
+                color: 'text.primary',
                 cursor: 'pointer',
                 '&:hover': { borderColor: 'info.light' },
+                '&[data-live="true"]': {
+                  borderColor: CARD_LIVE_BORDER,
+                  bgcolor: CARD_LIVE,
+                  color: 'info.contrastText',
+                },
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 1 }}>
@@ -293,7 +330,6 @@ export default function TimingPanel({
                   <Box onClick={(event) => event.stopPropagation()}>
                     <BpmPicker
                       value={section.bpm}
-                      active={active}
                       onChange={(bpm) => update(section.id, { bpm })}
                       onEditingChange={(editing) => onEditingChange(editing ? section.id : null)}
                     />
@@ -328,8 +364,9 @@ export default function TimingPanel({
                           borderRadius: 999,
                           border: 1,
                           bgcolor: 'background.paper',
-                          borderColor: active ? CARD_LIVE : ACTION_COLOR,
-                          color: active ? LIVE_INK : ACTION_INK,
+                          borderColor: ACTION_COLOR,
+                          color: ACTION_INK,
+                          '[data-live="true"] &': { borderColor: CARD_LIVE, color: LIVE_INK },
                           fontSize: (current) => current.typography.caption.fontSize,
                           '& input': { p: 0, textAlign: 'center' },
                         }}
@@ -343,10 +380,12 @@ export default function TimingPanel({
                           onEditingChange(section.id)
                         }}
                         sx={{
-                          bgcolor: active ? LIVE_PILL : ACTION_COLOR,
-                          color: active ? LIVE_INK : ACTION_INK,
+                          bgcolor: ACTION_COLOR,
+                          color: ACTION_INK,
                           fontWeight: 600,
-                          '&:hover': { bgcolor: active ? LIVE_PILL_HOVER : ACTION_HOVER },
+                          '&:hover': { bgcolor: ACTION_HOVER },
+                          '[data-live="true"] &': { bgcolor: LIVE_PILL, color: LIVE_INK },
+                          '[data-live="true"] &:hover': { bgcolor: LIVE_PILL_HOVER },
                         }}
                       />
                     )}
@@ -389,7 +428,7 @@ export default function TimingPanel({
                     title="Play from here"
                     aria-label="Play from section"
                     onClick={() => onSeekMs(section.offsetMs)}
-                    sx={actionPill(active)}
+                    sx={actionPill}
                   >
                     <PlayArrowIcon sx={{ fontSize: 20 }} />
                   </IconButton>
@@ -400,7 +439,7 @@ export default function TimingPanel({
                     onClick={() =>
                       onSectionsChange(sections.filter((current) => current.id !== section.id))
                     }
-                    sx={actionPill(active)}
+                    sx={actionPill}
                   >
                     <DeleteOutlinedIcon sx={{ fontSize: 20 }} />
                   </IconButton>
@@ -423,7 +462,7 @@ export default function TimingPanel({
           <Button
             size="small"
             startIcon={<AddIcon />}
-            onClick={() => add(positionMs)}
+            onClick={() => add((playing ? positionRef.current : position) * durationMs)}
             sx={{ textTransform: 'none' }}
           >
             At playhead

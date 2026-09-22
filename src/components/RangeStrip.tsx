@@ -69,7 +69,9 @@ export default function RangeStrip({
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
-  const canvasRef = useCanvas(
+  // the audio and the grid on one canvas, painted when the window changes;
+  // the playhead on another over it, painted every frame while playing
+  const stillRef = useCanvas(
     (context, width, height) => {
       if (!envelope) return
 
@@ -93,6 +95,14 @@ export default function RangeStrip({
         theme.palette.info.dark,
         halves,
       )
+    },
+    false,
+    `${range.start}|${range.end}|${envelope?.length}|${sectionSignature(sections)}|${curveSignature(curve)}`,
+  )
+
+  const canvasRef = useCanvas(
+    (context, width, height) => {
+      if (!envelope) return
       drawPlayhead(
         context,
         positionRef.current,
@@ -104,26 +114,34 @@ export default function RangeStrip({
       )
     },
     playing,
-    `${range.start}|${range.end}|${position}|${envelope?.length}|${sectionSignature(sections)}|${curveSignature(curve)}`,
+    `${range.start}|${range.end}|${position}|${envelope?.length}`,
   )
 
   return (
-    <Box
-      component="canvas"
-      ref={canvasRef}
-      data-trace="RangeStrip"
-      onPointerDown={begin}
-      onPointerMove={move}
-      onPointerUp={end}
-      onPointerCancel={end}
-      sx={{
-        display: 'block',
-        width: '100%',
-        height: STRIP_HEIGHT,
-        flex: '0 0 auto',
-        touchAction: 'none',
-        cursor: 'ew-resize',
-      }}
-    />
+    <Box sx={{ position: 'relative', height: STRIP_HEIGHT, flex: '0 0 auto' }}>
+      <Box
+        component="canvas"
+        ref={stillRef}
+        data-trace="RangeStrip"
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+      />
+      <Box
+        component="canvas"
+        ref={canvasRef}
+        data-trace="RangeStrip playhead"
+        onPointerDown={begin}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          touchAction: 'none',
+          cursor: 'ew-resize',
+        }}
+      />
+    </Box>
   )
 }

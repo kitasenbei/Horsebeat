@@ -312,6 +312,12 @@ export default function BarGrid({
   // columns are on screen. They are kept apart from the picture so a pan or a
   // zoom never reads the lanes again
   const planRef = useRef<{ layers: ProjectionLayer[]; key: string } | null>(null)
+  // the three projection graphs drawn once per plan into a strip either side,
+  // and blitted after that: they are the song's and do not move with the frame
+  const stripsRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
+  // the current column's trace, read when the playhead enters a column and
+  // kept until it leaves: a column lasts many frames
+  const traceRef = useRef<{ key: string; values: (Float32Array | null)[] } | null>(null)
   // what each section adds to each block's projections, kept by everything it
   // was read from: dragging one section re-reads that section and the one
   // before it, whose end moved, and sums the rest as they were
@@ -644,40 +650,56 @@ export default function BarGrid({
     context.restore()
 
     const projected = stopwatch('BarGrid projections')
-    for (const layer of cache.layers) {
-      // how alike the bars are at each row on the left, how much they add up to
-      // on the right
-      drawProjection(
-        context,
-        layer.steady,
-        0,
-        layer.top,
-        PROJECTION_WIDTH,
-        layer.height,
-        theme.palette.success.main,
-        true,
-      )
-      drawProjection(
-        context,
-        layer.profile,
-        PROJECTION_WIDTH + width,
-        layer.top,
-        PROJECTION_WIDTH,
-        layer.height,
-        theme.palette.text.primary,
-      )
+    const stripKey = `${plan.key}|${Math.round(full)}|${Math.round(height)}`
+    let strips = stripsRef.current
+    if (!strips || strips.key !== stripKey) {
+      const ratio = window.devicePixelRatio || 1
+      const canvas = strips?.canvas ?? document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(full * ratio))
+      canvas.height = Math.max(1, Math.round(height * ratio))
+      const strip = canvas.getContext('2d')
+      if (strip) {
+        strip.setTransform(ratio, 0, 0, ratio, 0, 0)
+        strip.clearRect(0, 0, full, height)
+        for (const layer of cache.layers) {
+          // how alike the bars are at each row on the left, how much they add
+          // up to on the right
+          drawProjection(
+            strip,
+            layer.steady,
+            0,
+            layer.top,
+            PROJECTION_WIDTH,
+            layer.height,
+            theme.palette.success.main,
+            true,
+          )
+          drawProjection(
+            strip,
+            layer.profile,
+            PROJECTION_WIDTH + width,
+            layer.top,
+            PROJECTION_WIDTH,
+            layer.height,
+            theme.palette.text.primary,
+          )
 
-      // over the sum, so the two are read against each other
-      drawProjection(
-        context,
-        layer.both,
-        PROJECTION_WIDTH + width,
-        layer.top,
-        PROJECTION_WIDTH,
-        layer.height,
-        theme.palette.primary.main,
-      )
+          // over the sum, so the two are read against each other
+          drawProjection(
+            strip,
+            layer.both,
+            PROJECTION_WIDTH + width,
+            layer.top,
+            PROJECTION_WIDTH,
+            layer.height,
+            theme.palette.primary.main,
+          )
+        }
+      }
+      strips = { canvas, key: stripKey }
+      stripsRef.current = strips
     }
+    context.drawImage(strips.canvas, 0, 0, full, height)
 
     // and the one column the playhead is in, drawn as an outline over the rest:
     // the shape of this bar against the shape of all of them
@@ -685,9 +707,21 @@ export default function BarGrid({
       (bar) => positionRef.current >= bar.start && positionRef.current < bar.end,
     )
     if (atColumn >= 0) {
-      for (const layer of cache.layers) {
-        const values = columnProfile(sources, layer.block, bars[atColumn], layer.rows)
-        if (!values) continue
+      const traceKey = `${key}|${atColumn}`
+      let trace = traceRef.current
+      if (!trace || trace.key !== traceKey) {
+        trace = {
+          key: traceKey,
+          values: cache.layers.map((layer) =>
+            columnProfile(sources, layer.block, bars[atColumn], layer.rows),
+          ),
+        }
+        traceRef.current = trace
+      }
+
+      cache.layers.forEach((layer, index) => {
+        const values = trace.values[index]
+        if (!values) return
 
         drawProjection(
           context,
@@ -700,7 +734,7 @@ export default function BarGrid({
           false,
           false,
         )
-      }
+      })
     }
 
     projected()

@@ -45,6 +45,11 @@ function add(name: string, ms: number) {
   totals.set(name, (totals.get(name) ?? 0) + 1)
 }
 
+// A duration measured elsewhere, put under a name.
+export function record(name: string, ms: number) {
+  add(name, ms)
+}
+
 // A stretch of work timed by the caller, for work that has no one function
 // to wrap: started here, recorded when the returned function is called.
 export function stopwatch(name: string): () => void {

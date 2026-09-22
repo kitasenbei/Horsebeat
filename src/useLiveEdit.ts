@@ -1,11 +1,10 @@
 import { useRef, useState } from 'react'
 
-const COMMIT_MS = 50
-
-// A drag that writes to app state on every frame re-renders the whole tree, and
-// on a file with hundreds of sections that is the lag. The surface being
-// dragged keeps its own copy and repaints at frame rate; the app hears about it
-// at COMMIT_MS, and exactly once more when the drag ends.
+// How long the app can be left behind the surface being dragged. At nought the
+// app hears about every edit as it happens, so the other views follow the
+// gesture frame for frame; the surface still keeps its own copy so it repaints
+// without waiting on the app, and says once more where it ended.
+const COMMIT_MS = 0
 export function useLiveEdit<T>(value: T, onChange: (next: T) => void) {
   const [preview, setPreview] = useState<T | null>(null)
   const stampRef = useRef(0)

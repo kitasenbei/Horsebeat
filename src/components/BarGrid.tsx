@@ -8,6 +8,7 @@ import {
   autoSliceBeats,
   curveSignature,
   collectBars,
+  columnLayout,
   columnProfile,
   drawColumnCursor,
   drawProjection,
@@ -213,11 +214,12 @@ function viewBars(spans: SectionSpan[], range: Range, slice: number | 'auto', wi
 // Where a moment sits across the columns, as a fraction of the plot: the
 // columns are equal in width whatever they last, so this is not where it sits
 // in time.
-function acrossColumns(bars: Bar[], moment: number): number | null {
+function acrossColumns(bars: Bar[], moment: number, range: Range): number | null {
   const at = bars.findIndex((bar) => moment >= bar.start && moment < bar.end)
   if (at < 0) return null
   const bar = bars[at]
-  return (at + (moment - bar.start) / Math.max(1e-12, bar.end - bar.start)) / bars.length
+  const { head, shown } = columnLayout(bars, range)
+  return (at + (moment - bar.start) / Math.max(1e-12, bar.end - bar.start) - head) / shown
 }
 
 export default function BarGrid({
@@ -267,9 +269,16 @@ export default function BarGrid({
   const bars = viewBars(spans, range, slice, width)
 
   const sources = { envelope, loudness, onsets, bands }
+  // The projections are read over every bar of the song, whatever the window
+  // shows: the typical bar is the song's, and the window only decides which
+  // columns are on screen. They are kept apart from the picture so a pan or a
+  // zoom never reads the lanes again
+  const planRef = useRef<{ layers: BlockLayer[]; key: string } | null>(null)
+
   const cacheRef = useRef<{
-    canvases: {
-      canvas: HTMLCanvasElement
+    layers: {
+      // the CPU's painting of the visible bars, for a browser without WebGL2
+      canvas: HTMLCanvasElement | null
       top: number
       height: number
       block: number
@@ -342,23 +351,44 @@ export default function BarGrid({
       curve.points.map((point) => `${point.x}:${point.y}`).join(','),
     ].join('|')
 
+    const planKey = [
+      Math.round(width),
+      Math.round(height),
+      sectionSignature(live),
+      slice,
+      envelope?.length ?? 0,
+      loudness?.length ?? 0,
+      onsets?.length ?? 0,
+      bands?.length ?? 0,
+      blocks.join(','),
+      curve.points.map((point) => `${point.x}:${point.y}`).join(','),
+    ].join('|')
+
+    let plan = planRef.current
+    if (!plan || plan.key !== planKey) {
+      const whole = viewBars(spans, { start: 0, end: 1 }, slice, width)
+      plan = {
+        key: planKey,
+        layers: renderBarLayers(context, sources, whole, height, curve, blocks, colormap, false),
+      }
+      planRef.current = plan
+    }
+
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
-      // the lanes are read once for their projections; their pixels are the
-      // GPU's, and only when it cannot take them are they read again to paint
-      let layers = renderBarLayers(context, sources, bars, height, curve, blocks, colormap, false)
-      const picture = paintLanes(layers, sources, bars, width, height, curve, colormap, waveStyle, theme)
-      if (!picture) {
-        layers = renderBarLayers(context, sources, bars, height, curve, blocks, colormap, true)
-      }
+      const picture = paintLanes(plan.layers, sources, bars, width, height, curve, colormap, waveStyle, theme)
 
-      const waveLayer = layers.find((layer) => layer.block === 0)
+      // only a browser the GPU cannot serve reads the visible bars to paint them
+      const painted = picture
+        ? null
+        : renderBarLayers(context, sources, bars, height, curve, blocks, colormap, true)
+      const waveLayer = plan.layers.find((layer) => layer.block === 0)
 
       cache = {
         key,
         picture,
         wave:
-          !picture && envelope && waveLayer
+          painted && envelope && waveLayer
             ? paintWave(
                 context,
                 envelope,
@@ -371,11 +401,15 @@ export default function BarGrid({
                 theme,
               )
             : null,
-        canvases: layers.map((layer) => {
-          const canvas = document.createElement('canvas')
-          canvas.width = layer.image.width
-          canvas.height = layer.image.height
-          canvas.getContext('2d')?.putImageData(layer.image, 0, 0)
+        layers: plan.layers.map((layer) => {
+          const image = painted?.find((entry) => entry.block === layer.block)?.image
+          let canvas: HTMLCanvasElement | null = null
+          if (image) {
+            canvas = document.createElement('canvas')
+            canvas.width = image.width
+            canvas.height = image.height
+            canvas.getContext('2d')?.putImageData(image, 0, 0)
+          }
           return {
             canvas,
             block: layer.block,
@@ -397,18 +431,64 @@ export default function BarGrid({
     context.save()
     context.translate(PROJECTION_WIDTH, 0)
 
+    // the straddling bars run past the plot on both sides, into the panels
+    // the projections sit in, so the plot is clipped to its own width first
+    context.beginPath()
+    context.rect(0, 0, width, height)
+    context.clip()
+
+    // the bars straddling the window's edges are drawn partly off it, so a
+    // pan slides the picture by the fraction of a column it moved. Each panel
+    // is placed on its own: three side by side each carry the whole offset
+    const layout = columnLayout(bars, range)
+    const column = width / layout.shown
+    const offset = -layout.head * column
+
     context.imageSmoothingEnabled = false
-    if (cache.picture) {
-      context.drawImage(cache.picture, 0, 0, width, height)
-    } else {
-      for (const layer of cache.canvases) {
-        const picture = layer.block === 0 && cache.wave ? cache.wave : layer.canvas
-        context.drawImage(picture, 0, layer.top, width, layer.height)
+    for (const layer of cache.layers) {
+      const count = blockPanels(layer.block)
+      const panelWidth = width / count
+      const shownWidth = (bars.length / layout.shown) * panelWidth
+
+      for (let panel = 0; panel < count; panel += 1) {
+        const dx = panel * panelWidth + offset / count
+
+        if (cache.picture) {
+          const down = cache.picture.height / height
+          context.drawImage(
+            cache.picture,
+            panel * (cache.picture.width / count),
+            layer.top * down,
+            cache.picture.width / count,
+            layer.height * down,
+            dx,
+            layer.top,
+            shownWidth,
+            layer.height,
+          )
+          continue
+        }
+
+        const wave = layer.block === 0 && cache.wave ? cache.wave : null
+        const picture = wave ?? layer.canvas
+        if (!picture) continue
+        const sourceWidth = wave ? wave.width : bars.length
+        context.drawImage(
+          picture,
+          panel * sourceWidth,
+          0,
+          sourceWidth,
+          picture.height,
+          dx,
+          layer.top,
+          shownWidth,
+          layer.height,
+        )
       }
     }
 
-    const heights = cache.canvases.map((layer) => layer.height)
-    const tops = cache.canvases.map((layer) => layer.top)
+    const heights = cache.layers.map((layer) => layer.height)
+    const tops = cache.layers.map((layer) => layer.top)
     sliceHeightRef.current = Math.max(1, heights[0] ?? 1)
     layoutRef.current = { tops, heights }
 
@@ -418,11 +498,14 @@ export default function BarGrid({
 
     // the section under the pointer is the one a drag would edit, so it is
     // tinted: the hover position already says which column
-    const column = width / bars.length
     const under =
       hover && bars.length > 0
-        ? (bars[Math.min(bars.length - 1, Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH) / column)))]?.section ??
-          null)
+        ? (bars[
+            Math.min(
+              bars.length - 1,
+              Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH - offset) / column)),
+            )
+          ]?.section ?? null)
         : null
 
     drawSectionBounds(
@@ -434,14 +517,18 @@ export default function BarGrid({
       under,
       theme.palette.info.main,
       waveStyle !== 'shape',
+      layout,
     )
 
     // only across the column under the pointer, so it reads as a position in
     // that slice rather than as a rule over the whole picture
     if (hover && bars.length > 0) {
-      const index = Math.min(bars.length - 1, Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH) / column)))
+      const index = Math.min(
+        bars.length - 1,
+        Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH - offset) / column)),
+      )
       context.fillStyle = HOVER_COLOR
-      context.fillRect(index * column, hover.y - HOVER_WIDTH / 2, column, HOVER_WIDTH)
+      context.fillRect(offset + index * column, hover.y - HOVER_WIDTH / 2, column, HOVER_WIDTH)
     }
 
     drawColumnCursor(
@@ -453,12 +540,13 @@ export default function BarGrid({
       width,
       cursorMode,
       theme.palette.error.main,
-      cache.canvases.map((layer) => !(layer.block === 0 && waveStyle === 'silhouette')),
+      cache.layers.map((layer) => !(layer.block === 0 && waveStyle === 'silhouette')),
+      layout,
     )
 
     context.restore()
 
-    for (const layer of cache.canvases) {
+    for (const layer of cache.layers) {
       // how alike the bars are at each row on the left, how much they add up to
       // on the right
       drawProjection(
@@ -499,7 +587,7 @@ export default function BarGrid({
       (bar) => positionRef.current >= bar.start && positionRef.current < bar.end,
     )
     if (atColumn >= 0) {
-      for (const layer of cache.canvases) {
+      for (const layer of cache.layers) {
         const values = columnProfile(sources, layer.block, bars[atColumn], layer.rows)
         if (!values) continue
 
@@ -517,7 +605,7 @@ export default function BarGrid({
       }
     }
 
-  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
+  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${position}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -538,7 +626,8 @@ export default function BarGrid({
       // off the time axis: the columns are equal in width and unequal in
       // length, so the two agree only when every bar lasts the same
       const before = viewBars(held, current, cut, full)
-      const across = ratio * before.length
+      const placed = columnLayout(before, current)
+      const across = placed.head + ratio * placed.shown
       const index = Math.min(before.length - 1, Math.max(0, Math.floor(across)))
       const bar = before[index]
       const anchor = bar
@@ -554,11 +643,12 @@ export default function BarGrid({
       // under the pointer, a column's length at a time
       for (let pass = 0; pass < 4; pass += 1) {
         const after = viewBars(held, target, cut, full)
-        const landed = acrossColumns(after, anchor)
+        const landed = acrossColumns(after, anchor, target)
         if (landed === null || Math.abs(landed - ratio) < 1e-4) break
-        const at = Math.min(after.length - 1, Math.floor(landed * after.length))
+        const seat = columnLayout(after, target)
+        const at = Math.min(after.length - 1, Math.max(0, Math.floor(seat.head + landed * seat.shown)))
         const width = after[at].end - after[at].start
-        const shift = (landed - ratio) * after.length * width
+        const shift = (landed - ratio) * seat.shown * width
         const slid = clampRange({ start: target.start + shift, end: target.end + shift })
         if (slid.start === target.start) break
         target = slid
@@ -584,7 +674,8 @@ export default function BarGrid({
       0.999,
       Math.max(0, (event.clientX - bounds.left - PROJECTION_WIDTH) / plotWidth(bounds.width)),
     )
-    const bar = bars[Math.floor(ratio * bars.length)]
+    const { head, shown } = columnLayout(bars, range)
+    const bar = bars[Math.min(bars.length - 1, Math.max(0, Math.floor(head + ratio * shown)))]
     const span = spans.find((item) => item.section.id === bar.section)
     return span ? { span, bar } : null
   }

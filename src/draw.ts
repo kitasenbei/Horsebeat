@@ -1583,6 +1583,31 @@ const HUE_STRENGTH = 0.35
 
 const SECTION_OUTLINE = 2
 
+// How the columns sit against the window. The first and last bars usually
+// straddle its edges, so the picture is `head` columns to the left of the plot
+// and `shown` columns wide across it: that is what lets a pan slide the bars
+// by a fraction of a column instead of stepping a whole one at a time.
+export type ColumnLayout = {
+  head: number
+  shown: number
+}
+
+export function columnLayout(bars: Bar[], range: Range): ColumnLayout {
+  if (bars.length === 0) return { head: 0, shown: 1 }
+
+  const first = bars[0]
+  const last = bars[bars.length - 1]
+  const head = Math.min(
+    1,
+    Math.max(0, (range.start - first.start) / Math.max(1e-12, first.end - first.start)),
+  )
+  const tail = Math.min(
+    1,
+    Math.max(0, (last.end - range.end) / Math.max(1e-12, last.end - last.start)),
+  )
+  return { head, shown: Math.max(1e-6, bars.length - head - tail) }
+}
+
 export function drawSectionBounds(
   context: CanvasRenderingContext2D,
   bars: Bar[],
@@ -1594,17 +1619,19 @@ export function drawSectionBounds(
   // a silhouette is one flat colour, so the section under the pointer is
   // boxed rather than recoloured: a hue laid on it would only change the flat
   outlined = false,
+  layout: ColumnLayout = { head: 0, shown: bars.length },
 ) {
   if (bars.length === 0) return
 
-  const column = width / bars.length
+  const column = width / layout.shown
+  const { head } = layout
 
   context.strokeStyle = color
   context.lineWidth = 1
   context.globalAlpha = 0.8
   for (let index = 1; index < bars.length; index += 1) {
     if (bars[index].section === bars[index - 1].section) continue
-    const x = Math.round(index * column) + 0.5
+    const x = Math.round((index - head) * column) + 0.5
     context.beginPath()
     context.moveTo(x, 0)
     context.lineTo(x, height)
@@ -1625,7 +1652,7 @@ export function drawSectionBounds(
     context.strokeStyle = hue
     context.lineWidth = SECTION_OUTLINE
     context.strokeRect(
-      first * column + inset,
+      (first - head) * column + inset,
       inset,
       (last - first + 1) * column - SECTION_OUTLINE,
       height - SECTION_OUTLINE,
@@ -1640,7 +1667,7 @@ export function drawSectionBounds(
   context.globalCompositeOperation = 'hue'
   context.globalAlpha = HUE_STRENGTH
   context.fillStyle = hue
-  context.fillRect(first * column, 0, (last - first + 1) * column, height)
+  context.fillRect((first - head) * column, 0, (last - first + 1) * column, height)
   context.restore()
 }
 
@@ -1681,6 +1708,7 @@ export function drawColumnCursor(
   // per block, whether the column under the playhead is recoloured or only
   // outlined: a silhouette is one flat colour and a hue on it says nothing
   tinted: boolean[],
+  layout: ColumnLayout = { head: 0, shown: bars.length },
 ) {
   const index = bars.findIndex((bar) => position >= bar.start && position < bar.end)
   if (index < 0) return
@@ -1703,11 +1731,11 @@ export function drawColumnCursor(
   tops.forEach((top, block) => {
     const panels = blockPanels(block)
     const panelWidth = width / panels
-    const column = panelWidth / bars.length
+    const column = panelWidth / layout.shown
     const y = Math.round(top + ratio * heights[block])
 
     for (let panel = 0; panel < panels; panel += 1) {
-      const left = panel * panelWidth + index * column
+      const left = panel * panelWidth + (index - layout.head) * column
 
       if (tinted[block]) {
         context.save()

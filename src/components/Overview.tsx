@@ -150,6 +150,7 @@ export default function Overview({
       <Box
         component="canvas"
         ref={canvasRef}
+      data-trace="Overview"
         onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}

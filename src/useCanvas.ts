@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { measure } from './trace'
 
 type Draw = (context: CanvasRenderingContext2D, width: number, height: number) => void
 
@@ -43,7 +44,9 @@ export function useCanvasControl(draw: Draw, animate = false, signature?: string
 
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, width, height)
-    drawRef.current(context, width, height)
+    // named after the canvas's data-trace, so the trace panel can tell the
+    // waveform's draw from the overview's
+    measure(`${canvas.dataset.trace ?? 'canvas'} draw`, () => drawRef.current(context, width, height))
   }, [])
 
   const signatureRef = useRef(signature)

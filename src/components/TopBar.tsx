@@ -18,6 +18,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import TuneIcon from '@mui/icons-material/Tune'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
 import GridOnIcon from '@mui/icons-material/GridOn'
+import SpeedIcon from '@mui/icons-material/Speed'
 import BeatLights from './BeatLights'
 import Gallop from './Gallop'
 import {
@@ -60,6 +61,8 @@ type TopBarProps = {
   onFramesOpenChange: (open: boolean) => void
   waveStyle: WaveStyle
   onWaveStyleChange: (style: WaveStyle) => void
+  traceOpen: boolean
+  onTraceOpenChange: (open: boolean) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -176,6 +179,8 @@ export default function TopBar({
   onFramesOpenChange,
   waveStyle,
   onWaveStyleChange,
+  traceOpen,
+  onTraceOpenChange,
   canUndo,
   canRedo,
   onUndo,
@@ -362,6 +367,20 @@ export default function TopBar({
           CURSOR_MODES.map((entry) => ({ value: entry.value, label: entry.label })),
           onCursorModeChange,
         )}
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={traceOpen ? 'trace' : null}
+          onChange={() => onTraceOpenChange(!traceOpen)}
+          sx={PILL}
+        >
+          <ToggleButton value="trace" aria-label="Trace panel" sx={selected('secondary')}>
+            <Tooltip title="What the app is running, a second at a time">
+              <span>{segment('Trace', <SpeedIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
 
         <Box sx={{ flex: 1 }} />
 

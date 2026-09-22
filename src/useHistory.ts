@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { tick } from './trace'
 
 const COALESCE_MS = 400
 const LIMIT = 100
@@ -39,6 +40,7 @@ export function useHistory<T>(initial: T) {
 
       stampRef.current = now
       futureRef.current = []
+      tick('history apply')
       commit(next)
     },
     [commit],

@@ -1,4 +1,5 @@
 import { prefixSums, WAVE_FILL, type Bar, type WaveStyle } from './draw'
+import { measure } from './trace'
 
 // The compiled lanes rasterised on the GPU. The running totals of each source
 // go up once as a texture and stay for as long as the song is open; a rebuild
@@ -227,7 +228,7 @@ function sumsTexture(held: Renderer, source: Float32Array, stride: number, chann
   if (existing) return existing
 
   const { gl } = held
-  const sums = prefixSums(source, stride, channel)
+  const sums = measure('lanes GL sums texture', () => prefixSums(source, stride, channel))
   const rows = Math.ceil(sums.length / SUMS_WIDTH)
   const data = new Float32Array(SUMS_WIDTH * rows * 2)
   for (let at = 0; at < sums.length; at += 1) {

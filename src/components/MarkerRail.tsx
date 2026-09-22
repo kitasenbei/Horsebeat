@@ -141,6 +141,7 @@ export default function MarkerRail({
       <Box
         component="canvas"
         ref={canvasRef}
+      data-trace="MarkerRail"
         onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { tick } from './trace'
 
 // How long the app can be left behind the surface being dragged. At nought the
 // app hears about every edit as it happens, so the other views follow the
@@ -19,6 +20,7 @@ export function useLiveEdit<T>(value: T, onChange: (next: T) => void) {
 
     stampRef.current = now
     pendingRef.current = null
+    tick('live edit commit')
     onChange(next)
   }
 

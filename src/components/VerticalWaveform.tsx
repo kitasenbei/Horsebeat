@@ -69,6 +69,7 @@ export default function VerticalWaveform({
     <Box
       component="canvas"
       ref={canvasRef}
+      data-trace="VerticalWaveform"
       sx={{
         display: 'block',
         width: '100%',

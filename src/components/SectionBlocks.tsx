@@ -67,6 +67,7 @@ export default function SectionBlocks({
     <Box
       component="canvas"
       ref={canvasRef}
+      data-trace="SectionBlocks"
       onPointerMove={(event) => {
         const item = spanAt(event.clientX)
         const next = item?.section.id ?? null

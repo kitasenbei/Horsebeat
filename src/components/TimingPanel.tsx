@@ -17,6 +17,7 @@ import { writeTimingPoints } from '../osu'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
+import { tick } from '../trace'
 
 type TimingPanelProps = {
   sections: Section[]
@@ -78,6 +79,7 @@ export default function TimingPanel({
   onClose,
   embedded = false,
 }: TimingPanelProps) {
+  tick('TimingPanel render')
   const moveRef = useRef<Move | null>(null)
   const [spot, setSpot] = useState({ left: 320, top: 96 })
   const [editingOffset, setEditingOffset] = useState<string | null>(null)

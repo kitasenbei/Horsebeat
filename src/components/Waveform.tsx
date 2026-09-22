@@ -14,6 +14,7 @@ import { useRafCallback } from '../useRafCallback'
 import { clampRange, type Range } from '../range'
 import type { Section } from '../timing'
 import { DEFAULT_CURVE, type Curve } from '../curve'
+import { measure, tick } from '../trace'
 
 type WaveformProps = {
   samples: Float32Array | null
@@ -64,6 +65,7 @@ export default function Waveform({
   onGhostChange,
   onPlace,
 }: WaveformProps) {
+  tick('Waveform render')
   const theme = useTheme()
   const panRef = useRef<Pan | null>(null)
   const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
@@ -142,7 +144,7 @@ export default function Waveform({
       if (!layerContext) return
       layerContext.setTransform(ratio, 0, 0, ratio, 0, 0)
       layerContext.clearRect(0, 0, width, height)
-      paintStatic(layerContext, width, height)
+      measure('Waveform static layer', () => paintStatic(layerContext, width, height))
       cache = { canvas: layer, key }
       cacheRef.current = cache
     }
@@ -221,6 +223,7 @@ export default function Waveform({
     <Box
       component="canvas"
       ref={canvasRef}
+      data-trace="Waveform"
       onPointerDown={begin}
       onPointerMove={move}
       onPointerUp={end}

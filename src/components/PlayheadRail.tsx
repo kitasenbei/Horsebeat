@@ -81,6 +81,7 @@ export default function PlayheadRail({
     <Box
       component="canvas"
       ref={canvasRef}
+      data-trace="PlayheadRail"
       onPointerDown={begin}
       onPointerMove={move}
       onPointerUp={end}

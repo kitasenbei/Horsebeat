@@ -259,6 +259,7 @@ export default function CurvePanel({
         <Box
           component="canvas"
           ref={canvasRef}
+      data-trace="CurvePanel"
           onPointerDown={grab}
           onPointerMove={shape}
           onPointerUp={release}

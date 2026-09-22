@@ -111,6 +111,7 @@ export default function RangeStrip({
     <Box
       component="canvas"
       ref={canvasRef}
+      data-trace="RangeStrip"
       onPointerDown={begin}
       onPointerMove={move}
       onPointerUp={end}

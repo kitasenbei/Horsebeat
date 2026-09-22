@@ -105,6 +105,7 @@ export default function SectionRail({
     <Box
       component="canvas"
       ref={canvasRef}
+      data-trace="SectionRail"
       onPointerDown={begin}
       onPointerMove={move}
       onPointerUp={end}

@@ -159,6 +159,7 @@ export default function LiveWave({
     <Box
       component="canvas"
       ref={canvasRef}
+      data-trace="LiveWave"
       title={`Reading the value as ${reading}`}
       onClick={() =>
         setReading((current) => READINGS[(READINGS.indexOf(current) + 1) % READINGS.length])

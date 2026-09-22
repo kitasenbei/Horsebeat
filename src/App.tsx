@@ -21,6 +21,7 @@ import CurvePanel from './components/CurvePanel'
 import type { WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
 import FloatingWindow from './components/FloatingWindow'
+import TracePanel from './components/TracePanel'
 import TimingPanel from './components/TimingPanel'
 import BarGrid from './components/BarGrid'
 import {
@@ -48,6 +49,7 @@ import {
 import type { EditMode } from './mode'
 import { DEFAULT_CURVE, applyCurve, type Curve } from './curve'
 import { useHistory } from './useHistory'
+import { tick } from './trace'
 
 const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
 // a beatmap arrives already timed, so it opens on the whole song: there is
@@ -79,6 +81,7 @@ const FIT_BUDGET_MS = 11
 const DEFAULT_BPM = 120
 
 export default function App() {
+  tick('App render')
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
@@ -123,6 +126,7 @@ export default function App() {
   const [curveOpen, setCurveOpen] = useState(false)
   const [framesOpen, setFramesOpen] = useState(false)
   const [waveStyle, setWaveStyle] = useState<WaveStyle>('colour')
+  const [traceOpen, setTraceOpen] = useState(false)
   const [divisions, setDivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
@@ -339,7 +343,8 @@ export default function App() {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <Box sx={{ display: 'flex', height: '100vh' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', flex: 1, minWidth: 0 }}>
       <TopBar
         sections={sections}
         duration={duration}
@@ -373,6 +378,8 @@ export default function App() {
         onFramesOpenChange={setFramesOpen}
         waveStyle={waveStyle}
         onWaveStyleChange={setWaveStyle}
+        traceOpen={traceOpen}
+        onTraceOpenChange={setTraceOpen}
       />
       {curveOpen ? (
         <CurvePanel curve={curve} onCurveChange={setCurve} onClose={() => setCurveOpen(false)} />
@@ -797,6 +804,8 @@ export default function App() {
           if (next) void load(next)
         }}
       />
+    </Box>
+    {traceOpen ? <TracePanel /> : null}
     </Box>
   )
 }

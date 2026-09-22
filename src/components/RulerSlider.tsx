@@ -112,6 +112,7 @@ export default function RulerSlider({
       <Box
         component="canvas"
         ref={canvasRef}
+      data-trace="RulerSlider"
         onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}

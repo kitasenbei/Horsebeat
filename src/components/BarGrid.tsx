@@ -51,6 +51,7 @@ import { useRafCallback } from '../useRafCallback'
 import { renderLanesGl, type LanePanel } from '../laneGl'
 import { applyCurve, type Curve } from '../curve'
 import type { Range } from '../range'
+import { measure, tick } from '../trace'
 
 type BarGridProps = {
   envelope: Float32Array | null
@@ -269,6 +270,7 @@ export default function BarGrid({
   cursorMode,
   waveStyle,
 }: BarGridProps) {
+  tick('BarGrid render')
   const theme = useTheme()
 
   const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
@@ -291,7 +293,7 @@ export default function BarGrid({
     return () => observer.disconnect()
   }, [])
 
-  const bars = viewBars(spans, range, slice, width)
+  const bars = measure('BarGrid bars', () => viewBars(spans, range, slice, width))
 
   const sources = { envelope, loudness, onsets, bands }
   // The projections are read over every bar of the song, whatever the window
@@ -395,59 +397,64 @@ export default function BarGrid({
 
     let plan = planRef.current
     if (!plan || plan.key !== planKey) {
-      const held = contributionsRef.current
-      if (held.size > CONTRIBUTION_LIMIT) held.clear()
-      const curveKey = curve.points.map((point) => `${point.x}:${point.y}`).join(',')
-      const heights = blockHeights(height, blocks)
-      const layers: ProjectionLayer[] = []
-      let top = 0
+      plan = measure('BarGrid plan', () => {
+        const held = contributionsRef.current
+        if (held.size > CONTRIBUTION_LIMIT) held.clear()
+        const curveKey = curve.points.map((point) => `${point.x}:${point.y}`).join(',')
+        const heights = blockHeights(height, blocks)
+        const layers: ProjectionLayer[] = []
+        let top = 0
 
-      blocks.forEach((block, slot) => {
-        const blockHeight = Math.max(1, heights[slot])
-        const source = block === 3 ? bands : [envelope, loudness, onsets][block]
-        if (!source) {
-          top += blockHeight + BLOCK_GAP
-          return
-        }
-
-        const rows = Math.max(1, Math.round(blockHeight))
-        const stride = block === 3 ? 3 : 1
-        const panels = blockPanels(block)
-        const total: Contribution = {
-          profile: new Float64Array(rows),
-          squares: new Float64Array(rows),
-          counted: 0,
-        }
-
-        for (let panel = 0; panel < panels; panel += 1) {
-          const channel = block === 3 ? BAND_ORDER[panel] : 0
-          for (const span of spans) {
-            const beats =
-              slice === 'auto'
-                ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
-                : slice
-            const name = `${sourceId(source)}|${block}|${panel}|${rows}|${beats}|${span.start}|${span.end}|${span.beat}|${curveKey}`
-            let part = held.get(name)
-            if (!part) {
-              part = barContribution(source, stride, channel, collectBars(span, beats), rows, curve)
-              held.set(name, part)
-            }
-            addContribution(total, part)
+        blocks.forEach((block, slot) => {
+          const blockHeight = Math.max(1, heights[slot])
+          const source = block === 3 ? bands : [envelope, loudness, onsets][block]
+          if (!source) {
+            top += blockHeight + BLOCK_GAP
+            return
           }
-        }
 
-        const { shape, steady, both } = finishProjections(total.profile, total.squares, total.counted, rows)
-        layers.push({ block, rows, top, height: blockHeight, profile: shape, steady, both })
-        top += blockHeight + BLOCK_GAP
+          const rows = Math.max(1, Math.round(blockHeight))
+          const stride = block === 3 ? 3 : 1
+          const panels = blockPanels(block)
+          const total: Contribution = {
+            profile: new Float64Array(rows),
+            squares: new Float64Array(rows),
+            counted: 0,
+          }
+
+          for (let panel = 0; panel < panels; panel += 1) {
+            const channel = block === 3 ? BAND_ORDER[panel] : 0
+            for (const span of spans) {
+              const beats =
+                slice === 'auto'
+                  ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
+                  : slice
+              const name = `${sourceId(source)}|${block}|${panel}|${rows}|${beats}|${span.start}|${span.end}|${span.beat}|${curveKey}`
+              let part = held.get(name)
+              if (!part) {
+                part = barContribution(source, stride, channel, collectBars(span, beats), rows, curve)
+                held.set(name, part)
+              }
+              addContribution(total, part)
+            }
+          }
+
+          const { shape, steady, both } = finishProjections(total.profile, total.squares, total.counted, rows)
+          layers.push({ block, rows, top, height: blockHeight, profile: shape, steady, both })
+          top += blockHeight + BLOCK_GAP
+        })
+
+        const built = { key: planKey, layers }
+        planRef.current = built
+        return built
       })
-
-      plan = { key: planKey, layers }
-      planRef.current = plan
     }
 
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
-      const picture = paintLanes(plan.layers, sources, bars, width, height, curve, colormap, waveStyle, theme)
+      const picture = measure('BarGrid picture', () =>
+        paintLanes(plan.layers, sources, bars, width, height, curve, colormap, waveStyle, theme),
+      )
 
       // only a browser the GPU cannot serve reads the visible bars to paint them
       const painted = picture
@@ -682,7 +689,7 @@ export default function BarGrid({
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const onWheel = (event: WheelEvent) => {
+    const onWheel = (event: WheelEvent) => measure('BarGrid wheel', () => {
       const bounds = canvas.getBoundingClientRect()
       if (bounds.width === 0) return
       event.preventDefault()
@@ -729,7 +736,7 @@ export default function BarGrid({
 
       window.clearTimeout(settleTimer.current)
       settleTimer.current = window.setTimeout(() => zoomRef.current.settle(), GESTURE_END_MS)
-    }
+    })
 
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
@@ -916,6 +923,7 @@ export default function BarGrid({
       <Box
         component="canvas"
       ref={canvasRef}
+      data-trace="BarGrid"
         onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}

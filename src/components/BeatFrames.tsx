@@ -175,6 +175,7 @@ export default function BeatFrames({
           <Box
             component="canvas"
             ref={canvasRef}
+      data-trace="BeatFrames"
             onPointerDown={begin}
             onPointerMove={move}
             onPointerUp={end}

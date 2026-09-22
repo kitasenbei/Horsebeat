@@ -1514,13 +1514,14 @@ export function drawProjection(
   context.restore()
 }
 
-// How the wave lane is drawn: as the field of colour it has always been, as
-// rows whose width is their value and whose colour is the one that value is
-// painted everywhere else, or as the one filled silhouette the beat frames draw.
+// How the level lanes, wave and loud, are drawn: as the field of colour they
+// have always been, as rows whose width is their value and whose colour is the
+// one that value is painted everywhere else, or as the one filled silhouette
+// the beat frames draw.
 export const WAVE_STYLES = [
-  { value: 'colour', label: 'Wave colour' },
-  { value: 'shape', label: 'Wave shape' },
-  { value: 'silhouette', label: 'Wave silhouette' },
+  { value: 'colour', label: 'Level colour' },
+  { value: 'shape', label: 'Level shape' },
+  { value: 'silhouette', label: 'Level silhouette' },
 ] as const
 
 export type WaveStyle = (typeof WAVE_STYLES)[number]['value']

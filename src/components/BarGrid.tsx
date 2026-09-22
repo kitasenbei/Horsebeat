@@ -200,7 +200,9 @@ function planPanels(
 
     const count = blockPanels(layer.block)
     const stride = layer.block === 3 ? 3 : 1
-    const style = layer.block === 0 ? waveStyle : 'colour'
+    // the wave and the loud lanes are the two whose source is a level, which
+    // is what a width can say; the hits and the bands stay colour
+    const style = layer.block === 0 || layer.block === 1 ? waveStyle : 'colour'
 
     // a shape is read against the loudest frame in view, curved the way the
     // levels are, so the loudest column fills its width and the rest are

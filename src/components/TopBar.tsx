@@ -361,7 +361,7 @@ export default function TopBar({
         </ToggleButtonGroup>
 
         {picker<WaveStyle>(
-          'Wave lane style',
+          'Wave and loud lane style',
           waveStyle,
           WAVE_STYLES.map((entry) => ({ value: entry.value, label: entry.label })),
           onWaveStyleChange,

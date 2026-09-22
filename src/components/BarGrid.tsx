@@ -95,8 +95,11 @@ const HOVER_COLOR = '#ffffff'
 const HOVER_WIDTH = 3
 const GESTURE_END_MS = 140
 const AXIS_SLOP = 4
-const COARSE_BPM = 0.1
-const FINE_BPM = 0.01
+// BPM a pixel of a shift drag moves, and with ctrl held as well: a hundredth
+// a pixel was still too quick to land a tempo on, so the plain drag is now the
+// hundredth and ctrl goes down to the thousandth
+const COARSE_BPM = 0.01
+const FINE_BPM = 0.001
 // plain drag covers several slices per screen; ctrl drops to one slice per
 // block, which is the resolution the columns are drawn at
 const OFFSET_GAIN = 2

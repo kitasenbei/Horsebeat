@@ -10,16 +10,19 @@ type BeatLightsProps = {
   color: string
 }
 
-// a square stands this much of the row it sits in, and is as wide as it is tall
-const SHARE = '90%'
+// a square stands this much of the row it sits in as its beat lands, and is
+// as wide as it is tall; between beats it is a dot at the resting share
+const SHARE = 0.9
+const REST = 0.01
 const GAP = 5
 const IDLE = 0.15
 // how fast a lit square falls back, in beats
 const FADE = 7
-// how far a square swells as its beat lands, and how fast it settles: the same
-// pulse the name beside it makes
-const PULSE = 0.35
+// how fast a square shrinks back to its dot after its beat lands, in beats
 const DECAY = 7
+
+// the scale that takes the full square down to a share of the row
+const scaled = (share: number) => `scale(${share / SHARE})`
 const DEFAULT_BEATS = 4
 
 export default function BeatLights({
@@ -53,7 +56,7 @@ export default function BeatLights({
       for (let at = 0; at < squares.length; at += 1) {
         squares[at].style.display = at < beats ? 'block' : 'none'
         squares[at].style.opacity = String(IDLE)
-        squares[at].style.transform = 'scale(1)'
+        squares[at].style.transform = scaled(REST)
       }
     }
 
@@ -75,8 +78,9 @@ export default function BeatLights({
         squares[index].style.opacity = String(
           index === lit ? IDLE + (1 - IDLE) * Math.exp(-since * FADE) : IDLE,
         )
-        squares[index].style.transform =
-          index === lit ? `scale(${1 + PULSE * Math.exp(-since * DECAY)})` : 'scale(1)'
+        squares[index].style.transform = scaled(
+          index === lit ? REST + (SHARE - REST) * Math.exp(-since * DECAY) : REST,
+        )
       }
 
       frame = requestAnimationFrame(tick)
@@ -97,8 +101,9 @@ export default function BeatLights({
         <Box
           key={index}
           sx={{
-            height: SHARE,
+            height: `${SHARE * 100}%`,
             aspectRatio: '1 / 1',
+            transform: scaled(REST),
             borderRadius: '3px',
             bgcolor: color,
             opacity: IDLE,

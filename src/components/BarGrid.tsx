@@ -333,6 +333,9 @@ export default function BarGrid({
   // drawing every frame. Playing, the loop reads it next frame; paused, the move
   // asks for the one repaint itself
   const hoverRef = useRef<{ x: number; y: number } | null>(null)
+  // which section the pointer is over: the base canvas tints it, so the base
+  // is repainted when this changes and not on every move
+  const hoverSectionRef = useRef<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const layoutRef = useRef<{ tops: number[]; heights: number[] }>({ tops: [], heights: [] })
   const dragRef = useRef<{
@@ -352,6 +355,36 @@ export default function BarGrid({
   useEffect(() => {
     zoomRef.current = { range, applyRange, settle: settleRange, spans, slice, width }
   })
+
+  // The hover bar on its own canvas over the base one: a pointer move repaints
+  // this alone, a fill and nothing else, where the base carries the picture,
+  // the guides, the cursor and the projections
+  const { canvasRef: overlayRef, repaint: repaintOverlay } = useCanvasControl(
+    (context, full, height) => {
+      const hover = hoverRef.current
+      if (!hover || bars.length === 0) return
+
+      const width = plotWidth(full)
+      const layout = columnLayout(bars, range)
+      const column = width / layout.shown
+      const offset = -layout.head * column
+      const index = Math.min(
+        bars.length - 1,
+        Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH - offset) / column)),
+      )
+
+      context.save()
+      context.translate(PROJECTION_WIDTH, 0)
+      context.beginPath()
+      context.rect(0, 0, width, height)
+      context.clip()
+      // only across the column under the pointer, so it reads as a position in
+      // that slice rather than as a rule over the whole picture
+      context.fillStyle = HOVER_COLOR
+      context.fillRect(offset + index * column, hover.y - HOVER_WIDTH / 2, column, HOVER_WIDTH)
+      context.restore()
+    },
+  )
 
   const { canvasRef, repaint } = useCanvasControl((context, full, height) => {
     if (bars.length === 0) return
@@ -598,17 +631,6 @@ export default function BarGrid({
       layout,
     )
 
-    // only across the column under the pointer, so it reads as a position in
-    // that slice rather than as a rule over the whole picture
-    if (hover && bars.length > 0) {
-      const index = Math.min(
-        bars.length - 1,
-        Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH - offset) / column)),
-      )
-      context.fillStyle = HOVER_COLOR
-      context.fillRect(offset + index * column, hover.y - HOVER_WIDTH / 2, column, HOVER_WIDTH)
-    }
-
     drawColumnCursor(
       context,
       bars,
@@ -854,7 +876,20 @@ export default function BarGrid({
       const current = hoverRef.current
       if (current?.x === x && current?.y === y) return
       hoverRef.current = { x, y }
-      if (!playing) repaint()
+      repaintOverlay()
+
+      const layout = columnLayout(bars, range)
+      const column = plotWidth(bounds.width) / layout.shown
+      const offset = -layout.head * column
+      const index = Math.min(
+        bars.length - 1,
+        Math.max(0, Math.floor((x - PROJECTION_WIDTH - offset) / column)),
+      )
+      const section = bars[index]?.section ?? null
+      if (section !== hoverSectionRef.current) {
+        hoverSectionRef.current = section
+        if (!playing) repaint()
+      }
       return
     }
 
@@ -930,6 +965,8 @@ export default function BarGrid({
         onPointerCancel={end}
         onPointerLeave={() => {
           hoverRef.current = null
+          hoverSectionRef.current = null
+          repaintOverlay()
           if (!playing) repaint()
         }}
         onContextMenu={openMenu}
@@ -939,6 +976,18 @@ export default function BarGrid({
           height: '100%',
           touchAction: 'none',
           cursor: dragging ? 'move' : 'default',
+        }}
+      />
+      <Box
+        component="canvas"
+        ref={overlayRef}
+        data-trace="BarGrid overlay"
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
         }}
       />
       {menu ? (

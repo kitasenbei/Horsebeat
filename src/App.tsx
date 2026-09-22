@@ -50,7 +50,7 @@ import {
 import type { EditMode } from './mode'
 import { DEFAULT_CURVE, applyCurve, type Curve } from './curve'
 import { useHistory } from './useHistory'
-import { tick } from './trace'
+import { tick, TRACING } from './trace'
 
 const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
 // a beatmap arrives already timed, so it opens on the whole song: there is
@@ -733,7 +733,7 @@ export default function App() {
         }}
       />
     </Box>
-    {traceOpen ? <TracePanel /> : null}
+    {TRACING && traceOpen ? <TracePanel /> : null}
     </Box>
   )
 }

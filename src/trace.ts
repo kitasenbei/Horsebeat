@@ -23,6 +23,10 @@ type Entry = {
 
 const WINDOW_MS = 1000
 
+// the trace is a development tool: a shipped build measures nothing, and every
+// call here is a test of one flag and a return
+export const TRACING = import.meta.env.DEV
+
 const live = new Map<string, Entry>()
 const totals = new Map<string, number>()
 let rolled: TraceRow[] = []
@@ -38,6 +42,7 @@ function entry(name: string): Entry {
 }
 
 function add(name: string, ms: number) {
+  if (!TRACING) return
   const held = entry(name)
   held.calls += 1
   held.ms += ms
@@ -53,12 +58,14 @@ export function record(name: string, ms: number) {
 // A stretch of work timed by the caller, for work that has no one function
 // to wrap: started here, recorded when the returned function is called.
 export function stopwatch(name: string): () => void {
+  if (!TRACING) return () => {}
   const start = performance.now()
   return () => add(name, performance.now() - start)
 }
 
 // A function run and timed under a name.
 export function measure<T>(name: string, run: () => T): T {
+  if (!TRACING) return run()
   const start = performance.now()
   try {
     return run()

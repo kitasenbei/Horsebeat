@@ -32,6 +32,7 @@ import {
   type WaveStyle,
 } from '../draw'
 import { sectionSpans, type Section } from '../timing'
+import { TRACING } from '../trace'
 
 type TopBarProps = {
   sections: Section[]
@@ -387,19 +388,21 @@ export default function TopBar({
           </ToggleButton>
         </ToggleButtonGroup>
 
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={traceOpen ? 'trace' : null}
-          onChange={() => onTraceOpenChange(!traceOpen)}
-          sx={PILL}
-        >
-          <ToggleButton value="trace" aria-label="Trace panel" sx={selected('secondary')}>
-            <Tooltip title="What the app is running, a second at a time">
-              <span>{segment('Trace', <SpeedIcon fontSize="small" />)}</span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
+        {TRACING ? (
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={traceOpen ? 'trace' : null}
+            onChange={() => onTraceOpenChange(!traceOpen)}
+            sx={PILL}
+          >
+            <ToggleButton value="trace" aria-label="Trace panel" sx={selected('secondary')}>
+              <Tooltip title="What the app is running, a second at a time">
+                <span>{segment('Trace', <SpeedIcon fontSize="small" />)}</span>
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
+        ) : null}
 
         <Box sx={{ flex: 1 }} />
 

@@ -14,6 +14,7 @@ import type { Curve } from '../curve'
 import type { Range } from '../range'
 import type { Section } from '../timing'
 import { tick } from '../trace'
+import { useLiveRangeValue } from '../liveRange'
 
 type RangeStripProps = {
   envelope: Float32Array | null
@@ -37,12 +38,13 @@ export default function RangeStrip({
   sections,
   duration,
   curve,
-  range,
+  range: givenRange,
   position,
   positionRef,
   playing,
   onSeek,
 }: RangeStripProps) {
+  const range = useLiveRangeValue(givenRange)
   const theme = useTheme()
   const draggingRef = useRef(false)
   const applySeek = useRafCallback(onSeek)

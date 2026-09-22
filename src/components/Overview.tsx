@@ -11,6 +11,7 @@ import { useRafCallback } from '../useRafCallback'
 import { clampRange, MIN_SPAN, type Range } from '../range'
 import type { Curve } from '../curve'
 import { measure } from '../trace'
+import { useLiveRangeEdit } from '../liveRange'
 
 type OverviewProps = {
   peaks: Float32Array | null
@@ -37,11 +38,14 @@ export default function Overview({
   positionRef,
   playing,
   curve,
-  range,
+  range: givenRange,
   onRangeChange,
 }: OverviewProps) {
   const dragRef = useRef<Drag | null>(null)
-  const applyRange = useRafCallback(onRangeChange)
+  // the window moves through the live store while it is dragged, and reaches
+  // the app once the drag is over
+  const [range, editRange, settleRange] = useLiveRangeEdit(givenRange, onRangeChange)
+  const applyRange = useRafCallback(editRange)
   const theme = useTheme()
   const [hovered, setHovered] = useState(false)
 
@@ -105,6 +109,7 @@ export default function Overview({
   const end = (event: React.PointerEvent<HTMLElement>) => {
     dragRef.current = null
     event.currentTarget.releasePointerCapture(event.pointerId)
+    settleRange()
   }
 
   const track = (event: React.PointerEvent<HTMLElement>) => {

@@ -61,6 +61,7 @@ import {
 import { applyCurve, type Curve } from '../curve'
 import type { Range } from '../range'
 import { measure, stopwatch, tick } from '../trace'
+import { useLiveRangeEdit } from '../liveRange'
 
 type BarGridProps = {
   envelope: Float32Array | null
@@ -276,7 +277,7 @@ export default function BarGrid({
   const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
   // the wheel fires faster than the app can usefully re-render, so the window
   // is kept here during a gesture and handed over once it stops
-  const [range, editRange, settleRange] = useLiveEdit(givenRange, onRangeChange)
+  const [range, editRange, settleRange] = useLiveRangeEdit(givenRange, onRangeChange)
   const settleTimer = useRef(0)
   const blocks = lane === 'all' ? ALL_BLOCKS : [lane]
   const spans = sectionSpans(live, duration)

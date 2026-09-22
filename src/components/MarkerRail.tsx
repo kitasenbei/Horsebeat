@@ -11,6 +11,7 @@ import { useRafCallback } from '../useRafCallback'
 import { RAIL_HEIGHT } from './PlayheadRail'
 import type { Range } from '../range'
 import { measure } from '../trace'
+import { useLiveRangeValue } from '../liveRange'
 
 type MarkerRailProps = {
   markers: number[]
@@ -25,12 +26,13 @@ const CLICK_SLOP = 4
 
 export default function MarkerRail({
   markers,
-  range,
+  range: givenRange,
   enabled,
   focus,
   ghost,
   onMarkersChange,
 }: MarkerRailProps) {
+  const range = useLiveRangeValue(givenRange)
   const dragRef = useRef<number | null>(null)
   const downRef = useRef<number | null>(null)
   const applyMarkers = useRafCallback(onMarkersChange)

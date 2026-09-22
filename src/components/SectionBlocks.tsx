@@ -5,6 +5,7 @@ import { drawSectionBlocks, sectionSignature } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
 import { clampRange, type Range } from '../range'
+import { useLiveRangeValue } from '../liveRange'
 
 type SectionBlocksProps = {
   sections: Section[]
@@ -23,13 +24,14 @@ const LIVE_COLOR = '#e07c0a'
 export default function SectionBlocks({
   sections,
   duration,
-  range,
+  range: givenRange,
   position,
   positionRef,
   playing,
   onRangeChange,
   onSeek,
 }: SectionBlocksProps) {
+  const range = useLiveRangeValue(givenRange)
   const [hovered, setHovered] = useState<string | null>(null)
   const theme = useTheme()
 

@@ -8,6 +8,7 @@ import { RAIL_HEIGHT } from './PlayheadRail'
 import { sortSections, type Section } from '../timing'
 import type { Range } from '../range'
 import { measure } from '../trace'
+import { useLiveRangeValue } from '../liveRange'
 
 type SectionRailProps = {
   sections: Section[]
@@ -18,10 +19,11 @@ type SectionRailProps = {
 
 export default function SectionRail({
   sections,
-  range,
+  range: givenRange,
   duration,
   onSectionsChange,
 }: SectionRailProps) {
+  const range = useLiveRangeValue(givenRange)
   const dragRef = useRef<string | null>(null)
   const [live, editSections, settleSections] = useLiveEdit(sections, onSectionsChange)
   const [hovered, setHovered] = useState<string | null>(null)

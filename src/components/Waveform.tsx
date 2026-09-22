@@ -15,6 +15,7 @@ import { clampRange, type Range } from '../range'
 import type { Section } from '../timing'
 import { DEFAULT_CURVE, type Curve } from '../curve'
 import { measure, tick } from '../trace'
+import { useLiveRangeEdit } from '../liveRange'
 
 type WaveformProps = {
   samples: Float32Array | null
@@ -45,6 +46,8 @@ type Pan = {
 
 const FULL: Range = { start: 0, end: 1 }
 const ZOOM_RATE = 0.002
+// a wheel gesture is over when this long passes without a tick
+const GESTURE_END_MS = 140
 const CLICK_SLOP = 4
 
 export default function Waveform({
@@ -58,7 +61,7 @@ export default function Waveform({
   sections,
   duration,
   curve = DEFAULT_CURVE,
-  range = FULL,
+  range: givenRange = FULL,
   placing = null,
   ghost = null,
   onRangeChange,
@@ -69,7 +72,13 @@ export default function Waveform({
   const theme = useTheme()
   const panRef = useRef<Pan | null>(null)
   const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
-  const applyRange = useRafCallback((next: Range) => onRangeChange?.(next))
+  // the window moves through the live store while it is dragged or zoomed,
+  // and reaches the app once the gesture is over
+  const [range, editRange, settleRange] = useLiveRangeEdit(givenRange, (next) =>
+    onRangeChange?.(next),
+  )
+  const applyRange = useRafCallback(editRange)
+  const settleTimer = useRef(0)
   const applyGhost = useRafCallback((next: number | null) => onGhostChange?.(next))
 
   const paintStatic = (context: CanvasRenderingContext2D, width: number, height: number) => {
@@ -153,9 +162,19 @@ export default function Waveform({
     drawPlayhead(context, positionRef.current, range, width, height, theme.palette.error.main, true)
   }, playing, `${range.start}|${range.end}|${position}|${markers.join(',')}|${sectionSignature(sections)}|${ghost}|${placing}|${curveSignature(curve)}|${focus?.start}|${focus?.end}`)
 
-  const zoomRef = useRef({ range, onRangeChange, enabled: Boolean(samples) })
+  const zoomRef = useRef({
+    range,
+    onRangeChange: onRangeChange ? applyRange : undefined,
+    settle: settleRange,
+    enabled: Boolean(samples),
+  })
   useEffect(() => {
-    zoomRef.current = { range, onRangeChange, enabled: Boolean(samples) }
+    zoomRef.current = {
+      range,
+      onRangeChange: onRangeChange ? applyRange : undefined,
+      settle: settleRange,
+      enabled: Boolean(samples),
+    }
   })
 
   useEffect(() => {
@@ -176,6 +195,8 @@ export default function Waveform({
       const nextSpan = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
 
       apply(clampRange({ start: anchor - ratio * nextSpan, end: anchor + (1 - ratio) * nextSpan }))
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = window.setTimeout(() => zoomRef.current.settle(), GESTURE_END_MS)
     }
 
     canvas.addEventListener('wheel', onWheel, { passive: false })
@@ -218,6 +239,7 @@ export default function Waveform({
     const pan = panRef.current
     panRef.current = null
     event.currentTarget.releasePointerCapture(event.pointerId)
+    if (pan) settleRange()
 
     if (!placing || !samples || !pan) return
     if (Math.abs(event.clientX - pan.clientX) > CLICK_SLOP) return

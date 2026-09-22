@@ -4,6 +4,7 @@ import { alpha, useTheme } from '@mui/material/styles'
 import { drawPlayheadHandle } from '../draw'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
+import { useLiveRangeValue } from '../liveRange'
 import type { Range } from '../range'
 
 type PlayheadRailProps = {
@@ -26,8 +27,9 @@ export default function PlayheadRail({
   playing,
   enabled,
   onSeek,
-  range = FULL,
+  range: givenRange = FULL,
 }: PlayheadRailProps) {
+  const range = useLiveRangeValue(givenRange)
   const draggingRef = useRef(false)
   const applySeek = useRafCallback(onSeek)
   const theme = useTheme()

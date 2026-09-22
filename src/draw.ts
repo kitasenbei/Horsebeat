@@ -1236,6 +1236,14 @@ export function addContribution(into: Contribution, part: Contribution) {
   into.counted += part.counted
 }
 
+export function takeContribution(from: Contribution, part: Contribution) {
+  for (let row = 0; row < from.profile.length; row += 1) {
+    from.profile[row] -= part.profile[row]
+    from.squares[row] -= part.squares[row]
+  }
+  from.counted -= part.counted
+}
+
 // The three projection graphs from a block's summed contribution.
 export function finishProjections(
   profile: Float64Array,
@@ -1729,17 +1737,19 @@ export function drawSectionBounds(
   const column = width / layout.shown
   const { head } = layout
 
+  // every boundary in one path and one stroke: a song of hundreds of sections
+  // drew hundreds of strokes a frame for a row of identical lines
   context.strokeStyle = color
   context.lineWidth = 1
   context.globalAlpha = 0.8
+  context.beginPath()
   for (let index = 1; index < bars.length; index += 1) {
     if (bars[index].section === bars[index - 1].section) continue
     const x = Math.round((index - head) * column) + 0.5
-    context.beginPath()
     context.moveTo(x, 0)
     context.lineTo(x, height)
-    context.stroke()
   }
+  context.stroke()
   context.globalAlpha = 1
 }
 

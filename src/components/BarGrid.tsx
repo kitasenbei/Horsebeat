@@ -25,6 +25,7 @@ import {
   barContribution,
   blockHeights,
   finishProjections,
+  takeContribution,
   BAND_ORDER,
   BLOCK_GAP,
   CURSOR_OUTLINE,
@@ -166,9 +167,18 @@ function sourceId(source: Float32Array): number {
   return id
 }
 
-// past this many held contributions the map is started afresh: a long drag
-// leaves one behind per frame, and none of those are read again
-const CONTRIBUTION_LIMIT = 4000
+// The running total of a block's projections and the sections in it. A plan
+// moves the total by the sections that left and the ones that arrived, so a
+// drag costs the dragged section and its neighbour rather than the song.
+// Summing floats in and out drifts by the last few digits, so the total is
+// summed afresh every so many moves.
+type Running = {
+  total: Contribution
+  members: Map<string, Contribution>
+  moves: number
+}
+
+const RESUM_EVERY = 256
 
 // The panels the GPU draws: one per block, or three side by side for the
 // bands, each reading its own source through the one shader. Built once per
@@ -348,7 +358,10 @@ export default function BarGrid({
   // what each section adds to each block's projections, kept by everything it
   // was read from: dragging one section re-reads that section and the one
   // before it, whose end moved, and sums the rest as they were
-  const contributionsRef = useRef(new Map<string, Contribution>())
+  const runningRef = useRef<{ generation: string; blocks: Map<number, Running> }>({
+    generation: '',
+    blocks: new Map(),
+  })
 
   const cacheRef = useRef<{
     layers: {
@@ -518,12 +531,26 @@ export default function BarGrid({
     let plan = planRef.current
     if (!plan || plan.key !== planKey) {
       plan = measure('BarGrid plan', () => {
-        const held = contributionsRef.current
-        if (held.size > CONTRIBUTION_LIMIT) held.clear()
         const curveKey = curve.points.map((point) => `${point.x}:${point.y}`).join(',')
         const heights = blockHeights(height, blocks)
         const layers: ProjectionLayer[] = []
         let top = 0
+
+        // everything a contribution is read through besides the section: when
+        // any of it changes, every total starts again
+        const generation = [
+          Math.round(width),
+          Math.round(height),
+          slice,
+          blocks.join(','),
+          curveKey,
+          [envelope, loudness, onsets, bands].map((source) => (source ? sourceId(source) : 0)).join(','),
+        ].join('|')
+        const running = runningRef.current
+        if (running.generation !== generation) {
+          running.generation = generation
+          running.blocks.clear()
+        }
 
         blocks.forEach((block, slot) => {
           const blockHeight = Math.max(1, heights[slot])
@@ -536,29 +563,52 @@ export default function BarGrid({
           const rows = Math.max(1, Math.round(blockHeight))
           const stride = block === 3 ? 3 : 1
           const panels = blockPanels(block)
-          const total: Contribution = {
-            profile: new Float64Array(rows),
-            squares: new Float64Array(rows),
-            counted: 0,
-          }
 
+          let held = running.blocks.get(block)
+          if (!held || held.total.profile.length !== rows || held.moves >= RESUM_EVERY) {
+            held = {
+              total: { profile: new Float64Array(rows), squares: new Float64Array(rows), counted: 0 },
+              members: new Map(),
+              moves: 0,
+            }
+            running.blocks.set(block, held)
+          }
+          held.moves += 1
+
+          // the sections as they are now, by what their columns are read from
+          const wanted = new Map<string, { span: SectionSpan; panel: number; beats: number }>()
           for (let panel = 0; panel < panels; panel += 1) {
-            const channel = block === 3 ? BAND_ORDER[panel] : 0
             for (const span of spans) {
               const beats =
                 slice === 'auto'
                   ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
                   : slice
-              const name = `${sourceId(source)}|${block}|${panel}|${rows}|${beats}|${span.start}|${span.end}|${span.beat}|${curveKey}`
-              let part = held.get(name)
-              if (!part) {
-                part = barContribution(source, stride, channel, collectBars(span, beats), rows, curve)
-                held.set(name, part)
-              }
-              addContribution(total, part)
+              wanted.set(`${panel}|${beats}|${span.start}|${span.end}|${span.beat}`, { span, panel, beats })
             }
           }
 
+          // out with the sections that are no longer there, in with the new
+          for (const [name, part] of held.members) {
+            if (wanted.has(name)) continue
+            takeContribution(held.total, part)
+            held.members.delete(name)
+          }
+          for (const [name, entry] of wanted) {
+            if (held.members.has(name)) continue
+            const channel = block === 3 ? BAND_ORDER[entry.panel] : 0
+            const part = barContribution(
+              source,
+              stride,
+              channel,
+              collectBars(entry.span, entry.beats),
+              rows,
+              curve,
+            )
+            held.members.set(name, part)
+            addContribution(held.total, part)
+          }
+
+          const { total } = held
           const { shape, steady, both } = finishProjections(total.profile, total.squares, total.counted, rows)
           layers.push({ block, rows, top, height: blockHeight, profile: shape, steady, both })
           top += blockHeight + BLOCK_GAP

@@ -300,34 +300,51 @@ export function invertColor(color: string): string {
   return `#${inverted.toString(16).padStart(6, '0')}`
 }
 
-function verticalLine(
+// Vertical lines through the waveform, all of them in three strokes: one path
+// for the parts above and below the wave, one for the parts across it in the
+// inverted colour. A stroke is what a line costs, and a grid of a thousand
+// beats stroked one at a time was the strip's whole frame.
+function verticalLines(
   context: CanvasRenderingContext2D,
-  x: number,
+  xs: number[],
   height: number,
   envelope: Float32Array | null,
   color: string,
+  lineWidth: number,
+  alpha: number,
 ) {
+  if (xs.length === 0) return
+
   const middle = height / 2
-  const half = envelope ? (envelope[Math.floor(x)] ?? 0) : 0
+  const outside = new Path2D()
+  const across = new Path2D()
+  let crossed = false
 
+  for (const x of xs) {
+    const half = envelope ? (envelope[Math.floor(x)] ?? 0) : 0
+    if (half > 0) {
+      outside.moveTo(x, 0)
+      outside.lineTo(x, middle - half)
+      outside.moveTo(x, middle + half)
+      outside.lineTo(x, height)
+      across.moveTo(x, middle - half)
+      across.lineTo(x, middle + half)
+      crossed = true
+    } else {
+      outside.moveTo(x, 0)
+      outside.lineTo(x, height)
+    }
+  }
+
+  context.lineWidth = lineWidth
+  context.globalAlpha = alpha
   context.strokeStyle = color
-  context.beginPath()
-  context.moveTo(x, half > 0 ? 0 : 0)
-  context.lineTo(x, half > 0 ? middle - half : height)
-  context.stroke()
-
-  if (half <= 0) return
-
-  context.beginPath()
-  context.moveTo(x, middle + half)
-  context.lineTo(x, height)
-  context.stroke()
-
-  context.strokeStyle = invertColor(color)
-  context.beginPath()
-  context.moveTo(x, middle - half)
-  context.lineTo(x, middle + half)
-  context.stroke()
+  context.stroke(outside)
+  if (crossed) {
+    context.strokeStyle = invertColor(color)
+    context.stroke(across)
+  }
+  context.globalAlpha = 1
 }
 
 export function drawGrid(
@@ -344,6 +361,9 @@ export function drawGrid(
   const span = range.end - range.start
   if (span <= 0 || duration <= 0) return
 
+  const beats: number[] = []
+  const starts: number[] = []
+
   for (const item of sectionSpans(sections, duration)) {
     if (item.end < range.start || item.start > range.end) continue
     if (item.beat <= 0) continue
@@ -355,23 +375,18 @@ export function drawGrid(
       const firstIndex = Math.max(0, Math.ceil((from - item.start) / item.beat))
       const lastIndex = Math.floor((to - item.start) / item.beat)
 
-      context.lineWidth = BEAT_LINE_WIDTH
-      context.globalAlpha = 0.4
-
       for (let index = firstIndex; index <= lastIndex; index += 1) {
-        const x = Math.round(((item.start + index * item.beat - range.start) / span) * width) + 0.5
-        verticalLine(context, x, height, envelope, color)
+        beats.push(Math.round(((item.start + index * item.beat - range.start) / span) * width) + 0.5)
       }
-
-      context.globalAlpha = 1
     }
 
     if (item.start >= range.start && item.start <= range.end) {
-      const x = Math.round(((item.start - range.start) / span) * width) + 0.5
-      context.lineWidth = BEAT_LINE_WIDTH * 2
-      verticalLine(context, x, height, envelope, accent)
+      starts.push(Math.round(((item.start - range.start) / span) * width) + 0.5)
     }
   }
+
+  verticalLines(context, beats, height, envelope, color, BEAT_LINE_WIDTH, 0.4)
+  verticalLines(context, starts, height, envelope, accent, BEAT_LINE_WIDTH * 2, 1)
 }
 
 export function drawPeaksAmplitude(
@@ -458,6 +473,20 @@ export type BlockPalette = {
   text: string
 }
 
+// A label's width per font, measured the first time it is asked for: a song
+// has a handful of distinct tempos, and measureText is among the slowest calls
+// a canvas takes.
+const LABEL_WIDTHS = new Map<string, number>()
+
+function labelWidth(context: CanvasRenderingContext2D, font: string, label: string): number {
+  const key = `${font}|${label}`
+  const held = LABEL_WIDTHS.get(key)
+  if (held !== undefined) return held
+  const measured = context.measureText(label).width
+  LABEL_WIDTHS.set(key, measured)
+  return measured
+}
+
 export function drawSectionBlocks(
   context: CanvasRenderingContext2D,
   sections: Section[],
@@ -499,7 +528,7 @@ export function drawSectionBlocks(
     context.fill()
 
     const label = `${item.section.bpm.toFixed(1)}`
-    if (box > context.measureText(label).width + 10) {
+    if (box > labelWidth(context, font, label) + 10) {
       context.fillStyle = palette.text
       context.fillText(label, left + 1 + box / 2, height / 2 + 0.5)
     }

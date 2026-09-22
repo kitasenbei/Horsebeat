@@ -1053,8 +1053,14 @@ export function renderBarLayers(
         const step = (span * frames) / rows
 
         for (let row = 0; row < rows; row += 1) {
-          const frame = Math.min(last, Math.max(0, (base + row * step) | 0))
-          const value = source[frame * stride + band]
+          // the mean of every frame the row covers, not the one frame it starts
+          // on: a row is drawn as a band the full height of the cell, and a
+          // point sample paints that whole band with whichever frame it landed
+          const from = Math.min(last, Math.max(0, (base + row * step) | 0))
+          const until = Math.min(frames, Math.max(from + 1, Math.ceil(base + (row + 1) * step)))
+          let total = 0
+          for (let frame = from; frame < until; frame += 1) total += source[frame * stride + band]
+          const value = total / (until - from)
           const level = ((value < 1 ? value : 1) * top255 + 0.5) | 0
           const curved = shaped[level]
           profile[row] += curved
@@ -1160,8 +1166,13 @@ export function columnProfile(
   let least = Infinity
   let most = -Infinity
   for (let row = 0; row < rows; row += 1) {
-    const frame = Math.min(last, Math.max(0, (base + row * step) | 0))
-    const value = source[frame * stride]
+    // averaged over the row the same way the cells are, or the trace and the
+    // picture it is read against disagree
+    const from = Math.min(last, Math.max(0, (base + row * step) | 0))
+    const until = Math.min(frames, Math.max(from + 1, Math.ceil(base + (row + 1) * step)))
+    let total = 0
+    for (let frame = from; frame < until; frame += 1) total += source[frame * stride]
+    const value = total / (until - from)
     values[row] = value
     if (value < least) least = value
     if (value > most) most = value
@@ -1222,6 +1233,26 @@ export function drawProjection(
 }
 
 export const CURSOR_WIDTH = 3
+// a canvas stroke straddles its path, so the rect is grown by half the weight
+// to put the whole outline outside the column and leave the column itself whole
+export const CURSOR_OUTLINE = 2
+// the hue the column under the playhead is repainted in: hue blending keeps the
+// brightness and the saturation the lane drew, so the bar keeps its shape and
+// only its colour says it is the current one
+const CURSOR_HUE = '#00e5ff'
+
+// How the column cursor is blended into the lanes under it. Every one of these
+// keeps the cursor readable over a colourmap that owns any given hue; the plain
+// paint is last because it is the only one a lane can hide.
+export const CURSOR_MODES: { value: GlobalCompositeOperation; label: string }[] = [
+  { value: 'difference', label: 'Inverse' },
+  { value: 'exclusion', label: 'Soft inverse' },
+  { value: 'xor', label: 'Cut out' },
+  { value: 'lighten', label: 'Lighten' },
+  { value: 'darken', label: 'Darken' },
+  { value: 'luminosity', label: 'Luminosity' },
+  { value: 'source-over', label: 'Solid' },
+]
 
 export const GUIDE_WIDTH = 1
 
@@ -1302,7 +1333,8 @@ export function drawColumnCursor(
   heights: number[],
   position: number,
   width: number,
-  color: string,
+  mode: GlobalCompositeOperation,
+  solid: string,
 ) {
   const index = bars.findIndex((bar) => position >= bar.start && position < bar.end)
   if (index < 0) return
@@ -1310,9 +1342,17 @@ export function drawColumnCursor(
   const bar = bars[index]
   const ratio = (position - bar.start) / (bar.end - bar.start)
 
-  context.strokeStyle = color
-  context.fillStyle = color
-  context.lineWidth = 1
+  // the blend does the work of staying visible, so the paint is white for all
+  // of them but the one that lays a colour down as it is
+  const paint = mode === 'source-over' ? solid : '#ffffff'
+
+  context.save()
+  context.globalCompositeOperation = mode
+  context.strokeStyle = paint
+  context.fillStyle = paint
+  context.lineWidth = CURSOR_OUTLINE
+
+  const grow = CURSOR_OUTLINE / 2
 
   tops.forEach((top, block) => {
     const panels = blockPanels(block)
@@ -1322,10 +1362,24 @@ export function drawColumnCursor(
 
     for (let panel = 0; panel < panels; panel += 1) {
       const left = panel * panelWidth + index * column
-      context.strokeRect(left + 0.5, top + 0.5, column - 1, heights[block] - 1)
+
+      context.save()
+      context.globalCompositeOperation = 'hue'
+      context.fillStyle = CURSOR_HUE
+      context.fillRect(left, top, column, heights[block])
+      context.restore()
+
+      context.strokeRect(
+        left - grow,
+        top - grow,
+        column + CURSOR_OUTLINE,
+        heights[block] + CURSOR_OUTLINE,
+      )
       context.fillRect(left, y - CURSOR_WIDTH / 2, column, CURSOR_WIDTH)
     }
   })
+
+  context.restore()
 }
 
 // Signatures for useCanvas. They have to cover everything a draw reads, or the

@@ -51,6 +51,7 @@ type BarGridProps = {
   lane: number | 'all'
   divisions: number
   colormap: number
+  cursorMode: GlobalCompositeOperation
 }
 
 const GUIDE_COLOR = '#ffffff'
@@ -91,6 +92,7 @@ export default function BarGrid({
   lane,
   divisions,
   colormap,
+  cursorMode,
 }: BarGridProps) {
   const theme = useTheme()
 
@@ -272,6 +274,7 @@ export default function BarGrid({
       heights,
       positionRef.current,
       width,
+      cursorMode,
       theme.palette.error.main,
     )
 
@@ -336,7 +339,7 @@ export default function BarGrid({
       }
     }
 
-  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${curveSignature(curve)}`)
+  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current

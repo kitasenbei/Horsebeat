@@ -6,6 +6,8 @@ import Button from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
@@ -16,6 +18,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import TuneIcon from '@mui/icons-material/Tune'
 import BeatLights from './BeatLights'
 import Gallop from './Gallop'
+import { BLOCK_LABELS, COLORMAPS, CURSOR_MODES, DIVISION_STEPS, SLICE_STEPS } from '../draw'
 import { sectionSpans, type Section } from '../timing'
 
 type TopBarProps = {
@@ -31,6 +34,16 @@ type TopBarProps = {
   onFittingChange: (fitting: boolean) => void
   curved: boolean
   onCurvedChange: (curved: boolean) => void
+  lane: number | 'all'
+  onLaneChange: (lane: number | 'all') => void
+  slice: number | 'auto'
+  onSliceChange: (slice: number | 'auto') => void
+  divisions: number
+  onDivisionsChange: (divisions: number) => void
+  colormap: number
+  onColormapChange: (colormap: number) => void
+  cursorMode: GlobalCompositeOperation
+  onCursorModeChange: (mode: GlobalCompositeOperation) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -66,6 +79,13 @@ const PILL = {
   },
 }
 
+const PICKER = {
+  ...PILL,
+  fontSize: 13,
+  '& .MuiSelect-select': { py: 0.5, pl: 1.25, lineHeight: 1.4 },
+  '& .MuiOutlinedInput-notchedOutline': { border: 0 },
+}
+
 function selected(palette: 'primary' | 'secondary' | 'info') {
   return {
     '&.Mui-selected': {
@@ -86,6 +106,31 @@ function segment(label: string, icon: ReactNode, iconOnly = false) {
   )
 }
 
+// One shape for the four compiled-view pickers, so a picker costs a value and a
+// list of options rather than another twelve lines of Select dressing.
+function picker<T extends number | string>(
+  label: string,
+  value: T,
+  options: { value: T; label: string }[],
+  onChange: (next: T) => void,
+) {
+  return (
+    <Select
+      size="small"
+      value={value}
+      onChange={(event) => onChange(event.target.value as T)}
+      inputProps={{ 'aria-label': label }}
+      sx={PICKER}
+    >
+      {options.map((option) => (
+        <MenuItem key={String(option.value)} value={option.value}>
+          {option.label}
+        </MenuItem>
+      ))}
+    </Select>
+  )
+}
+
 export default function TopBar({
   sections,
   duration,
@@ -99,6 +144,16 @@ export default function TopBar({
   curved,
   onCurvedChange,
   onFittingChange,
+  lane,
+  onLaneChange,
+  slice,
+  onSliceChange,
+  divisions,
+  onDivisionsChange,
+  colormap,
+  onColormapChange,
+  cursorMode,
+  onCursorModeChange,
   canUndo,
   canRedo,
   onUndo,
@@ -207,6 +262,49 @@ export default function TopBar({
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>
+
+        {picker<number | 'all'>(
+          'Lane shown in the compiled view',
+          lane,
+          [
+            { value: 'all', label: 'All lanes' },
+            ...BLOCK_LABELS.map((label, index) => ({ value: index, label })),
+          ],
+          onLaneChange,
+        )}
+
+        {picker<number | 'auto'>(
+          'Beats per column',
+          slice,
+          [
+            { value: 'auto', label: 'Auto' },
+            ...SLICE_STEPS.map((entry) => ({ value: entry, label: `${entry} beats` })),
+          ],
+          onSliceChange,
+        )}
+
+        {picker<number>(
+          'Guide divisions',
+          divisions,
+          DIVISION_STEPS.map((entry) => ({ value: entry, label: `/${entry}` })),
+          onDivisionsChange,
+        )}
+
+        {lane === 0 || lane === 'all'
+          ? picker<number>(
+              'Colours',
+              colormap,
+              COLORMAPS.map((map, index) => ({ value: index, label: map.name })),
+              onColormapChange,
+            )
+          : null}
+
+        {picker<GlobalCompositeOperation>(
+          'Position marker blend',
+          cursorMode,
+          CURSOR_MODES.map((entry) => ({ value: entry.value, label: entry.label })),
+          onCursorModeChange,
+        )}
 
         <Box sx={{ flex: 1 }} />
 

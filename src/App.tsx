@@ -15,13 +15,11 @@ import RangeStrip from './components/RangeStrip'
 import VerticalWaveform from './components/VerticalWaveform'
 import LiveWave from './components/LiveWave'
 import RulerSlider from './components/RulerSlider'
-import AnalysisLanes from './components/AnalysisLanes'
 import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
 import TimingPanel from './components/TimingPanel'
 import BarGrid from './components/BarGrid'
-import BarGridControls from './components/BarGridControls'
 import {
   computeBands,
   computeLoudness,
@@ -49,6 +47,9 @@ import { DEFAULT_CURVE, applyCurve, type Curve } from './curve'
 import { useHistory } from './useHistory'
 
 const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
+// a beatmap arrives already timed, so it opens on the whole song: there is
+// nothing to drag into place, and the point is to see the timing it brought
+const WHOLE_RANGE: Range = { start: 0, end: 1 }
 const FALL_RANGE = 10.5
 type Doc = {
   markers: number[]
@@ -114,6 +115,7 @@ export default function App() {
   const [barGrid, setBarGrid] = useState(true)
   const [slice, setSlice] = useState<number | 'auto'>('auto')
   const [lane, setLane] = useState<number | 'all'>(0)
+  const [cursorMode, setCursorMode] = useState<GlobalCompositeOperation>('difference')
   const [divisions, setDivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
@@ -312,7 +314,7 @@ export default function App() {
       setLoudness(computeLoudness(mono))
       setBands(computeBands(mono, buffer.sampleRate))
       setSampleRate(buffer.sampleRate)
-      setRange(INITIAL_RANGE)
+      setRange(beatmap ? WHOLE_RANGE : INITIAL_RANGE)
       setDoc((current) => ({
         markers: [],
         // a plain audio file arrives with no timing at all, so it opens on a
@@ -348,6 +350,16 @@ export default function App() {
         canFit={Boolean(envelope) && sections.length > 0}
         curved={curved}
         onCurvedChange={setCurved}
+        lane={lane}
+        onLaneChange={setLane}
+        slice={slice}
+        onSliceChange={setSlice}
+        divisions={divisions}
+        onDivisionsChange={setDivisions}
+        colormap={colormap}
+        onColormapChange={setColormap}
+        cursorMode={cursorMode}
+        onCursorModeChange={setCursorMode}
       />
       <Box
         component="main"
@@ -490,21 +502,11 @@ export default function App() {
                     lane={lane}
                     divisions={divisions}
                     colormap={colormap}
+                    cursorMode={cursorMode}
                   />
                 </Box>
-                <BarGridControls
-                  lane={lane}
-                  slice={slice}
-                  divisions={divisions}
-                  colormap={colormap}
-                  onLaneChange={setLane}
-                  onSliceChange={setSlice}
-                  onDivisionsChange={setDivisions}
-                  onColormapChange={setColormap}
-                />
               </>
             ) : null}
-            <AnalysisLanes loudness={loudness} onsets={onsets} bands={bands} range={range} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <LiveWave

@@ -27,6 +27,8 @@ import {
   finishProjections,
   BAND_ORDER,
   BLOCK_GAP,
+  CURSOR_OUTLINE,
+  CURSOR_WIDTH,
   type Bar,
   type BarSources,
   type Contribution,
@@ -49,7 +51,13 @@ import {
 import { clampRange } from '../range'
 import { useLiveEdit } from '../useLiveEdit'
 import { useRafCallback } from '../useRafCallback'
-import { renderLanesGl, type LanePanel } from '../laneGl'
+import {
+  canRenderLanesGl,
+  releaseLanesGl,
+  renderLanesGl,
+  type LaneCursor,
+  type LanePanel,
+} from '../laneGl'
 import { applyCurve, type Curve } from '../curve'
 import type { Range } from '../range'
 import { measure, stopwatch, tick } from '../trace'
@@ -155,20 +163,18 @@ function sourceId(source: Float32Array): number {
 // leaves one behind per frame, and none of those are read again
 const CONTRIBUTION_LIMIT = 4000
 
-// The whole compiled picture drawn by the GPU: one panel per block, or three
-// side by side for the bands, each reading its own source through the one
-// shader. Null where the GPU cannot take it, and the CPU paints instead.
-function paintLanes(
+// The panels the GPU draws: one per block, or three side by side for the
+// bands, each reading its own source through the one shader. Built once per
+// window and handed to the renderer every frame after that.
+function planPanels(
   layers: ProjectionLayer[],
   sources: BarSources,
   bars: Bar[],
   width: number,
-  height: number,
   curve: Curve,
   colormap: number,
   waveStyle: WaveStyle,
-  theme: Theme,
-): HTMLCanvasElement | null {
+): LanePanel[] {
   const panels: LanePanel[] = []
 
   for (const layer of layers) {
@@ -202,29 +208,12 @@ function paintLanes(
         height: layer.height,
         style,
         scale,
+        tinted: style !== 'silhouette',
       })
     }
   }
 
-  const drawn = renderLanesGl(
-    bars,
-    panels,
-    width,
-    height,
-    window.devicePixelRatio || 1,
-    colorChannels(theme.palette.background.paper),
-    colorChannels(theme.palette.primary.main),
-  )
-  if (!drawn) return null
-
-  // copied into a plain canvas once: reading a WebGL canvas into a 2D one can
-  // mean pulling the picture back from the card, and that is paid here per
-  // rebuild rather than in every frame that blits it
-  const copy = document.createElement('canvas')
-  copy.width = drawn.width
-  copy.height = drawn.height
-  copy.getContext('2d')?.drawImage(drawn, 0, 0)
-  return copy
+  return panels
 }
 
 // every section the window touches contributes its own slices, so the view is
@@ -312,9 +301,6 @@ export default function BarGrid({
   // columns are on screen. They are kept apart from the picture so a pan or a
   // zoom never reads the lanes again
   const planRef = useRef<{ layers: ProjectionLayer[]; key: string } | null>(null)
-  // the three projection graphs drawn once per plan into a strip either side,
-  // and blitted after that: they are the song's and do not move with the frame
-  const stripsRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
   // the current column's trace, read when the playhead enters a column and
   // kept until it leaves: a column lasts many frames
   const traceRef = useRef<{ key: string; values: (Float32Array | null)[] } | null>(null)
@@ -335,12 +321,21 @@ export default function BarGrid({
       steady: Float32Array
       both: Float32Array
     }[]
-    // the GPU's picture of every lane at once, or null when the CPU painted
-    // them into the canvases above
-    picture: HTMLCanvasElement | null
+    // what the GPU draws, or empty when the CPU painted the canvases above
+    panels: LanePanel[]
+    gpu: boolean
     wave: HTMLCanvasElement | null
     key: string
   } | null>(null)
+  // the canvas the GPU draws the lanes on, shown as it is under the 2D ones
+  const glRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = glRef.current
+    return () => {
+      if (canvas) releaseLanesGl(canvas)
+    }
+  }, [])
 
   const applyRange = useRafCallback(editRange)
   const sliceHeightRef = useRef(1)
@@ -408,9 +403,9 @@ export default function BarGrid({
     },
   )
 
-  const { canvasRef } = useCanvasControl((context, full, height) => {
-    if (bars.length === 0) return
-
+  // The picture, the plan and the window cache are settled once per change
+  // and shared by every canvas that draws from them
+  const ensureCache = (context: CanvasRenderingContext2D, full: number, height: number) => {
     // the bars keep the canvas minus the panel on the right, and everything
     // that maps a position to a column measures against this rather than the
     // whole canvas
@@ -505,19 +500,22 @@ export default function BarGrid({
 
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
-      const picture = measure('BarGrid picture', () =>
-        paintLanes(plan.layers, sources, bars, width, height, curve, colormap, waveStyle, theme),
+      const panels = measure('BarGrid picture', () =>
+        planPanels(plan.layers, sources, bars, width, curve, colormap, waveStyle),
       )
+      const gl = glRef.current
+      const gpu = Boolean(gl && canRenderLanesGl(gl, bars, panels))
 
       // only a browser the GPU cannot serve reads the visible bars to paint them
-      const painted = picture
+      const painted = gpu
         ? null
         : renderBarLayers(context, sources, bars, height, curve, blocks, colormap, true)
       const waveLayer = plan.layers.find((layer) => layer.block === 0)
 
       cache = {
         key,
-        picture,
+        gpu,
+        panels: gpu ? panels : [],
         wave:
           painted && envelope && waveLayer
             ? paintWave(
@@ -556,6 +554,22 @@ export default function BarGrid({
       cacheRef.current = cache
     }
 
+    return { key, plan, cache, width }
+  }
+
+  const stillKey = `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${blocks.join(',')}|${divisions}|${colormap}|${waveStyle}|${slice}|${curveSignature(curve)}`
+
+  // What stays put between frames: the guides, the section bounds, the three
+  // projection graphs, and on a browser without WebGL2 the lanes themselves.
+  // Painted when the window or the song changes and left alone while playing
+  const { canvasRef: stillRef } = useCanvasControl((context, full, height) => {
+    if (bars.length === 0) return
+    const { cache, width } = ensureCache(context, full, height)
+
+    const layout = columnLayout(bars, range)
+    const column = width / layout.shown
+    const offset = -layout.head * column
+
     // everything about the bars is drawn in the space between the panels, so
     // the whole of it moves across together rather than each piece carrying the
     // offset itself
@@ -568,58 +582,35 @@ export default function BarGrid({
     context.rect(0, 0, width, height)
     context.clip()
 
-    // the bars straddling the window's edges are drawn partly off it, so a
-    // pan slides the picture by the fraction of a column it moved. Each panel
-    // is placed on its own: three side by side each carry the whole offset
-    const layout = columnLayout(bars, range)
-    const column = width / layout.shown
-    const offset = -layout.head * column
+    if (!cache.gpu) {
+      // the bars straddling the window's edges are drawn partly off it, so a
+      // pan slides the picture by the fraction of a column it moved. Each panel
+      // is placed on its own: three side by side each carry the whole offset
+      context.imageSmoothingEnabled = false
+      for (const layer of cache.layers) {
+        const count = blockPanels(layer.block)
+        const panelWidth = width / count
+        const shownWidth = (bars.length / layout.shown) * panelWidth
 
-    context.imageSmoothingEnabled = false
-    const blitted = stopwatch('BarGrid blit')
-    for (const layer of cache.layers) {
-      const count = blockPanels(layer.block)
-      const panelWidth = width / count
-      const shownWidth = (bars.length / layout.shown) * panelWidth
-
-      for (let panel = 0; panel < count; panel += 1) {
-        const dx = panel * panelWidth + offset / count
-
-        if (cache.picture) {
-          const down = cache.picture.height / height
+        for (let panel = 0; panel < count; panel += 1) {
+          const wave = layer.block === 0 && cache.wave ? cache.wave : null
+          const picture = wave ?? layer.canvas
+          if (!picture) continue
+          const sourceWidth = wave ? wave.width : bars.length
           context.drawImage(
-            cache.picture,
-            panel * (cache.picture.width / count),
-            layer.top * down,
-            cache.picture.width / count,
-            layer.height * down,
-            dx,
+            picture,
+            panel * sourceWidth,
+            0,
+            sourceWidth,
+            picture.height,
+            panel * panelWidth + offset / count,
             layer.top,
             shownWidth,
             layer.height,
           )
-          continue
         }
-
-        const wave = layer.block === 0 && cache.wave ? cache.wave : null
-        const picture = wave ?? layer.canvas
-        if (!picture) continue
-        const sourceWidth = wave ? wave.width : bars.length
-        context.drawImage(
-          picture,
-          panel * sourceWidth,
-          0,
-          sourceWidth,
-          picture.height,
-          dx,
-          layer.top,
-          shownWidth,
-          layer.height,
-        )
       }
     }
-
-    blitted()
 
     const heights = cache.layers.map((layer) => layer.height)
     const tops = cache.layers.map((layer) => layer.top)
@@ -629,110 +620,113 @@ export default function BarGrid({
     tops.forEach((top, index) =>
       drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR, divisions),
     )
-
     drawSectionBounds(context, bars, width, height, theme.palette.info.dark, layout)
-
-    const cursored = stopwatch('BarGrid cursor')
-    drawColumnCursor(
-      context,
-      bars,
-      tops,
-      heights,
-      positionRef.current,
-      width,
-      cursorMode,
-      theme.palette.error.main,
-      cache.layers.map((layer) => !(layer.block === 0 && waveStyle === 'silhouette')),
-      layout,
-    )
-    cursored()
 
     context.restore()
 
-    const projected = stopwatch('BarGrid projections')
-    const stripKey = `${plan.key}|${Math.round(full)}|${Math.round(height)}`
-    let strips = stripsRef.current
-    if (!strips || strips.key !== stripKey) {
-      const ratio = window.devicePixelRatio || 1
-      const canvas = strips?.canvas ?? document.createElement('canvas')
-      canvas.width = Math.max(1, Math.round(full * ratio))
-      canvas.height = Math.max(1, Math.round(height * ratio))
-      const strip = canvas.getContext('2d')
-      if (strip) {
-        strip.setTransform(ratio, 0, 0, ratio, 0, 0)
-        strip.clearRect(0, 0, full, height)
-        for (const layer of cache.layers) {
-          // how alike the bars are at each row on the left, how much they add
-          // up to on the right
-          drawProjection(
-            strip,
-            layer.steady,
-            0,
-            layer.top,
-            PROJECTION_WIDTH,
-            layer.height,
-            theme.palette.success.main,
-            true,
-          )
-          drawProjection(
-            strip,
-            layer.profile,
-            PROJECTION_WIDTH + width,
-            layer.top,
-            PROJECTION_WIDTH,
-            layer.height,
-            theme.palette.text.primary,
-          )
-
-          // over the sum, so the two are read against each other
-          drawProjection(
-            strip,
-            layer.both,
-            PROJECTION_WIDTH + width,
-            layer.top,
-            PROJECTION_WIDTH,
-            layer.height,
-            theme.palette.primary.main,
-          )
-        }
-      }
-      strips = { canvas, key: stripKey }
-      stripsRef.current = strips
-    }
-    // only the two strips are copied, not the plot between them
-    {
-      const ratio = strips.canvas.width / full
-      const right = PROJECTION_WIDTH + width
-      context.drawImage(
-        strips.canvas,
+    for (const layer of cache.layers) {
+      // how alike the bars are at each row on the left, how much they add up
+      // to on the right
+      drawProjection(
+        context,
+        layer.steady,
         0,
-        0,
-        PROJECTION_WIDTH * ratio,
-        strips.canvas.height,
-        0,
-        0,
+        layer.top,
         PROJECTION_WIDTH,
-        height,
+        layer.height,
+        theme.palette.success.main,
+        true,
       )
-      context.drawImage(
-        strips.canvas,
-        right * ratio,
-        0,
-        (full - right) * ratio,
-        strips.canvas.height,
-        right,
-        0,
-        full - right,
-        height,
+      drawProjection(
+        context,
+        layer.profile,
+        PROJECTION_WIDTH + width,
+        layer.top,
+        PROJECTION_WIDTH,
+        layer.height,
+        theme.palette.text.primary,
+      )
+
+      // over the sum, so the two are read against each other
+      drawProjection(
+        context,
+        layer.both,
+        PROJECTION_WIDTH + width,
+        layer.top,
+        PROJECTION_WIDTH,
+        layer.height,
+        theme.palette.primary.main,
       )
     }
+  }, false, `${stillKey}|${width}`)
 
-    // and the one column the playhead is in, drawn as an outline over the rest:
-    // the shape of this bar against the shape of all of them
+  // What moves with the playhead: the lanes with the cursor drawn into them
+  // by the GPU, and the trace of the column the playhead is in
+  const { canvasRef } = useCanvasControl((context, full, height) => {
+    if (bars.length === 0) return
+    const { key, cache, width } = ensureCache(context, full, height)
+
+    const layout = columnLayout(bars, range)
     const atColumn = bars.findIndex(
       (bar) => positionRef.current >= bar.start && positionRef.current < bar.end,
     )
+
+    const gl = glRef.current
+    if (cache.gpu && gl) {
+      const bar = atColumn >= 0 ? bars[atColumn] : null
+      const cursor: LaneCursor | null = bar
+        ? {
+            column: atColumn,
+            row: (positionRef.current - bar.start) / Math.max(1e-12, bar.end - bar.start),
+            mode: cursorMode === 'xor' ? 'cut' : cursorMode === 'source-over' ? 'solid' : 'inverse',
+            solid: colorChannels(theme.palette.error.main),
+            outline: CURSOR_OUTLINE,
+            bar: CURSOR_WIDTH,
+          }
+        : null
+
+      const lanes = stopwatch('BarGrid lanes GL')
+      renderLanesGl(
+        gl,
+        bars,
+        cache.panels,
+        layout,
+        width,
+        height,
+        window.devicePixelRatio || 1,
+        colorChannels(theme.palette.background.paper),
+        colorChannels(theme.palette.primary.main),
+        cursor,
+      )
+      lanes()
+    } else {
+      context.save()
+      context.translate(PROJECTION_WIDTH, 0)
+      context.beginPath()
+      context.rect(0, 0, width, height)
+      context.clip()
+      const cursored = stopwatch('BarGrid cursor')
+      drawColumnCursor(
+        context,
+        bars,
+        cache.layers.map((layer) => layer.top),
+        cache.layers.map((layer) => layer.height),
+        positionRef.current,
+        width,
+        'source-over',
+        theme.palette.error.main,
+        cache.layers.map(() => false),
+        layout,
+      )
+      cursored()
+      context.restore()
+    }
+
+    // the one column the playhead is in, drawn as an outline over the rest:
+    // the shape of this bar against the shape of all of them. Read when the
+    // playhead enters the column and kept until it leaves
     if (atColumn >= 0) {
+      const projected = stopwatch('BarGrid projections')
       const traceKey = `${key}|${atColumn}`
       let trace = traceRef.current
       if (!trace || trace.key !== traceKey) {
@@ -761,10 +755,9 @@ export default function BarGrid({
           false,
         )
       })
+      projected()
     }
-
-    projected()
-  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${position}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
+  }, playing, `${stillKey}|${width}|${position}|${cursorMode}`)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1003,8 +996,32 @@ export default function BarGrid({
     <Box ref={wrapRef} sx={{ position: 'relative', height: '100%' }}>
       <Box
         component="canvas"
-      ref={canvasRef}
-      data-trace="BarGrid"
+        ref={glRef}
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: PROJECTION_WIDTH,
+          width: `calc(100% - ${PROJECTION_WIDTH * 2}px)`,
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+      />
+      <Box
+        component="canvas"
+        ref={stillRef}
+        data-trace="BarGrid still"
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+      />
+      <Box
+        component="canvas"
+        ref={canvasRef}
+        data-trace="BarGrid"
         onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}
@@ -1015,6 +1032,8 @@ export default function BarGrid({
         }}
         onContextMenu={openMenu}
         sx={{
+          position: 'absolute',
+          inset: 0,
           display: 'block',
           width: '100%',
           height: '100%',

@@ -1682,11 +1682,7 @@ const CURSOR_HUE = '#00e5ff'
 // paint is last because it is the only one a lane can hide.
 export const CURSOR_MODES: { value: GlobalCompositeOperation; label: string }[] = [
   { value: 'difference', label: 'Inverse' },
-  { value: 'exclusion', label: 'Soft inverse' },
   { value: 'xor', label: 'Cut out' },
-  { value: 'lighten', label: 'Lighten' },
-  { value: 'darken', label: 'Darken' },
-  { value: 'luminosity', label: 'Luminosity' },
   { value: 'source-over', label: 'Solid' },
 ]
 

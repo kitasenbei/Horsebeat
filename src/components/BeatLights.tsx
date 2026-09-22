@@ -10,7 +10,8 @@ type BeatLightsProps = {
   color: string
 }
 
-const SIZE = 16
+// a square stands this much of the row it sits in, and is as wide as it is tall
+const SHARE = '90%'
 const GAP = 5
 const IDLE = 0.15
 // how fast a lit square falls back, in beats
@@ -81,13 +82,16 @@ export default function BeatLights({
   }, [playing, sections, duration, positionRef])
 
   return (
-    <Box ref={lightsRef} sx={{ display: 'flex', alignItems: 'center', gap: `${GAP}px`, pr: 1.5 }}>
+    <Box
+      ref={lightsRef}
+      sx={{ display: 'flex', alignItems: 'center', alignSelf: 'stretch', gap: `${GAP}px`, pr: 1.5 }}
+    >
       {Array.from({ length: most }, (_, index) => (
         <Box
           key={index}
           sx={{
-            width: SIZE,
-            height: SIZE,
+            height: SHARE,
+            aspectRatio: '1 / 1',
             borderRadius: '3px',
             bgcolor: color,
             opacity: IDLE,

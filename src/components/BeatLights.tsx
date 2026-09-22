@@ -16,6 +16,10 @@ const GAP = 5
 const IDLE = 0.15
 // how fast a lit square falls back, in beats
 const FADE = 7
+// how far a square swells as its beat lands, and how fast it settles: the same
+// pulse the name beside it makes
+const PULSE = 0.35
+const DECAY = 7
 const DEFAULT_BEATS = 4
 
 export default function BeatLights({
@@ -49,6 +53,7 @@ export default function BeatLights({
       for (let at = 0; at < squares.length; at += 1) {
         squares[at].style.display = at < beats ? 'block' : 'none'
         squares[at].style.opacity = String(IDLE)
+        squares[at].style.transform = 'scale(1)'
       }
     }
 
@@ -70,6 +75,8 @@ export default function BeatLights({
         squares[index].style.opacity = String(
           index === lit ? IDLE + (1 - IDLE) * Math.exp(-since * FADE) : IDLE,
         )
+        squares[index].style.transform =
+          index === lit ? `scale(${1 + PULSE * Math.exp(-since * DECAY)})` : 'scale(1)'
       }
 
       frame = requestAnimationFrame(tick)
@@ -95,7 +102,7 @@ export default function BeatLights({
             borderRadius: '3px',
             bgcolor: color,
             opacity: IDLE,
-            willChange: 'opacity',
+            willChange: 'opacity, transform',
           }}
         />
       ))}

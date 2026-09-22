@@ -101,11 +101,13 @@ vec3 fromHsl(vec3 hsl) {
   return vec3(hueTo(p, q, hsl.x + 1.0 / 3.0), hueTo(p, q, hsl.x), hueTo(p, q, hsl.x - 1.0 / 3.0));
 }
 
-// the hue of the tint with the lightness and saturation the lane drew, so the
-// column keeps its shape and only its colour says it is the current one
+// every hue turned to its opposite, with the lightness and saturation the
+// lane drew: the column keeps its shape and its contrasts, and stands apart
+// from its neighbours whatever colours the map uses. One fixed hue was lost
+// wherever the map came near it
 vec3 tinted(vec3 c) {
   vec3 hsl = toHsl(c);
-  return fromHsl(vec3(0.5, hsl.y, hsl.z));
+  return fromHsl(vec3(fract(hsl.x + 0.5), hsl.y, hsl.z));
 }
 
 vec3 marked(vec3 c) {

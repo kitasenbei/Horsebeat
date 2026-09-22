@@ -1,12 +1,7 @@
 import { useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
-import IconButton from '@mui/material/IconButton'
-import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import OpenInFullIcon from '@mui/icons-material/OpenInFull'
-import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
-import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import { useTheme } from '@mui/material/styles'
 import { drawBands, drawEnvelopeStrip, drawHeatmap, drawLevels, sectionSignature } from '../draw'
 import { useCanvas } from '../useCanvas'
@@ -24,10 +19,7 @@ type BeatFramesProps = {
   position: number
   positionRef: RefObject<number>
   playing: boolean
-  expanded: boolean
   onSectionsChange: (sections: Section[]) => void
-  onExpandedChange: (expanded: boolean) => void
-  onCompile: () => void
 }
 
 const LANE_HEIGHT = 20
@@ -51,10 +43,7 @@ export default function BeatFrames({
   position,
   positionRef,
   playing,
-  expanded,
   onSectionsChange,
-  onExpandedChange,
-  onCompile,
 }: BeatFramesProps) {
   const theme = useTheme()
   const spans = sectionSpans(sections, duration)
@@ -170,46 +159,13 @@ export default function BeatFrames({
       elevation={0}
       sx={{
         width: '100%',
-        height: expanded ? '100%' : 'auto',
+        height: 'auto',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        border: 1,
-        borderColor: 'divider',
+        border: 0,
       }}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-          px: 1,
-          py: 0.25,
-          bgcolor: 'action.hover',
-        }}
-      >
-        <Typography variant="caption" sx={{ flex: 1 }}>
-          Beat frames
-        </Typography>
-        <Tooltip title="Compile every bar">
-          <IconButton size="small" aria-label="Compile every bar" onClick={onCompile}>
-            <ViewHeadlineIcon sx={{ fontSize: 15 }} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={expanded ? 'Back to panels' : 'Expand beat frames'}>
-          <IconButton
-            size="small"
-            aria-label={expanded ? 'Collapse beat frames' : 'Expand beat frames'}
-            onClick={() => onExpandedChange(!expanded)}
-          >
-            {expanded ? (
-              <CloseFullscreenIcon sx={{ fontSize: 15 }} />
-            ) : (
-              <OpenInFullIcon sx={{ fontSize: 15 }} />
-            )}
-          </IconButton>
-        </Tooltip>
-      </Box>
       <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex' }}>
         {spans.length === 0 ? (
           <Typography variant="caption" color="text.secondary">
@@ -226,7 +182,7 @@ export default function BeatFrames({
             sx={{
               display: 'block',
               width: '100%',
-              height: expanded ? '100%' : PANEL_HEIGHT,
+              height: PANEL_HEIGHT,
               touchAction: 'none',
               cursor: 'ew-resize',
             }}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
-import { useTheme } from '@mui/material/styles'
+import { useTheme, type Theme } from '@mui/material/styles'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import {
@@ -13,6 +13,10 @@ import {
   drawProjection,
   drawSectionBounds,
   drawSliceGuides,
+  buildWaveImage,
+  buildWaveShape,
+  type Bar,
+  type WaveStyle,
   renderBarLayers,
   PROJECTION_WIDTH,
   sectionSignature,
@@ -29,6 +33,7 @@ import {
 import { clampRange } from '../range'
 import { useLiveEdit } from '../useLiveEdit'
 import { useRafCallback } from '../useRafCallback'
+import { renderWaveGl } from '../waveGl'
 import type { Curve } from '../curve'
 import type { Range } from '../range'
 
@@ -52,6 +57,7 @@ type BarGridProps = {
   divisions: number
   colormap: number
   cursorMode: GlobalCompositeOperation
+  waveStyle: WaveStyle
 }
 
 const GUIDE_COLOR = '#ffffff'
@@ -71,6 +77,48 @@ const OFFSET_GAIN = 2
 // column under the cursor stops being the column under the cursor.
 function plotWidth(full: number): number {
   return Math.max(1, full - PROJECTION_WIDTH * 2)
+}
+
+// The wave lane as its own canvas, painted once and blitted after that. The
+// GPU rasterises it at the resolution the screen shows it, with one sampled
+// value per device pixel row; a browser without WebGL2 gets the pixel fill.
+function paintWave(
+  context: CanvasRenderingContext2D,
+  envelope: Float32Array,
+  bars: Bar[],
+  height: number,
+  width: number,
+  curve: Curve,
+  colormap: number,
+  style: WaveStyle,
+  theme: Theme,
+): HTMLCanvasElement | null {
+  const ratio = window.devicePixelRatio || 1
+  // one row per source frame in the widest bar and no more: rows past that
+  // read the same frames again, and the GPU interpolates between rows as it
+  // stretches them to the pixels, so the picture loses nothing
+  const widest = bars.reduce((most, bar) => Math.max(most, bar.end - bar.start), 0)
+  const rows = Math.max(
+    1,
+    Math.min(Math.round(height * ratio), Math.ceil(widest * envelope.length)),
+  )
+  const shape = buildWaveShape(envelope, bars, rows, curve)
+  if (!shape) return null
+
+  const background = theme.palette.background.paper
+  const flat = theme.palette.primary.main
+
+  const drawn = renderWaveGl(shape, width * ratio, height * ratio, colormap, background, style, flat)
+  if (drawn) return drawn
+
+  const image = buildWaveImage(context, shape, width, colormap, background, style, flat)
+  if (!image) return null
+
+  const canvas = document.createElement('canvas')
+  canvas.width = image.width
+  canvas.height = image.height
+  canvas.getContext('2d')?.putImageData(image, 0, 0)
+  return canvas
 }
 
 export default function BarGrid({
@@ -93,6 +141,7 @@ export default function BarGrid({
   divisions,
   colormap,
   cursorMode,
+  waveStyle,
 }: BarGridProps) {
   const theme = useTheme()
 
@@ -142,6 +191,7 @@ export default function BarGrid({
       steady: Float32Array
       both: Float32Array
     }[]
+    wave: HTMLCanvasElement | null
     key: string
   } | null>(null)
 
@@ -192,6 +242,7 @@ export default function BarGrid({
       bands?.length ?? 0,
       blocks.join(','),
       colormap,
+      waveStyle,
       curve.points.map((point) => `${point.x}:${point.y}`).join(','),
     ].join('|')
 
@@ -199,8 +250,27 @@ export default function BarGrid({
     if (!cache || cache.key !== key) {
       const layers = renderBarLayers(context, sources, bars, height, curve, blocks, colormap)
 
+      const waveLayer = layers.find((layer) => layer.block === 0)
+
       cache = {
         key,
+        // drawn into its own canvas once, like the lanes are, and blitted after
+        // that: the shape does not move with the playhead, and walking a path of
+        // one point per row and column is far dearer than one drawImage
+        wave:
+          waveStyle !== 'colour' && envelope && waveLayer
+            ? paintWave(
+                context,
+                envelope,
+                bars,
+                waveLayer.height,
+                width,
+                curve,
+                colormap,
+                waveStyle,
+                theme,
+              )
+            : null,
         canvases: layers.map((layer) => {
           const canvas = document.createElement('canvas')
           canvas.width = layer.image.width
@@ -229,6 +299,12 @@ export default function BarGrid({
     context.imageSmoothingEnabled = false
     for (const layer of cache.canvases) {
       context.drawImage(layer.canvas, 0, layer.top, width, layer.height)
+
+      // the wave block can say its value as a width instead of only as a
+      // colour, which is the one lane whose source is an amplitude
+      if (layer.block === 0 && cache.wave) {
+        context.drawImage(cache.wave, 0, layer.top, width, layer.height)
+      }
     }
 
     const heights = cache.canvases.map((layer) => layer.height)
@@ -257,6 +333,7 @@ export default function BarGrid({
       theme.palette.info.dark,
       under,
       theme.palette.info.main,
+      waveStyle !== 'shape',
     )
 
     // only across the column under the pointer, so it reads as a position in
@@ -276,6 +353,7 @@ export default function BarGrid({
       width,
       cursorMode,
       theme.palette.error.main,
+      cache.canvases.map((layer) => !(layer.block === 0 && waveStyle === 'silhouette')),
     )
 
     context.restore()
@@ -339,7 +417,7 @@ export default function BarGrid({
       }
     }
 
-  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${curveSignature(curve)}`)
+  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current

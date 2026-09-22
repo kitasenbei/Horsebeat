@@ -888,7 +888,25 @@ export function blockPanels(block: number): number {
 }
 
 function parseHex(color: string): [number, number, number] {
-  const value = Number.parseInt(color.replace('#', ''), 16)
+  const text = color.trim()
+
+  // the theme hands out both '#fff' and 'rgb(255 255 255)', and the short hex
+  // read as six digits is a colour of its own rather than a wrong shade
+  if (text.startsWith('rgb')) {
+    const parts = text.match(/\d+(\.\d+)?/g) ?? []
+    return [Number(parts[0]) | 0, Number(parts[1]) | 0, Number(parts[2]) | 0]
+  }
+
+  const digits = text.replace('#', '')
+  const full =
+    digits.length === 3 || digits.length === 4
+      ? digits
+          .slice(0, 3)
+          .split('')
+          .map((digit) => digit + digit)
+          .join('')
+      : digits.slice(0, 6)
+  const value = Number.parseInt(full, 16)
   return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]
 }
 
@@ -1232,6 +1250,173 @@ export function drawProjection(
   context.restore()
 }
 
+// How the wave lane is drawn: as the field of colour it has always been, as
+// rows whose width is their value and whose colour is the one that value is
+// painted everywhere else, or as the one filled silhouette the beat frames draw.
+export const WAVE_STYLES = [
+  { value: 'colour', label: 'Wave colour' },
+  { value: 'shape', label: 'Wave shape' },
+  { value: 'silhouette', label: 'Wave silhouette' },
+] as const
+
+export type WaveStyle = (typeof WAVE_STYLES)[number]['value']
+
+// A full value fills this much of its column, so the loudest row still leaves a
+// gap to the column beside it rather than running edge to edge.
+export const WAVE_FILL = 0.82
+
+// The wave lane sampled once per column and row, curved, and read against the
+// loudest row in view. Kept apart from the drawing because the sampling is the
+// expensive half and it only changes when the bars, the window or the curve do,
+// while the drawing runs on every frame the playhead moves.
+export type WaveShape = {
+  rows: number
+  columns: number
+  values: Float32Array
+}
+
+// Running totals of a source, so the mean over any run of frames is two reads
+// and a divide however long the run is. Held per array: a source is decoded
+// once and then read for as long as it is open.
+const PREFIX_SUMS = new WeakMap<Float32Array, Float64Array>()
+
+function prefixSums(source: Float32Array): Float64Array {
+  const held = PREFIX_SUMS.get(source)
+  if (held) return held
+
+  const sums = new Float64Array(source.length + 1)
+  for (let frame = 0; frame < source.length; frame += 1) {
+    sums[frame + 1] = sums[frame] + source[frame]
+  }
+  PREFIX_SUMS.set(source, sums)
+  return sums
+}
+
+export function buildWaveShape(
+  source: Float32Array,
+  bars: Bar[],
+  rows: number,
+  curve: Curve,
+): WaveShape | null {
+  if (bars.length === 0 || source.length === 0 || rows <= 0) return null
+
+  const frames = source.length
+  const last = frames - 1
+  const columns = bars.length
+  const values = new Float32Array(columns * rows)
+  const sums = prefixSums(source)
+  const shaped = shapeLut(curve)
+  const top255 = LUT_SIZE - 1
+  let most = 0
+
+  for (let index = 0; index < columns; index += 1) {
+    const bar = bars[index]
+    const base = bar.start * frames
+    const step = ((bar.end - bar.start) * frames) / rows
+
+    for (let row = 0; row < rows; row += 1) {
+      const from = Math.min(last, Math.max(0, (base + row * step) | 0))
+      const until = Math.min(frames, Math.max(from + 1, Math.ceil(base + (row + 1) * step)))
+      const mean = (sums[until] - sums[from]) / (until - from)
+      const value = shaped[((mean < 1 ? mean : 1) * top255 + 0.5) | 0]
+      values[index * rows + row] = value
+      if (value > most) most = value
+    }
+  }
+
+  // read against the loudest row rather than against one: a quiet passage would
+  // otherwise draw as a sliver, and a loud one as a column of solid bars
+  if (most > 0) {
+    for (let at = 0; at < values.length; at += 1) values[at] /= most
+  }
+
+  return { rows, columns, values }
+}
+
+// Packed colours for the pixel fill. The shape is built the way the lanes are,
+// a pixel at a time into an ImageData, because a path costs one point per row
+// per column and the whole song can be thousands of columns wide, while this
+// costs the size of the picture whatever the columns do.
+const LANE_LUTS = new Map<number, Uint32Array>()
+
+function laneLut(colormap: number): Uint32Array {
+  const held = LANE_LUTS.get(colormap)
+  if (held) return held
+
+  const lut = new Uint32Array(LUT_SIZE)
+  for (let step = 0; step < LUT_SIZE; step += 1) {
+    const [red, green, blue] = waveRgb(step / (LUT_SIZE - 1), colormap)
+    lut[step] = (255 << 24) | (Math.round(blue) << 16) | (Math.round(green) << 8) | Math.round(red)
+  }
+  LANE_LUTS.set(colormap, lut)
+  return lut
+}
+
+// A theme colour as the three channels a shader takes, on nought to one.
+export function colorChannels(color: string): [number, number, number] {
+  const [red, green, blue] = parseHex(color)
+  return [red / 255, green / 255, blue / 255]
+}
+
+// A colourmap as the bytes of a 256 by 1 RGBA texture.
+export function colormapBytes(colormap: number): Uint8Array {
+  const bytes = new Uint8Array(LUT_SIZE * 4)
+  for (let step = 0; step < LUT_SIZE; step += 1) {
+    const [red, green, blue] = waveRgb(step / (LUT_SIZE - 1), colormap)
+    bytes[step * 4] = Math.round(red)
+    bytes[step * 4 + 1] = Math.round(green)
+    bytes[step * 4 + 2] = Math.round(blue)
+    bytes[step * 4 + 3] = 255
+  }
+  return bytes
+}
+
+function packed(color: string): number {
+  const [red, green, blue] = parseHex(color)
+  return (255 << 24) | (blue << 16) | (green << 8) | red
+}
+
+export function buildWaveImage(
+  context: CanvasRenderingContext2D,
+  shape: WaveShape,
+  width: number,
+  colormap: number,
+  background: string,
+  style: WaveStyle,
+  silhouette: string,
+): ImageData | null {
+  const { rows, columns, values } = shape
+  const span = Math.max(1, Math.round(width))
+  if (columns === 0 || rows === 0) return null
+
+  const image = context.createImageData(span, rows)
+  const pixels = new Uint32Array(image.data.buffer)
+  pixels.fill(packed(background))
+
+  const column = span / columns
+  const reach = (column * WAVE_FILL) / 2
+  const flat = packed(silhouette)
+  const lut = laneLut(colormap)
+
+  for (let index = 0; index < columns; index += 1) {
+    const middle = index * column + column / 2
+    const base = index * rows
+
+    for (let row = 0; row < rows; row += 1) {
+      const value = values[base + row]
+      const half = value * reach
+      const from = Math.max(0, Math.round(middle - half))
+      const until = Math.min(span, Math.max(from + 1, Math.round(middle + half)))
+      const paint = style === 'silhouette' ? flat : lut[(value * (LUT_SIZE - 1) + 0.5) | 0]
+      const line = row * span
+
+      for (let x = from; x < until; x += 1) pixels[line + x] = paint
+    }
+  }
+
+  return image
+}
+
 export const CURSOR_WIDTH = 3
 // a canvas stroke straddles its path, so the rect is grown by half the weight
 // to put the whole outline outside the column and leave the column itself whole
@@ -1258,6 +1443,8 @@ export const GUIDE_WIDTH = 1
 
 const HUE_STRENGTH = 0.35
 
+const SECTION_OUTLINE = 2
+
 export function drawSectionBounds(
   context: CanvasRenderingContext2D,
   bars: Bar[],
@@ -1266,6 +1453,9 @@ export function drawSectionBounds(
   color: string,
   highlight: string | null = null,
   hue = color,
+  // a silhouette is one flat colour, so the section under the pointer is
+  // boxed rather than recoloured: a hue laid on it would only change the flat
+  outlined = false,
 ) {
   if (bars.length === 0) return
 
@@ -1290,6 +1480,21 @@ export function drawSectionBounds(
   if (first < 0) return
   let last = first
   while (last + 1 < bars.length && bars[last + 1].section === highlight) last += 1
+
+  if (outlined) {
+    const inset = SECTION_OUTLINE / 2
+    context.save()
+    context.strokeStyle = hue
+    context.lineWidth = SECTION_OUTLINE
+    context.strokeRect(
+      first * column + inset,
+      inset,
+      (last - first + 1) * column - SECTION_OUTLINE,
+      height - SECTION_OUTLINE,
+    )
+    context.restore()
+    return
+  }
 
   // the hue blend takes the fill's hue and keeps the luminance underneath, so
   // the section reads as marked without losing the shape it is showing
@@ -1335,6 +1540,9 @@ export function drawColumnCursor(
   width: number,
   mode: GlobalCompositeOperation,
   solid: string,
+  // per block, whether the column under the playhead is recoloured or only
+  // outlined: a silhouette is one flat colour and a hue on it says nothing
+  tinted: boolean[],
 ) {
   const index = bars.findIndex((bar) => position >= bar.start && position < bar.end)
   if (index < 0) return
@@ -1363,11 +1571,13 @@ export function drawColumnCursor(
     for (let panel = 0; panel < panels; panel += 1) {
       const left = panel * panelWidth + index * column
 
-      context.save()
-      context.globalCompositeOperation = 'hue'
-      context.fillStyle = CURSOR_HUE
-      context.fillRect(left, top, column, heights[block])
-      context.restore()
+      if (tinted[block]) {
+        context.save()
+        context.globalCompositeOperation = 'hue'
+        context.fillStyle = CURSOR_HUE
+        context.fillRect(left, top, column, heights[block])
+        context.restore()
+      }
 
       context.strokeRect(
         left - grow,

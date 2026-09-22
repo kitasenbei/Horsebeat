@@ -16,9 +16,19 @@ import RedoIcon from '@mui/icons-material/Redo'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import TuneIcon from '@mui/icons-material/Tune'
+import ShowChartIcon from '@mui/icons-material/ShowChart'
+import GridOnIcon from '@mui/icons-material/GridOn'
 import BeatLights from './BeatLights'
 import Gallop from './Gallop'
-import { BLOCK_LABELS, COLORMAPS, CURSOR_MODES, DIVISION_STEPS, SLICE_STEPS } from '../draw'
+import {
+  BLOCK_LABELS,
+  COLORMAPS,
+  CURSOR_MODES,
+  DIVISION_STEPS,
+  SLICE_STEPS,
+  WAVE_STYLES,
+  type WaveStyle,
+} from '../draw'
 import { sectionSpans, type Section } from '../timing'
 
 type TopBarProps = {
@@ -44,6 +54,12 @@ type TopBarProps = {
   onColormapChange: (colormap: number) => void
   cursorMode: GlobalCompositeOperation
   onCursorModeChange: (mode: GlobalCompositeOperation) => void
+  curveOpen: boolean
+  onCurveOpenChange: (open: boolean) => void
+  framesOpen: boolean
+  onFramesOpenChange: (open: boolean) => void
+  waveStyle: WaveStyle
+  onWaveStyleChange: (style: WaveStyle) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -154,6 +170,12 @@ export default function TopBar({
   onColormapChange,
   cursorMode,
   onCursorModeChange,
+  curveOpen,
+  onCurveOpenChange,
+  framesOpen,
+  onFramesOpenChange,
+  waveStyle,
+  onWaveStyleChange,
   canUndo,
   canRedo,
   onUndo,
@@ -298,6 +320,41 @@ export default function TopBar({
               onColormapChange,
             )
           : null}
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={curveOpen ? 'curve' : null}
+          onChange={() => onCurveOpenChange(!curveOpen)}
+          sx={PILL}
+        >
+          <ToggleButton value="curve" aria-label="Amplitude curve" sx={selected('secondary')}>
+            <Tooltip title="Amplitude curve">
+              <span>{segment('Curve', <ShowChartIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={framesOpen ? 'frames' : null}
+          onChange={() => onFramesOpenChange(!framesOpen)}
+          sx={PILL}
+        >
+          <ToggleButton value="frames" aria-label="Beat frames" sx={selected('secondary')}>
+            <Tooltip title="Beat frames">
+              <span>{segment('Frames', <GridOnIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        {picker<WaveStyle>(
+          'Wave lane style',
+          waveStyle,
+          WAVE_STYLES.map((entry) => ({ value: entry.value, label: entry.label })),
+          onWaveStyleChange,
+        )}
 
         {picker<GlobalCompositeOperation>(
           'Position marker blend',

@@ -18,6 +18,9 @@ import RulerSlider from './components/RulerSlider'
 import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
+import type { WaveStyle } from './draw'
+import BeatFrames from './components/BeatFrames'
+import FloatingWindow from './components/FloatingWindow'
 import TimingPanel from './components/TimingPanel'
 import BarGrid from './components/BarGrid'
 import {
@@ -50,6 +53,7 @@ const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
 // a beatmap arrives already timed, so it opens on the whole song: there is
 // nothing to drag into place, and the point is to see the timing it brought
 const WHOLE_RANGE: Range = { start: 0, end: 1 }
+const FRAMES_WIDTH = 420
 const FALL_RANGE = 10.5
 type Doc = {
   markers: number[]
@@ -116,6 +120,9 @@ export default function App() {
   const [slice, setSlice] = useState<number | 'auto'>('auto')
   const [lane, setLane] = useState<number | 'all'>(0)
   const [cursorMode, setCursorMode] = useState<GlobalCompositeOperation>('difference')
+  const [curveOpen, setCurveOpen] = useState(false)
+  const [framesOpen, setFramesOpen] = useState(false)
+  const [waveStyle, setWaveStyle] = useState<WaveStyle>('colour')
   const [divisions, setDivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
@@ -360,7 +367,37 @@ export default function App() {
         onColormapChange={setColormap}
         cursorMode={cursorMode}
         onCursorModeChange={setCursorMode}
+        curveOpen={curveOpen}
+        onCurveOpenChange={setCurveOpen}
+        framesOpen={framesOpen}
+        onFramesOpenChange={setFramesOpen}
+        waveStyle={waveStyle}
+        onWaveStyleChange={setWaveStyle}
       />
+      {curveOpen ? (
+        <CurvePanel curve={curve} onCurveChange={setCurve} onClose={() => setCurveOpen(false)} />
+      ) : null}
+      {framesOpen ? (
+        <FloatingWindow
+          title="Beat frames"
+          width={FRAMES_WIDTH}
+          left={320}
+          onClose={() => setFramesOpen(false)}
+        >
+          <BeatFrames
+            envelope={envelope}
+            loudness={loudness}
+            onsets={onsets}
+            bands={bands}
+            sections={sections}
+            duration={duration}
+            position={position}
+            positionRef={positionRef}
+            playing={playing}
+            onSectionsChange={setSections}
+          />
+        </FloatingWindow>
+      ) : null}
       <Box
         component="main"
         sx={{
@@ -402,9 +439,6 @@ export default function App() {
                 onSectionsChange={setSections}
                 onEditingChange={setEditingSection}
               />
-            </Box>
-            <Box sx={{ flex: '0 0 auto' }}>
-              <CurvePanel embedded curve={curve} onCurveChange={setCurve} />
             </Box>
           </Box>
           <Box
@@ -503,6 +537,7 @@ export default function App() {
                     divisions={divisions}
                     colormap={colormap}
                     cursorMode={cursorMode}
+                    waveStyle={waveStyle}
                   />
                 </Box>
               </>

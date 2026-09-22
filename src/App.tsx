@@ -561,6 +561,7 @@ export default function App() {
                 playing={playing}
                 duration={duration}
                 seconds={FALL_RANGE - fallSpeed}
+                onSeek={seek}
               />
               <Paper
                 elevation={4}

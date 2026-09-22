@@ -4,6 +4,7 @@ import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
 import ButtonGroup from '@mui/material/ButtonGroup'
 import Divider from '@mui/material/Divider'
+import InputBase from '@mui/material/InputBase'
 import Popover from '@mui/material/Popover'
 import Typography from '@mui/material/Typography'
 import RulerSlider from './RulerSlider'
@@ -37,6 +38,23 @@ export default function BpmPicker({
   onEditingChange,
 }: BpmPickerProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  // the tempo as typed, kept apart from the value until it is entered: a
+  // half-typed number is not a tempo the song should jump to
+  const [typed, setTyped] = useState('')
+
+  const open = (element: HTMLElement) => {
+    setTyped(value.toFixed(3))
+    setAnchor(element)
+  }
+
+  const enter = () => {
+    const parsed = Number(typed.trim())
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setTyped(value.toFixed(3))
+      return
+    }
+    onChange(Math.min(MAX_BPM, Math.max(MIN_BPM, parsed)))
+  }
 
   const whole = Math.floor(value)
   const fraction = Math.round((value - whole) * 100)
@@ -49,7 +67,7 @@ export default function BpmPicker({
     <>
       <ButtonBase
         onClick={(event) => {
-          setAnchor(event.currentTarget)
+          open(event.currentTarget)
           onEditingChange?.(true)
         }}
         sx={{
@@ -86,6 +104,37 @@ export default function BpmPicker({
           },
         }}
       >
+        <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
+          <InputBase
+            autoFocus
+            value={typed}
+            inputProps={{ inputMode: 'decimal', 'aria-label': 'Tempo in beats per minute' }}
+            onFocus={(event) => event.target.select()}
+            onChange={(event) => setTyped(event.target.value)}
+            onBlur={enter}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                enter()
+                event.currentTarget.blur()
+              }
+              if (event.key === 'Escape') {
+                setTyped(value.toFixed(3))
+                event.currentTarget.blur()
+              }
+            }}
+            sx={{
+              width: 140,
+              px: 1.5,
+              borderRadius: 999,
+              border: 1,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+              fontWeight: 600,
+              '& input': { textAlign: 'center', p: 0.5 },
+            }}
+          />
+        </Box>
+        <Divider />
           <RulerSlider
             value={fraction}
             min={0}

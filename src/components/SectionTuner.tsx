@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import RulerSlider from './RulerSlider'
 import { useLiveSection } from '../useLiveSection'
+import { useLiveSectionsValue } from '../liveSections'
 import { MAX_BPM, MIN_BPM, sortSections, type Section } from '../timing'
 
 type SectionTunerProps = {
@@ -26,13 +27,16 @@ const PILL = {
 // playhead on their own while the song plays, so the app is not rendered to
 // keep them current.
 export default function SectionTuner({
-  sections,
+  sections: givenSections,
   duration,
   position,
   positionRef,
   playing,
   onSectionsChange,
 }: SectionTunerProps) {
+  // the rulers show the section as it is being dragged elsewhere, not as the
+  // app last heard of it
+  const sections = useLiveSectionsValue(givenSections)
   const live = useLiveSection(sections, duration, position, positionRef, playing)
   const fraction = Math.round(((live?.bpm ?? 120) % 1) * 100)
 

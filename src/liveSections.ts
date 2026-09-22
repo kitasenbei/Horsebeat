@@ -10,3 +10,4 @@ const store = makeLiveStore<Section[]>(
 export const liveSections = store.read
 export const useLiveSectionsValue = store.useValue
 export const useLiveSectionsEdit = store.useEdit
+export const subscribeLiveSections = store.subscribe

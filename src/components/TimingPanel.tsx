@@ -18,6 +18,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 import { tick } from '../trace'
+import { liveSections, subscribeLiveSections } from '../liveSections'
 
 type TimingPanelProps = {
   sections: Section[]
@@ -99,6 +100,32 @@ export default function TimingPanel({
   // rendered from the app's position, which is right while paused; playing,
   // the poll below marks the cards again straight after every render
   const activeId = liveIdAt(position)
+
+  // While a section is dragged elsewhere its card shows the drag: the tempo
+  // and the offset are written into the card's text by hand, the way the live
+  // mark is, so a drag frame renders no card. The render after the release
+  // writes the same numbers back through React
+  useEffect(() => {
+    return subscribeLiveSections(() => {
+      const list = listRef.current
+      if (!list) return
+      const live = liveSections(sections)
+      for (const card of list.querySelectorAll<HTMLElement>('[data-section]')) {
+        const section = live.find((item) => item.id === card.dataset.section)
+        if (!section) continue
+        const bpm = card.querySelector<HTMLElement>('[data-field="bpm"]')
+        if (bpm) {
+          const text = `${section.bpm.toFixed(2)} BPM`
+          if (bpm.textContent !== text) bpm.textContent = text
+        }
+        const offset = card.querySelector<HTMLElement>('[data-field="offset"] .MuiChip-label')
+        if (offset) {
+          const text = `${Math.round(section.offsetMs)} ms`
+          if (offset.textContent !== text) offset.textContent = text
+        }
+      }
+    })
+  })
 
   useEffect(() => {
     if (!playing) return
@@ -374,6 +401,7 @@ export default function TimingPanel({
                     ) : (
                       <Chip
                         size="small"
+                        data-field="offset"
                         label={`${Math.round(section.offsetMs)} ms`}
                         onClick={() => {
                           setEditingOffset(section.id)

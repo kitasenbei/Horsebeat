@@ -13,6 +13,9 @@ export type LiveStore<T> = {
   // a gesture that moves the value: the same shape as a live edit, with the
   // frames going to the followers and one commit going to the app
   useEdit: (settled: T, onChange: (next: T) => void) => readonly [T, (next: T) => void, () => void]
+  // to be told when the gesture moves, for a follower that updates the page
+  // by hand rather than by rendering
+  subscribe: (listener: () => void) => () => void
 }
 
 export function makeLiveStore<T>(same: (left: T, right: T) => boolean): LiveStore<T> {
@@ -75,5 +78,5 @@ export function makeLiveStore<T>(same: (left: T, right: T) => boolean): LiveStor
     return [value, edit, settle] as const
   }
 
-  return { read, useValue, useEdit }
+  return { read, useValue, useEdit, subscribe }
 }

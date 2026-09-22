@@ -66,7 +66,7 @@ export default function BpmPicker({
           '[data-live="true"] &:hover': { bgcolor: BPM_LIVE_HOVER },
         }}
       >
-        <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
+        <Typography variant="body2" data-field="bpm" sx={{ fontWeight: 600, lineHeight: 1.4 }}>
           {value.toFixed(2)} BPM
         </Typography>
       </ButtonBase>

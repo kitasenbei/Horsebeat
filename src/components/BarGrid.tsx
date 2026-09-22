@@ -769,6 +769,7 @@ export default function BarGrid({
         colorChannels(theme.palette.background.paper),
         colorChannels(theme.palette.primary.main),
         cursor,
+        key,
       )
       lanes()
     } else {

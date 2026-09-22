@@ -416,6 +416,10 @@ export function renderLanesGl(
   background: [number, number, number],
   flat: [number, number, number],
   cursor: LaneCursor | null,
+  // what the columns were made from, by the caller who knows: the bars are
+  // uploaded again only when this changes. The ends alone cannot say, since a
+  // section moved in the middle leaves them where they were
+  barsKey: string,
 ) {
   const held = rendererFor(canvas)
   if (!held || !canRenderLanesGl(canvas, bars, panels)) return
@@ -453,17 +457,17 @@ export function renderLanesGl(
   // the columns in frames: every source here has the same frame count, and
   // the upload is skipped while the window holds the same bars
   const frames = panels.length > 0 ? panels[0].source.length / panels[0].stride : 0
-  const barsKey = `${columns}|${frames}|${bars[0]?.start}|${bars[columns - 1]?.end}`
+  const uploadKey = `${barsKey}|${frames}`
   gl.activeTexture(gl.TEXTURE1)
   gl.bindTexture(gl.TEXTURE_2D, held.bars)
-  if (held.barsKey !== barsKey) {
+  if (held.barsKey !== uploadKey) {
     const data = new Float32Array(columns * 2)
     for (let index = 0; index < columns; index += 1) {
       data[index * 2] = bars[index].start * frames
       data[index * 2 + 1] = (bars[index].end - bars[index].start) * frames
     }
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, columns, 1, 0, gl.RG, gl.FLOAT, data)
-    held.barsKey = barsKey
+    held.barsKey = uploadKey
   }
 
   panels.forEach((panel, slot) => {

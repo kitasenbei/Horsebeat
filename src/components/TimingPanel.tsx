@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -18,10 +18,13 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 import { tick } from '../trace'
+import { useLivePosition } from '../useLivePosition'
 
 type TimingPanelProps = {
   sections: Section[]
-  positionMs: number
+  position: number
+  positionRef: RefObject<number>
+  playing: boolean
   durationMs: number
   onJump: (fromMs: number, toMs: number) => void
   onSeekMs: (ms: number) => void
@@ -70,7 +73,9 @@ function actionPill(live: boolean) {
 
 export default function TimingPanel({
   sections,
-  positionMs,
+  position,
+  positionRef,
+  playing,
   durationMs,
   onJump,
   onSeekMs,
@@ -80,6 +85,7 @@ export default function TimingPanel({
   embedded = false,
 }: TimingPanelProps) {
   tick('TimingPanel render')
+  const positionMs = useLivePosition(position, positionRef, playing) * durationMs
   const moveRef = useRef<Move | null>(null)
   const [spot, setSpot] = useState({ left: 320, top: 96 })
   const [editingOffset, setEditingOffset] = useState<string | null>(null)

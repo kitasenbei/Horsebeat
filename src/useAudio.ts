@@ -23,13 +23,23 @@ export function useAudio(file: File | null) {
     const audio = new Audio(url)
     audioRef.current = audio
 
+    // the app's position only moves when the song is not playing: a seek, or
+    // the moment it stops. While it plays the frame loop below keeps the ref,
+    // and everything that shows the playhead reads that; setting state a few
+    // times a second rendered the whole app for a number nothing needed
+    const land = () => {
+      const next = audio.duration > 0 ? audio.currentTime / audio.duration : 0
+      positionRef.current = next
+      setPosition(next)
+    }
     const onPlay = () => setPlaying(true)
-    const onStop = () => setPlaying(false)
+    const onStop = () => {
+      setPlaying(false)
+      land()
+    }
     const onMeta = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
     const onTime = () => {
-      const next = audio.duration > 0 ? audio.currentTime / audio.duration : 0
-      if (audio.paused) positionRef.current = next
-      setPosition(next)
+      if (audio.paused) land()
     }
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onStop)

@@ -22,6 +22,7 @@ import type { WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
 import FloatingWindow from './components/FloatingWindow'
 import TracePanel from './components/TracePanel'
+import SectionTuner from './components/SectionTuner'
 import TimingPanel from './components/TimingPanel'
 import BarGrid from './components/BarGrid'
 import {
@@ -154,23 +155,6 @@ export default function App() {
   const focus = editingSection
     ? (sectionSpans(sections, duration).find((item) => item.section.id === editingSection) ?? null)
     : null
-
-  const liveSection =
-    sectionSpans(sections, duration).find((item) => position >= item.start && position <= item.end)
-      ?.section ?? null
-
-  const bpmFraction = Math.round(((liveSection?.bpm ?? 120) % 1) * 100)
-
-  const tuneSection = (patch: Partial<Section>) => {
-    if (!liveSection) return
-    setSections((current) =>
-      sortSections(
-        current.map((section) =>
-          section.id === liveSection.id ? { ...section, ...patch } : section,
-        ),
-      ),
-    )
-  }
 
   const anchorSection = (at: number) => {
     const offsetMs = at * duration * 1000
@@ -432,7 +416,9 @@ export default function App() {
               <TimingPanel
                 embedded
                 sections={sections}
-                positionMs={position * duration * 1000}
+                position={position}
+                positionRef={positionRef}
+                playing={playing}
                 durationMs={duration * 1000}
                 onJump={(fromMs, toMs) => {
                   if (duration <= 0) return
@@ -607,76 +593,14 @@ export default function App() {
           onRateChange={setRate}
           left={
             file ? (
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    width: 200,
-                    borderRadius: 999,
-                    overflow: 'hidden',
-                    border: 1,
-                    borderColor: 'divider',
-                  }}
-                >
-                  <RulerSlider
-                    value={Math.floor(liveSection?.bpm ?? 120)}
-                    disabled={!liveSection}
-                    min={Math.floor(MIN_BPM)}
-                    max={Math.floor(MAX_BPM)}
-                    step={1}
-                    pixelsPerStep={10}
-                    majorEvery={5}
-                    format={(value) => `${Math.round(value)} BPM`}
-                    onChange={(whole) => tuneSection({ bpm: whole + bpmFraction / 100 })}
-                  />
-                </Paper>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    width: 200,
-                    borderRadius: 999,
-                    overflow: 'hidden',
-                    border: 1,
-                    borderColor: 'divider',
-                  }}
-                >
-                  <RulerSlider
-                    value={bpmFraction}
-                    disabled={!liveSection}
-                    min={0}
-                    max={99}
-                    step={1}
-                    pixelsPerStep={6}
-                    majorEvery={5}
-                    format={(value) => `.${String(Math.round(value)).padStart(2, '0')}`}
-                    onChange={(fraction) =>
-                      tuneSection({ bpm: Math.floor(liveSection?.bpm ?? 120) + fraction / 100 })
-                    }
-                  />
-                </Paper>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    width: 200,
-                    borderRadius: 999,
-                    overflow: 'hidden',
-                    border: 1,
-                    borderColor: 'divider',
-                  }}
-                >
-                  <RulerSlider
-                    value={Math.round(liveSection?.offsetMs ?? 0)}
-                    disabled={!liveSection}
-                    min={0}
-                    max={Math.max(1, Math.round(duration * 1000))}
-                    step={1}
-                    pixelsPerStep={4}
-                    majorEvery={10}
-                    format={(value) => `${Math.round(value)} ms`}
-                    onChange={(offsetMs) => tuneSection({ offsetMs })}
-                  />
-                </Paper>
-              </Box>
+              <SectionTuner
+                sections={sections}
+                duration={duration}
+                position={position}
+                positionRef={positionRef}
+                playing={playing}
+                onSectionsChange={setSections}
+              />
             ) : null
           }
           above={

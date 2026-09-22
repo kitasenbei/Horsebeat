@@ -13,6 +13,7 @@ import {
   drawColumnCursor,
   drawProjection,
   drawSectionBounds,
+  drawSectionHighlight,
   drawSliceGuides,
   buildWaveImage,
   buildWaveShape,
@@ -51,7 +52,7 @@ import { useRafCallback } from '../useRafCallback'
 import { renderLanesGl, type LanePanel } from '../laneGl'
 import { applyCurve, type Curve } from '../curve'
 import type { Range } from '../range'
-import { measure, tick } from '../trace'
+import { measure, record, tick } from '../trace'
 
 type BarGridProps = {
   envelope: Float32Array | null
@@ -205,7 +206,7 @@ function paintLanes(
     }
   }
 
-  return renderLanesGl(
+  const drawn = renderLanesGl(
     bars,
     panels,
     width,
@@ -214,6 +215,16 @@ function paintLanes(
     colorChannels(theme.palette.background.paper),
     colorChannels(theme.palette.primary.main),
   )
+  if (!drawn) return null
+
+  // copied into a plain canvas once: reading a WebGL canvas into a 2D one can
+  // mean pulling the picture back from the card, and that is paid here per
+  // rebuild rather than in every frame that blits it
+  const copy = document.createElement('canvas')
+  copy.width = drawn.width
+  copy.height = drawn.height
+  copy.getContext('2d')?.drawImage(drawn, 0, 0)
+  return copy
 }
 
 // every section the window touches contributes its own slices, so the view is
@@ -333,9 +344,6 @@ export default function BarGrid({
   // drawing every frame. Playing, the loop reads it next frame; paused, the move
   // asks for the one repaint itself
   const hoverRef = useRef<{ x: number; y: number } | null>(null)
-  // which section the pointer is over: the base canvas tints it, so the base
-  // is repainted when this changes and not on every move
-  const hoverSectionRef = useRef<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const layoutRef = useRef<{ tops: number[]; heights: number[] }>({ tops: [], heights: [] })
   const dragRef = useRef<{
@@ -378,6 +386,14 @@ export default function BarGrid({
       context.beginPath()
       context.rect(0, 0, width, height)
       context.clip()
+
+      // the section under the pointer is the one a drag would edit, so it is
+      // boxed: the hover position already says which column
+      const section = bars[index]?.section
+      if (section) {
+        drawSectionHighlight(context, bars, width, height, section, theme.palette.info.main, layout)
+      }
+
       // only across the column under the pointer, so it reads as a position in
       // that slice rather than as a rule over the whole picture
       context.fillStyle = HOVER_COLOR
@@ -386,10 +402,8 @@ export default function BarGrid({
     },
   )
 
-  const { canvasRef, repaint } = useCanvasControl((context, full, height) => {
+  const { canvasRef } = useCanvasControl((context, full, height) => {
     if (bars.length === 0) return
-
-    const hover = hoverRef.current
 
     // the bars keep the canvas minus the panel on the right, and everything
     // that maps a position to a column measures against this rather than the
@@ -556,6 +570,7 @@ export default function BarGrid({
     const offset = -layout.head * column
 
     context.imageSmoothingEnabled = false
+    const blitted = performance.now()
     for (const layer of cache.layers) {
       const count = blockPanels(layer.block)
       const panelWidth = width / count
@@ -598,6 +613,8 @@ export default function BarGrid({
       }
     }
 
+    record('BarGrid blit', performance.now() - blitted)
+
     const heights = cache.layers.map((layer) => layer.height)
     const tops = cache.layers.map((layer) => layer.top)
     sliceHeightRef.current = Math.max(1, heights[0] ?? 1)
@@ -607,30 +624,9 @@ export default function BarGrid({
       drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR, divisions),
     )
 
-    // the section under the pointer is the one a drag would edit, so it is
-    // tinted: the hover position already says which column
-    const under =
-      hover && bars.length > 0
-        ? (bars[
-            Math.min(
-              bars.length - 1,
-              Math.max(0, Math.floor((hover.x - PROJECTION_WIDTH - offset) / column)),
-            )
-          ]?.section ?? null)
-        : null
+    drawSectionBounds(context, bars, width, height, theme.palette.info.dark, layout)
 
-    drawSectionBounds(
-      context,
-      bars,
-      width,
-      height,
-      theme.palette.info.dark,
-      under,
-      theme.palette.info.main,
-      waveStyle !== 'shape',
-      layout,
-    )
-
+    const cursored = performance.now()
     drawColumnCursor(
       context,
       bars,
@@ -643,9 +639,11 @@ export default function BarGrid({
       cache.layers.map((layer) => !(layer.block === 0 && waveStyle === 'silhouette')),
       layout,
     )
+    record('BarGrid cursor', performance.now() - cursored)
 
     context.restore()
 
+    const projected = performance.now()
     for (const layer of cache.layers) {
       // how alike the bars are at each row on the left, how much they add up to
       // on the right
@@ -705,6 +703,7 @@ export default function BarGrid({
       }
     }
 
+    record('BarGrid projections', performance.now() - projected)
   }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${position}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
 
   useEffect(() => {
@@ -877,19 +876,6 @@ export default function BarGrid({
       if (current?.x === x && current?.y === y) return
       hoverRef.current = { x, y }
       repaintOverlay()
-
-      const layout = columnLayout(bars, range)
-      const column = plotWidth(bounds.width) / layout.shown
-      const offset = -layout.head * column
-      const index = Math.min(
-        bars.length - 1,
-        Math.max(0, Math.floor((x - PROJECTION_WIDTH - offset) / column)),
-      )
-      const section = bars[index]?.section ?? null
-      if (section !== hoverSectionRef.current) {
-        hoverSectionRef.current = section
-        if (!playing) repaint()
-      }
       return
     }
 
@@ -965,9 +951,7 @@ export default function BarGrid({
         onPointerCancel={end}
         onPointerLeave={() => {
           hoverRef.current = null
-          hoverSectionRef.current = null
           repaintOverlay()
-          if (!playing) repaint()
         }}
         onContextMenu={openMenu}
         sx={{

@@ -45,6 +45,12 @@ function add(name: string, ms: number) {
   totals.set(name, (totals.get(name) ?? 0) + 1)
 }
 
+// A stretch of work timed by the caller, for work that has no one function
+// to wrap.
+export function record(name: string, ms: number) {
+  add(name, ms)
+}
+
 // A function run and timed under a name.
 export function measure<T>(name: string, run: () => T): T {
   const start = performance.now()

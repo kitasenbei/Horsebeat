@@ -1692,7 +1692,6 @@ export const CURSOR_MODES: { value: GlobalCompositeOperation; label: string }[] 
 
 export const GUIDE_WIDTH = 1
 
-const HUE_STRENGTH = 0.35
 
 const SECTION_OUTLINE = 2
 
@@ -1727,11 +1726,6 @@ export function drawSectionBounds(
   width: number,
   height: number,
   color: string,
-  highlight: string | null = null,
-  hue = color,
-  // a silhouette is one flat colour, so the section under the pointer is
-  // boxed rather than recoloured: a hue laid on it would only change the flat
-  outlined = false,
   layout: ColumnLayout = { head: 0, shown: bars.length },
 ) {
   if (bars.length === 0) return
@@ -1751,36 +1745,36 @@ export function drawSectionBounds(
     context.stroke()
   }
   context.globalAlpha = 1
+}
 
-  if (!highlight) return
-
+// The section under the pointer, boxed. An outline rather than a tint so it
+// can sit on a canvas of its own over the picture: a blend needs the pixels
+// it blends with, and a pointer move then costs this box and nothing else.
+export function drawSectionHighlight(
+  context: CanvasRenderingContext2D,
+  bars: Bar[],
+  width: number,
+  height: number,
+  highlight: string,
+  color: string,
+  layout: ColumnLayout = { head: 0, shown: bars.length },
+) {
   const first = bars.findIndex((bar) => bar.section === highlight)
   if (first < 0) return
   let last = first
   while (last + 1 < bars.length && bars[last + 1].section === highlight) last += 1
 
-  if (outlined) {
-    const inset = SECTION_OUTLINE / 2
-    context.save()
-    context.strokeStyle = hue
-    context.lineWidth = SECTION_OUTLINE
-    context.strokeRect(
-      (first - head) * column + inset,
-      inset,
-      (last - first + 1) * column - SECTION_OUTLINE,
-      height - SECTION_OUTLINE,
-    )
-    context.restore()
-    return
-  }
-
-  // the hue blend takes the fill's hue and keeps the luminance underneath, so
-  // the section reads as marked without losing the shape it is showing
+  const column = width / layout.shown
+  const inset = SECTION_OUTLINE / 2
   context.save()
-  context.globalCompositeOperation = 'hue'
-  context.globalAlpha = HUE_STRENGTH
-  context.fillStyle = hue
-  context.fillRect((first - head) * column, 0, (last - first + 1) * column, height)
+  context.strokeStyle = color
+  context.lineWidth = SECTION_OUTLINE
+  context.strokeRect(
+    (first - layout.head) * column + inset,
+    inset,
+    (last - first + 1) * column - SECTION_OUTLINE,
+    height - SECTION_OUTLINE,
+  )
   context.restore()
 }
 

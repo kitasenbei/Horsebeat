@@ -37,9 +37,9 @@ const STEADY_REACH = 0.7
 
 const EDGE = 3
 
-// a point every so many pixels along a wave: the curve between two is a
-// stroke's width off a sine at most, and a frame walks four waves
-const WAVE_STEP = 2
+// a point every so many pixels along a wave: the curve between two is well
+// under a stroke's width off a sine, and a frame strokes four waves
+const WAVE_STEP = 3
 
 
 // One wave a bar: the place the playhead stands in its own bar, and the same
@@ -157,7 +157,10 @@ export default function LiveWave({
       const bar = beat * beats
 
       context.lineWidth = 1.5
-      context.lineJoin = 'round'
+      // the joins are between segments a few pixels long and nearly in line,
+      // so a bevel is what a round join would look like without the arc the
+      // rasteriser draws at every one of them
+      context.lineJoin = 'bevel'
 
       // drawn back to front, so the bar the playhead is standing in is the one
       // on top rather than the one buried

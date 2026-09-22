@@ -15,6 +15,15 @@
 horsebeat.studio {
     encode gzip
 
+    # The page must be fetched afresh each time, or a browser keeps an old
+    # index.html that names an old bundle and a deploy never reaches it. The
+    # bundle's own files carry a hash in their names, so those can be kept
+    # for as long as the browser likes: a new build is a new name.
+    @page path / /index.html
+    header @page Cache-Control "no-cache"
+    @bundle path /assets/*
+    header @bundle Cache-Control "public, max-age=31536000, immutable"
+
     # A container of our own serves the bundle. Caddy only terminates TLS and
     # hands the request over.
     reverse_proxy horsebeat-web:80

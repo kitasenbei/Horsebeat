@@ -138,6 +138,10 @@ export default function RulerSlider({
           px: 0.5,
           bgcolor: 'background.paper',
           color: disabled ? 'text.disabled' : 'text.primary',
+          // the label sits over the ruler; a drag that starts on it should
+          // drag the ruler, not select the text
+          userSelect: 'none',
+          pointerEvents: 'none',
         }}
       >
         {format ? format(value) : unit ? `${value} ${unit}` : value}

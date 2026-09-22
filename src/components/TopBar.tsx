@@ -19,6 +19,7 @@ import TuneIcon from '@mui/icons-material/Tune'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
 import GridOnIcon from '@mui/icons-material/GridOn'
 import SpeedIcon from '@mui/icons-material/Speed'
+import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import BeatLights from './BeatLights'
 import Gallop from './Gallop'
 import {
@@ -63,6 +64,8 @@ type TopBarProps = {
   onWaveStyleChange: (style: WaveStyle) => void
   traceOpen: boolean
   onTraceOpenChange: (open: boolean) => void
+  follow: boolean
+  onFollowChange: (follow: boolean) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -181,6 +184,8 @@ export default function TopBar({
   onWaveStyleChange,
   traceOpen,
   onTraceOpenChange,
+  follow,
+  onFollowChange,
   canUndo,
   canRedo,
   onUndo,
@@ -367,6 +372,20 @@ export default function TopBar({
           CURSOR_MODES.map((entry) => ({ value: entry.value, label: entry.label })),
           onCursorModeChange,
         )}
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={follow ? 'follow' : null}
+          onChange={() => onFollowChange(!follow)}
+          sx={PILL}
+        >
+          <ToggleButton value="follow" aria-label="Follow the playhead" sx={selected('info')}>
+            <Tooltip title="Hold the playhead's column in place and move the window under it">
+              <span>{segment('Follow', <CenterFocusStrongIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
 
         <ToggleButtonGroup
           size="small"

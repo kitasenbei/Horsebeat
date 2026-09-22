@@ -128,6 +128,7 @@ export default function App() {
   const [framesOpen, setFramesOpen] = useState(false)
   const [waveStyle, setWaveStyle] = useState<WaveStyle>('colour')
   const [traceOpen, setTraceOpen] = useState(false)
+  const [follow, setFollow] = useState(false)
   const [divisions, setDivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
@@ -364,6 +365,8 @@ export default function App() {
         onWaveStyleChange={setWaveStyle}
         traceOpen={traceOpen}
         onTraceOpenChange={setTraceOpen}
+        follow={follow}
+        onFollowChange={setFollow}
       />
       {curveOpen ? (
         <CurvePanel curve={curve} onCurveChange={setCurve} onClose={() => setCurveOpen(false)} />
@@ -531,6 +534,7 @@ export default function App() {
                     colormap={colormap}
                     cursorMode={cursorMode}
                     waveStyle={waveStyle}
+                    follow={follow}
                   />
                 </Box>
               </>

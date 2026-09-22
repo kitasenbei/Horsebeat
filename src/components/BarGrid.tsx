@@ -84,6 +84,9 @@ type BarGridProps = {
   colormap: number
   cursorMode: GlobalCompositeOperation
   waveStyle: WaveStyle
+  // keep the playhead's column at a fixed place across the plot and move the
+  // window under it, rather than the playhead across a still window
+  follow: boolean
 }
 
 const GUIDE_COLOR = '#ffffff'
@@ -249,6 +252,39 @@ function acrossColumns(bars: Bar[], moment: number, range: Range): number | null
   return (at + (moment - bar.start) / Math.max(1e-12, bar.end - bar.start) - head) / shown
 }
 
+// The window that puts a moment at a fraction of the plot, keeping a given
+// span. The first guess is made along the time axis; the window's own columns
+// then put the moment wherever their lengths do, so it is slid until the
+// moment lands where it was asked to, a column's length at a time.
+function windowPlacing(
+  spans: SectionSpan[],
+  slice: number | 'auto',
+  width: number,
+  moment: number,
+  ratio: number,
+  span: number,
+): Range {
+  let target = clampRange({ start: moment - ratio * span, end: moment + (1 - ratio) * span })
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    const after = viewBars(spans, target, slice, width)
+    const landed = acrossColumns(after, moment, target)
+    if (landed === null || Math.abs(landed - ratio) < 1e-4) break
+    const seat = columnLayout(after, target)
+    const at = Math.min(after.length - 1, Math.max(0, Math.floor(seat.head + landed * seat.shown)))
+    const length = after[at].end - after[at].start
+    const shift = (landed - ratio) * seat.shown * length
+    const slid = clampRange({ start: target.start + shift, end: target.end + shift })
+    if (slid.start === target.start) break
+    target = slid
+  }
+
+  return target
+}
+
+// where the playhead's column is held while the window follows it
+const FOLLOW_AT = 0.4
+
 export default function BarGrid({
   envelope,
   loudness,
@@ -270,6 +306,7 @@ export default function BarGrid({
   colormap,
   cursorMode,
   waveStyle,
+  follow,
 }: BarGridProps) {
   tick('BarGrid render')
   const theme = useTheme()
@@ -361,10 +398,41 @@ export default function BarGrid({
     span: number
     axis: 'none' | 'vertical' | 'pan'
   } | null>(null)
-  const zoomRef = useRef({ range, applyRange, settle: settleRange, spans, slice, width })
+  const zoomRef = useRef({ range, applyRange, editRange, settle: settleRange, spans, slice, width })
   useEffect(() => {
-    zoomRef.current = { range, applyRange, settle: settleRange, spans, slice, width }
+    zoomRef.current = { range, applyRange, editRange, settle: settleRange, spans, slice, width }
   })
+
+  // Following: every frame while the song plays the window is placed so the
+  // playhead's column sits at FOLLOW_AT, through the live store like a drag,
+  // and committed once when the song stops or the following does
+  useEffect(() => {
+    if (!follow || !playing) return
+
+    let frame = requestAnimationFrame(function tick() {
+      const { range: current, editRange: edit, spans: held, slice: cut, width: full } = zoomRef.current
+      const span = current.end - current.start
+      const target = windowPlacing(held, cut, full, positionRef.current, FOLLOW_AT, span)
+      if (Math.abs(target.start - current.start) > 1e-9) edit(target)
+      frame = requestAnimationFrame(tick)
+    })
+
+    return () => {
+      cancelAnimationFrame(frame)
+      zoomRef.current.settle()
+    }
+  }, [follow, playing, positionRef])
+
+  // paused, a seek is followed once, straight to the app
+  useEffect(() => {
+    if (!follow || playing) return
+    const { range: current, spans: held, slice: cut, width: full } = zoomRef.current
+    const span = current.end - current.start
+    const target = windowPlacing(held, cut, full, position, FOLLOW_AT, span)
+    if (Math.abs(target.start - current.start) > 1e-9) onRangeChange(target)
+    // only a change of position or of following is a reason to move the window
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [follow, playing, position])
 
   // The hover bar on its own canvas over the base one: a pointer move repaints
   // this alone, a fill and nothing else, where the base carries the picture,
@@ -789,23 +857,7 @@ export default function BarGrid({
 
       const span = current.end - current.start
       const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
-      let target = clampRange({ start: anchor - ratio * next, end: anchor + (1 - ratio) * next })
-
-      // the new window has its own columns, and the anchor lands among them
-      // wherever their lengths put it; the window is slid until it lands back
-      // under the pointer, a column's length at a time
-      for (let pass = 0; pass < 4; pass += 1) {
-        const after = viewBars(held, target, cut, full)
-        const landed = acrossColumns(after, anchor, target)
-        if (landed === null || Math.abs(landed - ratio) < 1e-4) break
-        const seat = columnLayout(after, target)
-        const at = Math.min(after.length - 1, Math.max(0, Math.floor(seat.head + landed * seat.shown)))
-        const width = after[at].end - after[at].start
-        const shift = (landed - ratio) * seat.shown * width
-        const slid = clampRange({ start: target.start + shift, end: target.end + shift })
-        if (slid.start === target.start) break
-        target = slid
-      }
+      const target = windowPlacing(held, cut, full, anchor, ratio, next)
 
       apply(target)
 

@@ -13,6 +13,7 @@ import { useRafCallback } from '../useRafCallback'
 import type { Curve } from '../curve'
 import type { Range } from '../range'
 import type { Section } from '../timing'
+import { tick } from '../trace'
 
 type RangeStripProps = {
   envelope: Float32Array | null
@@ -61,7 +62,10 @@ export default function RangeStrip({
   }
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (draggingRef.current) applySeek(positionAt(event))
+    if (draggingRef.current) {
+      tick('drag RangeStrip scrub')
+      applySeek(positionAt(event))
+    }
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {

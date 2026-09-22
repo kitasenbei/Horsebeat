@@ -10,6 +10,7 @@ import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { RAIL_HEIGHT } from './PlayheadRail'
 import type { Range } from '../range'
+import { measure } from '../trace'
 
 type MarkerRailProps = {
   markers: number[]
@@ -114,8 +115,10 @@ export default function MarkerRail({
       return
     }
 
-    const at = positionAt(event.clientX)
-    applyMarkers(markers.map((marker, current) => (current === index ? at : marker)))
+    measure('drag MarkerRail marker', () => {
+      const at = positionAt(event.clientX)
+      applyMarkers(markers.map((marker, current) => (current === index ? at : marker)))
+    })
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {

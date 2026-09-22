@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography'
 import CloseIcon from '@mui/icons-material/Close'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { useRafCallback } from '../useRafCallback'
+import { tick } from '../trace'
 
 type FloatingWindowProps = {
   title: string
@@ -51,6 +52,7 @@ export default function FloatingWindow({
   const movePanel = (event: React.PointerEvent<HTMLDivElement>) => {
     const move = moveRef.current
     if (!move) return
+    tick('drag window move')
     applySpot({
       left: Math.max(0, move.left + (event.clientX - move.pointerX)),
       top: Math.max(0, move.top + (event.clientY - move.pointerY)),

@@ -7,6 +7,7 @@ import { useLiveEdit } from '../useLiveEdit'
 import { RAIL_HEIGHT } from './PlayheadRail'
 import { sortSections, type Section } from '../timing'
 import type { Range } from '../range'
+import { measure } from '../trace'
 
 type SectionRailProps = {
   sections: Section[]
@@ -86,10 +87,12 @@ export default function SectionRail({
       return
     }
 
-    editSections(
-      sortSections(
-        live.map((section) =>
-          section.id === id ? { ...section, offsetMs: Math.max(0, at * duration * 1000) } : section,
+    measure('drag SectionRail section', () =>
+      editSections(
+        sortSections(
+          live.map((section) =>
+            section.id === id ? { ...section, offsetMs: Math.max(0, at * duration * 1000) } : section,
+          ),
         ),
       ),
     )

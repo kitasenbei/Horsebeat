@@ -9,7 +9,8 @@ const FONT = "'JetBrains Mono', 'Fira Mono', ui-monospace, monospace"
 
 // What the app is doing, a second at a time: every measured function with how
 // often it ran and what it cost. Lives beside the page rather than in it, and
-// is the only thing that renders when it updates.
+// is the only thing that renders when it updates. What a drag sets off is
+// listed on its own: those names start with "drag".
 export default function TracePanel() {
   const [rows, setRows] = useState<TraceRow[]>([])
 
@@ -22,6 +23,8 @@ export default function TracePanel() {
   }, [])
 
   const busy = rows.reduce((sum, row) => sum + row.ms, 0)
+  const dragging = rows.filter((row) => row.name.startsWith('drag '))
+  const rest = rows.filter((row) => !row.name.startsWith('drag '))
 
   return (
     <Box
@@ -48,6 +51,24 @@ export default function TracePanel() {
         measured work {busy.toFixed(1)} ms every second ({((busy / 1000) * 100).toFixed(0)}% of the
         thread)
       </Box>
+      <Section title="Drag motions" rows={dragging} />
+      <Section title="Everything else" rows={rest} />
+      <Box sx={{ color: 'text.secondary', mt: 1 }}>
+        count is every call since the page opened; /s is calls a second; ms/s is time on the
+        thread a second; avg and max are per call. Renders are counted, not timed.
+      </Box>
+    </Box>
+  )
+}
+
+function Section({ title, rows }: { title: string; rows: TraceRow[] }) {
+  const busy = rows.reduce((sum, row) => sum + row.ms, 0)
+  return (
+    <Box sx={{ mb: 1.5 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+        <span>{title}</span>
+        <span>{busy.toFixed(1)} ms/s</span>
+      </Box>
       <Box
         component="table"
         sx={{
@@ -70,6 +91,13 @@ export default function TracePanel() {
           </tr>
         </thead>
         <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={6} style={{ textAlign: 'left', opacity: 0.6 }}>
+                nothing yet
+              </td>
+            </tr>
+          ) : null}
           {rows.map((row) => (
             <tr key={row.name}>
               <td>{row.name}</td>
@@ -81,11 +109,6 @@ export default function TracePanel() {
             </tr>
           ))}
         </tbody>
-      </Box>
-      <Box sx={{ color: 'text.secondary', mt: 1 }}>
-        count is every call since the page opened; /s is calls a second; ms/s is time on the
-        thread a second; avg and max are per call.
-        Renders are counted, not timed.
       </Box>
     </Box>
   )

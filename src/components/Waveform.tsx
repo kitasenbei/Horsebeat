@@ -197,16 +197,21 @@ export default function Waveform({
   }
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (placing && samples) applyGhost(positionAt(event.clientX, event.currentTarget))
+    if (placing && samples) {
+      tick('drag Waveform ghost')
+      applyGhost(positionAt(event.clientX, event.currentTarget))
+    }
 
     const pan = panRef.current
     if (!pan || !onRangeChange) return
 
-    const width = event.currentTarget.clientWidth
-    if (width === 0) return
+    measure('drag Waveform pan', () => {
+      const width = event.currentTarget.clientWidth
+      if (width === 0) return
 
-    const shift = ((event.clientX - pan.clientX) / width) * pan.span
-    applyRange(clampRange({ start: pan.start - shift, end: pan.start - shift + pan.span }))
+      const shift = ((event.clientX - pan.clientX) / width) * pan.span
+      applyRange(clampRange({ start: pan.start - shift, end: pan.start - shift + pan.span }))
+    })
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {

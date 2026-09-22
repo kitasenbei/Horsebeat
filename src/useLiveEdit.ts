@@ -12,6 +12,7 @@ export function useLiveEdit<T>(value: T, onChange: (next: T) => void) {
   const pendingRef = useRef<T | null>(null)
 
   const edit = (next: T) => {
+    tick('drag live edit')
     setPreview(next)
     pendingRef.current = next
 
@@ -20,7 +21,7 @@ export function useLiveEdit<T>(value: T, onChange: (next: T) => void) {
 
     stampRef.current = now
     pendingRef.current = null
-    tick('live edit commit')
+    tick('drag commit to app')
     onChange(next)
   }
 

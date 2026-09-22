@@ -948,10 +948,12 @@ export default function BarGrid({
     }
 
     if (drag.axis === 'pan') {
-      const width = plotWidth(event.currentTarget.clientWidth)
-      if (width <= 1) return
-      const shift = (dx / width) * drag.span
-      applyRange(clampRange({ start: drag.start - shift, end: drag.start - shift + drag.span }))
+      measure('drag BarGrid pan', () => {
+        const width = plotWidth(event.currentTarget.clientWidth)
+        if (width <= 1) return
+        const shift = (dx / width) * drag.span
+        applyRange(clampRange({ start: drag.start - shift, end: drag.start - shift + drag.span }))
+      })
       return
     }
 
@@ -971,10 +973,12 @@ export default function BarGrid({
           ),
         }
 
-    const next = sortSections(
-      live.map((section) => (section.id === drag.id ? { ...section, ...patch } : section)),
-    )
-    editSections(next)
+    measure(drag.tempo ? 'drag BarGrid tempo' : 'drag BarGrid offset', () => {
+      const next = sortSections(
+        live.map((section) => (section.id === drag.id ? { ...section, ...patch } : section)),
+      )
+      editSections(next)
+    })
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {

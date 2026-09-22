@@ -10,6 +10,7 @@ import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { clampRange, MIN_SPAN, type Range } from '../range'
 import type { Curve } from '../curve'
+import { measure } from '../trace'
 
 type OverviewProps = {
   peaks: Float32Array | null
@@ -87,16 +88,18 @@ export default function Overview({
   const move = (event: React.PointerEvent<HTMLElement>) => {
     const drag = dragRef.current
     if (!drag) return
-    const at = positionAt(event.clientX)
+    measure('drag Overview window', () => {
+      const at = positionAt(event.clientX)
 
-    if (drag.mode === 'move') {
-      const span = range.end - range.start
-      applyRange(clampRange({ start: at - drag.grab, end: at - drag.grab + span }))
-    } else if (drag.mode === 'start') {
-      applyRange(clampRange({ start: Math.min(at, range.end - MIN_SPAN), end: range.end }))
-    } else {
-      applyRange(clampRange({ start: range.start, end: Math.max(at, range.start + MIN_SPAN) }))
-    }
+      if (drag.mode === 'move') {
+        const span = range.end - range.start
+        applyRange(clampRange({ start: at - drag.grab, end: at - drag.grab + span }))
+      } else if (drag.mode === 'start') {
+        applyRange(clampRange({ start: Math.min(at, range.end - MIN_SPAN), end: range.end }))
+      } else {
+        applyRange(clampRange({ start: range.start, end: Math.max(at, range.start + MIN_SPAN) }))
+      }
+    })
   }
 
   const end = (event: React.PointerEvent<HTMLElement>) => {

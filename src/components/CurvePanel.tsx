@@ -17,6 +17,7 @@ import ContrastIcon from '@mui/icons-material/Contrast'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
+import { measure, tick } from '../trace'
 import {
   applyCurve,
   CURVE_PRESETS,
@@ -168,8 +169,10 @@ export default function CurvePanel({
   const shape = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const index = pointRef.current
     if (index === null) return
-    const { x, y } = spotAt(event)
-    shapeTo(index, x, y)
+    measure('drag CurvePanel point', () => {
+      const { x, y } = spotAt(event)
+      shapeTo(index, x, y)
+    })
   }
 
   const release = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -197,6 +200,7 @@ export default function CurvePanel({
   const movePanel = (event: React.PointerEvent<HTMLDivElement>) => {
     const move = moveRef.current
     if (!move) return
+    tick('drag CurvePanel window')
     applySpot({
       left: Math.max(0, move.left + (event.clientX - move.pointerX)),
       top: Math.max(0, move.top + (event.clientY - move.pointerY)),

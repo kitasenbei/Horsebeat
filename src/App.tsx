@@ -121,7 +121,7 @@ export default function App() {
   const [ghost, setGhost] = useState<number | null>(null)
   const [fallSpeed, setFallSpeed] = useState(FALL_RANGE - 0.5)
   const [barGrid, setBarGrid] = useState(true)
-  const [slice, setSlice] = useState<number | 'auto'>(1)
+  const [slice, setSlice] = useState<number | 'auto'>(16)
   const [lane, setLane] = useState<number | 'all'>(0)
   const [cursorMode, setCursorMode] = useState<GlobalCompositeOperation>('difference')
   const [curveOpen, setCurveOpen] = useState(false)

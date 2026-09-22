@@ -5,7 +5,17 @@ type Draw = (context: CanvasRenderingContext2D, width: number, height: number) =
 // `signature` is a cheap summary of everything the draw depends on. Without it
 // a canvas repaints on every render of the app, which during a drag is every
 // canvas on screen, sixty times a second, for one that actually changed.
+// The plain form: the canvas repaints when its signature changes, or every
+// frame while animating.
 export function useCanvas(draw: Draw, animate = false, signature?: string | number) {
+  return useCanvasControl(draw, animate, signature).canvasRef
+}
+
+// The form that also hands back a repaint, for a draw that reads something
+// kept in a ref rather than in state: the pointer, say. Asking for a repaint
+// costs a frame; changing state to get one costs a render of the component
+// and everything under it first.
+export function useCanvasControl(draw: Draw, animate = false, signature?: string | number) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawRef = useRef(draw)
   const frameRef = useRef(0)
@@ -85,5 +95,5 @@ export function useCanvas(draw: Draw, animate = false, signature?: string | numb
     return () => cancelAnimationFrame(frame)
   }, [animate, render])
 
-  return canvasRef
+  return { canvasRef, repaint: schedule }
 }

@@ -15,13 +15,20 @@ import {
   drawSliceGuides,
   buildWaveImage,
   buildWaveShape,
+  blockPanels,
+  colorChannels,
+  laneLutBytes,
+  peakBetween,
+  BAND_ORDER,
   type Bar,
+  type BarSources,
+  type BlockLayer,
   type WaveStyle,
   renderBarLayers,
   PROJECTION_WIDTH,
   sectionSignature,
 } from '../draw'
-import { useCanvas } from '../useCanvas'
+import { useCanvasControl } from '../useCanvas'
 import {
   createSection,
   MAX_BPM,
@@ -29,12 +36,13 @@ import {
   sectionSpans,
   sortSections,
   type Section,
+  type SectionSpan,
 } from '../timing'
 import { clampRange } from '../range'
 import { useLiveEdit } from '../useLiveEdit'
 import { useRafCallback } from '../useRafCallback'
-import { renderWaveGl } from '../waveGl'
-import type { Curve } from '../curve'
+import { renderLanesGl, type LanePanel } from '../laneGl'
+import { applyCurve, type Curve } from '../curve'
 import type { Range } from '../range'
 
 type BarGridProps = {
@@ -79,9 +87,8 @@ function plotWidth(full: number): number {
   return Math.max(1, full - PROJECTION_WIDTH * 2)
 }
 
-// The wave lane as its own canvas, painted once and blitted after that. The
-// GPU rasterises it at the resolution the screen shows it, with one sampled
-// value per device pixel row; a browser without WebGL2 gets the pixel fill.
+// The wave lane painted on the CPU, for a browser without WebGL2: sampled at
+// the source's resolution and drawn as a pixel fill.
 function paintWave(
   context: CanvasRenderingContext2D,
   envelope: Float32Array,
@@ -94,24 +101,23 @@ function paintWave(
   theme: Theme,
 ): HTMLCanvasElement | null {
   const ratio = window.devicePixelRatio || 1
-  // one row per source frame in the widest bar and no more: rows past that
-  // read the same frames again, and the GPU interpolates between rows as it
-  // stretches them to the pixels, so the picture loses nothing
   const widest = bars.reduce((most, bar) => Math.max(most, bar.end - bar.start), 0)
   const rows = Math.max(
     1,
     Math.min(Math.round(height * ratio), Math.ceil(widest * envelope.length)),
   )
-  const shape = buildWaveShape(envelope, bars, rows, curve)
+  const shape = buildWaveShape(envelope, bars, rows, curve, style !== 'colour')
   if (!shape) return null
 
-  const background = theme.palette.background.paper
-  const flat = theme.palette.primary.main
-
-  const drawn = renderWaveGl(shape, width * ratio, height * ratio, colormap, background, style, flat)
-  if (drawn) return drawn
-
-  const image = buildWaveImage(context, shape, width, colormap, background, style, flat)
+  const image = buildWaveImage(
+    context,
+    shape,
+    width,
+    colormap,
+    theme.palette.background.paper,
+    style,
+    theme.palette.primary.main,
+  )
   if (!image) return null
 
   const canvas = document.createElement('canvas')
@@ -119,6 +125,99 @@ function paintWave(
   canvas.height = image.height
   canvas.getContext('2d')?.putImageData(image, 0, 0)
   return canvas
+}
+
+// The whole compiled picture drawn by the GPU: one panel per block, or three
+// side by side for the bands, each reading its own source through the one
+// shader. Null where the GPU cannot take it, and the CPU paints instead.
+function paintLanes(
+  layers: BlockLayer[],
+  sources: BarSources,
+  bars: Bar[],
+  width: number,
+  height: number,
+  curve: Curve,
+  colormap: number,
+  waveStyle: WaveStyle,
+  theme: Theme,
+): HTMLCanvasElement | null {
+  const panels: LanePanel[] = []
+
+  for (const layer of layers) {
+    const source = layer.block === 3 ? sources.bands : [sources.envelope, sources.loudness, sources.onsets][layer.block]
+    if (!source) continue
+
+    const count = blockPanels(layer.block)
+    const stride = layer.block === 3 ? 3 : 1
+    const style = layer.block === 0 ? waveStyle : 'colour'
+
+    // a shape is read against the loudest frame in view, curved the way the
+    // levels are, so the loudest column fills its width and the rest are
+    // drawn in proportion
+    let scale = 1
+    if (style !== 'colour') {
+      const frames = source.length
+      const peak = peakBetween(source, 1, 0, bars[0].start * frames, bars[bars.length - 1].end * frames)
+      const curved = applyCurve(Math.min(1, peak), curve)
+      scale = curved > 0 ? 1 / curved : 1
+    }
+
+    for (let panel = 0; panel < count; panel += 1) {
+      panels.push({
+        source,
+        stride,
+        channel: layer.block === 3 ? BAND_ORDER[panel] : 0,
+        lut: laneLutBytes(layer.block, panel, curve, colormap),
+        left: (panel * width) / count,
+        top: layer.top,
+        width: width / count,
+        height: layer.height,
+        style,
+        scale,
+      })
+    }
+  }
+
+  return renderLanesGl(
+    bars,
+    panels,
+    width,
+    height,
+    window.devicePixelRatio || 1,
+    colorChannels(theme.palette.background.paper),
+    colorChannels(theme.palette.primary.main),
+  )
+}
+
+// every section the window touches contributes its own slices, so the view is
+// continuous across tempo changes rather than one section at a time
+function viewBars(spans: SectionSpan[], range: Range, slice: number | 'auto', width: number): Bar[] {
+  const visible = spans.filter((span) => span.end > range.start && span.start < range.end)
+
+  return (visible.length > 0 ? visible : spans.slice(0, 1))
+    .flatMap((span) => {
+      // the automatic slice is settled on the whole song, not on the window:
+      // zooming in then widens the columns and leaves what each one holds
+      // alone, where re-slicing per window would halve a column's phrase the
+      // moment there was room to, and change the picture under the pointer
+      const beats =
+        slice === 'auto'
+          ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
+          : slice
+      return collectBars(span, beats)
+    })
+    .filter((bar) => bar.end > range.start && bar.start < range.end)
+    .sort((left, right) => left.start - right.start)
+}
+
+// Where a moment sits across the columns, as a fraction of the plot: the
+// columns are equal in width whatever they last, so this is not where it sits
+// in time.
+function acrossColumns(bars: Bar[], moment: number): number | null {
+  const at = bars.findIndex((bar) => moment >= bar.start && moment < bar.end)
+  if (at < 0) return null
+  const bar = bars[at]
+  return (at + (moment - bar.start) / Math.max(1e-12, bar.end - bar.start)) / bars.length
 }
 
 export default function BarGrid({
@@ -165,20 +264,7 @@ export default function BarGrid({
     return () => observer.disconnect()
   }, [])
 
-  // every section the window touches contributes its own slices, so the view is
-  // continuous across tempo changes rather than one section at a time
-  const visible = spans.filter((span) => span.end > range.start && span.start < range.end)
-  const windowSpan = Math.max(1e-9, range.end - range.start)
-
-  const bars = (visible.length > 0 ? visible : spans.slice(0, 1))
-    .flatMap((span) => {
-      const share = (Math.min(span.end, range.end) - Math.max(span.start, range.start)) / windowSpan
-      const beats =
-        slice === 'auto' ? autoSliceBeats(span, Math.max(120, plotWidth(width) * share)) : slice
-      return collectBars(span, beats)
-    })
-    .filter((bar) => bar.end > range.start && bar.start < range.end)
-    .sort((left, right) => left.start - right.start)
+  const bars = viewBars(spans, range, slice, width)
 
   const sources = { envelope, loudness, onsets, bands }
   const cacheRef = useRef<{
@@ -187,10 +273,14 @@ export default function BarGrid({
       top: number
       height: number
       block: number
+      rows: number
       profile: Float32Array
       steady: Float32Array
       both: Float32Array
     }[]
+    // the GPU's picture of every lane at once, or null when the CPU painted
+    // them into the canvases above
+    picture: HTMLCanvasElement | null
     wave: HTMLCanvasElement | null
     key: string
   } | null>(null)
@@ -198,7 +288,11 @@ export default function BarGrid({
   const applyRange = useRafCallback(editRange)
   const sliceHeightRef = useRef(1)
   const [menu, setMenu] = useState<{ x: number; y: number; at: number; id: string } | null>(null)
-  const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
+  // the pointer lives in a ref, not in state: a move would otherwise render the
+  // component, and the bars with it, while the playback loop is already
+  // drawing every frame. Playing, the loop reads it next frame; paused, the move
+  // asks for the one repaint itself
+  const hoverRef = useRef<{ x: number; y: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const layoutRef = useRef<{ tops: number[]; heights: number[] }>({ tops: [], heights: [] })
   const dragRef = useRef<{
@@ -214,13 +308,15 @@ export default function BarGrid({
     span: number
     axis: 'none' | 'vertical' | 'pan'
   } | null>(null)
-  const zoomRef = useRef({ range, applyRange, settle: settleRange })
+  const zoomRef = useRef({ range, applyRange, settle: settleRange, spans, slice, width })
   useEffect(() => {
-    zoomRef.current = { range, applyRange, settle: settleRange }
+    zoomRef.current = { range, applyRange, settle: settleRange, spans, slice, width }
   })
 
-  const canvasRef = useCanvas((context, full, height) => {
+  const { canvasRef, repaint } = useCanvasControl((context, full, height) => {
     if (bars.length === 0) return
+
+    const hover = hoverRef.current
 
     // the bars keep the canvas minus the panel on the right, and everything
     // that maps a position to a column measures against this rather than the
@@ -248,17 +344,21 @@ export default function BarGrid({
 
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
-      const layers = renderBarLayers(context, sources, bars, height, curve, blocks, colormap)
+      // the lanes are read once for their projections; their pixels are the
+      // GPU's, and only when it cannot take them are they read again to paint
+      let layers = renderBarLayers(context, sources, bars, height, curve, blocks, colormap, false)
+      const picture = paintLanes(layers, sources, bars, width, height, curve, colormap, waveStyle, theme)
+      if (!picture) {
+        layers = renderBarLayers(context, sources, bars, height, curve, blocks, colormap, true)
+      }
 
       const waveLayer = layers.find((layer) => layer.block === 0)
 
       cache = {
         key,
-        // drawn into its own canvas once, like the lanes are, and blitted after
-        // that: the shape does not move with the playhead, and walking a path of
-        // one point per row and column is far dearer than one drawImage
+        picture,
         wave:
-          waveStyle !== 'colour' && envelope && waveLayer
+          !picture && envelope && waveLayer
             ? paintWave(
                 context,
                 envelope,
@@ -279,6 +379,7 @@ export default function BarGrid({
           return {
             canvas,
             block: layer.block,
+            rows: layer.rows,
             top: layer.top,
             height: layer.height,
             profile: layer.profile,
@@ -297,13 +398,12 @@ export default function BarGrid({
     context.translate(PROJECTION_WIDTH, 0)
 
     context.imageSmoothingEnabled = false
-    for (const layer of cache.canvases) {
-      context.drawImage(layer.canvas, 0, layer.top, width, layer.height)
-
-      // the wave block can say its value as a width instead of only as a
-      // colour, which is the one lane whose source is an amplitude
-      if (layer.block === 0 && cache.wave) {
-        context.drawImage(cache.wave, 0, layer.top, width, layer.height)
+    if (cache.picture) {
+      context.drawImage(cache.picture, 0, 0, width, height)
+    } else {
+      for (const layer of cache.canvases) {
+        const picture = layer.block === 0 && cache.wave ? cache.wave : layer.canvas
+        context.drawImage(picture, 0, layer.top, width, layer.height)
       }
     }
 
@@ -400,7 +500,7 @@ export default function BarGrid({
     )
     if (atColumn >= 0) {
       for (const layer of cache.canvases) {
-        const values = columnProfile(sources, layer.block, bars[atColumn], layer.canvas.height)
+        const values = columnProfile(sources, layer.block, bars[atColumn], layer.rows)
         if (!values) continue
 
         drawProjection(
@@ -417,7 +517,7 @@ export default function BarGrid({
       }
     }
 
-  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${hover?.x}:${hover?.y}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
+  }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${position}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -428,16 +528,43 @@ export default function BarGrid({
       if (bounds.width === 0) return
       event.preventDefault()
 
-      const { range: current, applyRange: apply } = zoomRef.current
+      const { range: current, applyRange: apply, spans: held, slice: cut, width: full } = zoomRef.current
       const ratio = Math.min(
         1,
         Math.max(0, (event.clientX - bounds.left - PROJECTION_WIDTH) / plotWidth(bounds.width)),
       )
-      const span = current.end - current.start
-      const anchor = current.start + ratio * span
-      const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
 
-      apply(clampRange({ start: anchor - ratio * next, end: anchor + (1 - ratio) * next }))
+      // the moment under the pointer is read off the column it is over, not
+      // off the time axis: the columns are equal in width and unequal in
+      // length, so the two agree only when every bar lasts the same
+      const before = viewBars(held, current, cut, full)
+      const across = ratio * before.length
+      const index = Math.min(before.length - 1, Math.max(0, Math.floor(across)))
+      const bar = before[index]
+      const anchor = bar
+        ? bar.start + (across - index) * (bar.end - bar.start)
+        : current.start + ratio * (current.end - current.start)
+
+      const span = current.end - current.start
+      const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
+      let target = clampRange({ start: anchor - ratio * next, end: anchor + (1 - ratio) * next })
+
+      // the new window has its own columns, and the anchor lands among them
+      // wherever their lengths put it; the window is slid until it lands back
+      // under the pointer, a column's length at a time
+      for (let pass = 0; pass < 4; pass += 1) {
+        const after = viewBars(held, target, cut, full)
+        const landed = acrossColumns(after, anchor)
+        if (landed === null || Math.abs(landed - ratio) < 1e-4) break
+        const at = Math.min(after.length - 1, Math.floor(landed * after.length))
+        const width = after[at].end - after[at].start
+        const shift = (landed - ratio) * after.length * width
+        const slid = clampRange({ start: target.start + shift, end: target.end + shift })
+        if (slid.start === target.start) break
+        target = slid
+      }
+
+      apply(target)
 
       window.clearTimeout(settleTimer.current)
       settleTimer.current = window.setTimeout(() => zoomRef.current.settle(), GESTURE_END_MS)
@@ -555,7 +682,10 @@ export default function BarGrid({
       const bounds = event.currentTarget.getBoundingClientRect()
       const x = Math.round(event.clientX - bounds.left)
       const y = Math.round(event.clientY - bounds.top)
-      setHover((current) => (current?.x === x && current?.y === y ? current : { x, y }))
+      const current = hoverRef.current
+      if (current?.x === x && current?.y === y) return
+      hoverRef.current = { x, y }
+      if (!playing) repaint()
       return
     }
 
@@ -628,7 +758,10 @@ export default function BarGrid({
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={() => {
+          hoverRef.current = null
+          if (!playing) repaint()
+        }}
         onContextMenu={openMenu}
         sx={{
           display: 'block',

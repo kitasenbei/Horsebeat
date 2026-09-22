@@ -862,7 +862,7 @@ export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar
 
 export const BLOCK_GAP = 8
 const BLOCK_WEIGHTS = [0.3, 0.16, 0.16, 0.38]
-const BAND_ORDER = [0, 1, 2]
+export const BAND_ORDER = [0, 1, 2]
 
 export type BarSources = {
   envelope: Float32Array | null
@@ -983,12 +983,99 @@ function buildLut(curve: Curve, color: (value: number) => [number, number, numbe
   return lut
 }
 
-function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
-  return buildLut(curve, (value) => [
+function bandRgb(rgb: [number, number, number]) {
+  return (value: number): [number, number, number] => [
     255 + (rgb[0] - 255) * value,
     255 + (rgb[1] - 255) * value,
     255 + (rgb[2] - 255) * value,
-  ])
+  ]
+}
+
+function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
+  return buildLut(curve, bandRgb(rgb))
+}
+
+// The colour a lane paints each level as the bytes of a 256 by 1 RGBA texture,
+// with the curved level itself in the alpha: one table gives a colour lane its
+// paint and a shape its width.
+export function laneLutBytes(block: number, panel: number, curve: Curve, colormap: number): Uint8Array {
+  const color =
+    block === 0
+      ? (value: number) => waveRgb(value, colormap)
+      : block === 1
+        ? levelRgb
+        : block === 2
+          ? heatRgb
+          : bandRgb(BAND_RGB[BAND_ORDER[panel]])
+
+  const bytes = new Uint8Array(LUT_SIZE * 4)
+  for (let step = 0; step < LUT_SIZE; step += 1) {
+    const curved = applyCurve(step / (LUT_SIZE - 1), curve)
+    const [red, green, blue] = color(curved)
+    bytes[step * 4] = Math.round(red)
+    bytes[step * 4 + 1] = Math.round(green)
+    bytes[step * 4 + 2] = Math.round(blue)
+    bytes[step * 4 + 3] = Math.round(Math.min(1, Math.max(0, curved)) * 255)
+  }
+  return bytes
+}
+
+// The loudest frame between two points of a source, from a table of the
+// loudest frame in each run of PEAK_RUN, so the question costs the runs
+// between the points and the frames either side of them rather than every
+// frame. Built once per channel, like the running totals.
+const PEAK_RUN = 256
+const PEAKS = new WeakMap<Float32Array, Float32Array[]>()
+
+function peakRuns(source: Float32Array, stride: number, channel: number): Float32Array {
+  let tables = PEAKS.get(source)
+  if (!tables) {
+    tables = []
+    PEAKS.set(source, tables)
+  }
+  const held = tables[channel]
+  if (held) return held
+
+  const frames = source.length / stride
+  const runs = new Float32Array(Math.ceil(frames / PEAK_RUN))
+  for (let frame = 0; frame < frames; frame += 1) {
+    const run = (frame / PEAK_RUN) | 0
+    const value = source[frame * stride + channel]
+    if (value > runs[run]) runs[run] = value
+  }
+  tables[channel] = runs
+  return runs
+}
+
+export function peakBetween(
+  source: Float32Array,
+  stride: number,
+  channel: number,
+  from: number,
+  until: number,
+): number {
+  const frames = source.length / stride
+  const first = Math.max(0, Math.min(frames, from | 0))
+  const last = Math.max(first, Math.min(frames, Math.ceil(until)))
+  if (last <= first) return 0
+
+  const runs = peakRuns(source, stride, channel)
+  let most = 0
+
+  const firstRun = Math.ceil(first / PEAK_RUN)
+  const lastRun = Math.floor(last / PEAK_RUN)
+  for (let run = firstRun; run < lastRun; run += 1) if (runs[run] > most) most = runs[run]
+
+  const head = Math.min(last, firstRun * PEAK_RUN)
+  for (let frame = first; frame < head; frame += 1) {
+    const value = source[frame * stride + channel]
+    if (value > most) most = value
+  }
+  for (let frame = Math.max(head, lastRun * PEAK_RUN); frame < last; frame += 1) {
+    const value = source[frame * stride + channel]
+    if (value > most) most = value
+  }
+  return most
 }
 
 // The picture projected onto its vertical axis: every column summed onto every
@@ -1003,8 +1090,49 @@ export type BlockLayer = {
   steady: Float32Array
   both: Float32Array
   image: ImageData
+  // how many rows the block was sampled at, which the image no longer says
+  // for a block whose picture is painted elsewhere
+  rows: number
   top: number
   height: number
+}
+
+// Running totals of a source, one table per interleaved channel, so the mean
+// over any run of frames is two reads and a divide however long the run is.
+// Built the first time a source is read and kept for as long as the array
+// lives: it is the same data structure a summed-area table is, not a copy of
+// any picture.
+const PREFIX_SUMS = new WeakMap<Float32Array, Float64Array[]>()
+
+export function prefixSums(source: Float32Array, stride: number, channel: number): Float64Array {
+  let tables = PREFIX_SUMS.get(source)
+  if (!tables) {
+    tables = []
+    PREFIX_SUMS.set(source, tables)
+  }
+  const held = tables[channel]
+  if (held) return held
+
+  const frames = source.length / stride
+  const sums = new Float64Array(frames + 1)
+  for (let frame = 0; frame < frames; frame += 1) {
+    sums[frame + 1] = sums[frame] + source[frame * stride + channel]
+  }
+  tables[channel] = sums
+  return sums
+}
+
+// Where each column's rows start in the source and how many frames a row
+// covers, worked out once per column rather than once per cell.
+function columnSteps(bars: Bar[], frames: number, rows: number) {
+  const starts = new Float64Array(bars.length)
+  const steps = new Float64Array(bars.length)
+  for (let index = 0; index < bars.length; index += 1) {
+    const bar = bars[index]
+    starts[index] = bar.start * frames
+    steps[index] = ((bar.end - bar.start) * frames) / rows
+  }
+  return { starts, steps }
 }
 
 export function renderBarLayers(
@@ -1015,6 +1143,9 @@ export function renderBarLayers(
   curve: Curve,
   blocks: number[] = ALL_BLOCKS,
   colormap = 0,
+  // the wave block's picture can come from the GPU instead; its projections
+  // are still read here, so only the pixels are left out
+  paintWave = true,
 ): BlockLayer[] {
   if (bars.length === 0) return []
 
@@ -1052,38 +1183,47 @@ export function renderBarLayers(
     const profile = new Float64Array(rows)
     const squares = new Float64Array(rows)
     let counted = 0
-    const image = context.createImageData(columns, rows)
-    const pixels = new Uint32Array(image.data.buffer)
-    pixels.fill(0xffffffff)
+    const painted = paintWave || block !== 0
+    const image = painted ? context.createImageData(columns, rows) : context.createImageData(1, 1)
+    const pixels = painted ? new Uint32Array(image.data.buffer) : null
+
+    const { starts, steps } = columnSteps(bars, frames, rows)
+    const top255 = LUT_SIZE - 1
+    const last = frames - 1
 
     for (let panel = 0; panel < panels; panel += 1) {
       const lut = block === 3 ? luts[3 + panel] : luts[block]
       const band = block === 3 ? BAND_ORDER[panel] : 0
-      const last = frames - 1
-      const top255 = LUT_SIZE - 1
-
+      const sums = prefixSums(source, stride, band)
+      const offset = panel * bars.length
       counted += bars.length
+
+      // columns outside, rows inside: a column's rows are consecutive runs of
+      // frames, so the two totals a cell reads sit next to the two the cell
+      // above it read, and the walk through the totals is one forward pass
+      // per column rather than a jump per cell. The row accumulators are a few
+      // hundred doubles and stay in cache whatever order they are hit in
       for (let index = 0; index < bars.length; index += 1) {
-        const bar = bars[index]
-        const span = bar.end - bar.start
-        const column = panel * bars.length + index
-        const base = bar.start * frames
-        const step = (span * frames) / rows
+        const start = starts[index]
+        const step = steps[index]
+        const column = offset + index
 
         for (let row = 0; row < rows; row += 1) {
-          // the mean of every frame the row covers, not the one frame it starts
-          // on: a row is drawn as a band the full height of the cell, and a
-          // point sample paints that whole band with whichever frame it landed
-          const from = Math.min(last, Math.max(0, (base + row * step) | 0))
-          const until = Math.min(frames, Math.max(from + 1, Math.ceil(base + (row + 1) * step)))
-          let total = 0
-          for (let frame = from; frame < until; frame += 1) total += source[frame * stride + band]
-          const value = total / (until - from)
+          // the mean of every frame the row covers: consecutive rows partition
+          // the frames between them, so each frame counts once and once only
+          const at = start + row * step
+          let from = at | 0
+          if (from > last) from = last
+          let until = (at + step) | 0
+          if (until <= from) until = from + 1
+          if (until > frames) until = frames
+
+          const value = (sums[until] - sums[from]) / (until - from)
           const level = ((value < 1 ? value : 1) * top255 + 0.5) | 0
           const curved = shaped[level]
           profile[row] += curved
           squares[row] += curved * curved
-          pixels[row * columns + column] = lut[level]
+          if (pixels) pixels[row * columns + column] = lut[level]
         }
       }
     }
@@ -1143,7 +1283,7 @@ export function renderBarLayers(
     const both = new Float32Array(rows)
     for (let row = 0; row < rows; row += 1) both[row] = shape[row] * steady[row]
 
-    layers.push({ block, image, top, height: blockHeight, profile: shape, steady, both })
+    layers.push({ block, image, rows, top, height: blockHeight, profile: shape, steady, both })
     top += blockHeight + BLOCK_GAP
   }
 
@@ -1175,10 +1315,10 @@ export function columnProfile(
 
   const stride = block === 3 ? 3 : 1
   const frames = source.length / stride
-  const span = bar.end - bar.start
   const base = bar.start * frames
-  const step = (span * frames) / rows
+  const step = ((bar.end - bar.start) * frames) / rows
   const last = frames - 1
+  const sums = prefixSums(source, stride, 0)
 
   const values = new Float32Array(rows)
   let least = Infinity
@@ -1186,11 +1326,14 @@ export function columnProfile(
   for (let row = 0; row < rows; row += 1) {
     // averaged over the row the same way the cells are, or the trace and the
     // picture it is read against disagree
-    const from = Math.min(last, Math.max(0, (base + row * step) | 0))
-    const until = Math.min(frames, Math.max(from + 1, Math.ceil(base + (row + 1) * step)))
-    let total = 0
-    for (let frame = from; frame < until; frame += 1) total += source[frame * stride]
-    const value = total / (until - from)
+    const at = base + row * step
+    let from = at | 0
+    if (from > last) from = last
+    let until = (at + step) | 0
+    if (until <= from) until = from + 1
+    if (until > frames) until = frames
+
+    const value = (sums[until] - sums[from]) / (until - from)
     values[row] = value
     if (value < least) least = value
     if (value > most) most = value
@@ -1272,24 +1415,9 @@ export const WAVE_FILL = 0.82
 export type WaveShape = {
   rows: number
   columns: number
-  values: Float32Array
-}
-
-// Running totals of a source, so the mean over any run of frames is two reads
-// and a divide however long the run is. Held per array: a source is decoded
-// once and then read for as long as it is open.
-const PREFIX_SUMS = new WeakMap<Float32Array, Float64Array>()
-
-function prefixSums(source: Float32Array): Float64Array {
-  const held = PREFIX_SUMS.get(source)
-  if (held) return held
-
-  const sums = new Float64Array(source.length + 1)
-  for (let frame = 0; frame < source.length; frame += 1) {
-    sums[frame + 1] = sums[frame] + source[frame]
-  }
-  PREFIX_SUMS.set(source, sums)
-  return sums
+  // row-major, one byte per cell on nought to 255: what the texture and the
+  // pixel fill both take as they are
+  levels: Uint8Array
 }
 
 export function buildWaveShape(
@@ -1297,40 +1425,50 @@ export function buildWaveShape(
   bars: Bar[],
   rows: number,
   curve: Curve,
+  // a shape is read against the loudest row in view; a colour is the value as
+  // it is, the same number the other lanes and the projections paint
+  normalise = true,
 ): WaveShape | null {
   if (bars.length === 0 || source.length === 0 || rows <= 0) return null
 
   const frames = source.length
   const last = frames - 1
   const columns = bars.length
-  const values = new Float32Array(columns * rows)
-  const sums = prefixSums(source)
+  const sums = prefixSums(source, 1, 0)
   const shaped = shapeLut(curve)
+  const { starts, steps } = columnSteps(bars, frames, rows)
   const top255 = LUT_SIZE - 1
+
+  const values = new Float32Array(columns * rows)
   let most = 0
 
-  for (let index = 0; index < columns; index += 1) {
-    const bar = bars[index]
-    const base = bar.start * frames
-    const step = ((bar.end - bar.start) * frames) / rows
+  for (let row = 0; row < rows; row += 1) {
+    const line = row * columns
+    for (let index = 0; index < columns; index += 1) {
+      const at = starts[index] + row * steps[index]
+      let from = at | 0
+      if (from > last) from = last
+      let until = (at + steps[index]) | 0
+      if (until <= from) until = from + 1
+      if (until > frames) until = frames
 
-    for (let row = 0; row < rows; row += 1) {
-      const from = Math.min(last, Math.max(0, (base + row * step) | 0))
-      const until = Math.min(frames, Math.max(from + 1, Math.ceil(base + (row + 1) * step)))
       const mean = (sums[until] - sums[from]) / (until - from)
       const value = shaped[((mean < 1 ? mean : 1) * top255 + 0.5) | 0]
-      values[index * rows + row] = value
+      values[line + index] = value
       if (value > most) most = value
     }
   }
 
   // read against the loudest row rather than against one: a quiet passage would
   // otherwise draw as a sliver, and a loud one as a column of solid bars
-  if (most > 0) {
-    for (let at = 0; at < values.length; at += 1) values[at] /= most
+  const scale = normalise && most > 0 ? 255 / most : 255
+  const levels = new Uint8Array(values.length)
+  for (let at = 0; at < values.length; at += 1) {
+    const level = (values[at] * scale + 0.5) | 0
+    levels[at] = level > 255 ? 255 : level
   }
 
-  return { rows, columns, values }
+  return { rows, columns, levels }
 }
 
 // Packed colours for the pixel fill. The shape is built the way the lanes are,
@@ -1385,7 +1523,7 @@ export function buildWaveImage(
   style: WaveStyle,
   silhouette: string,
 ): ImageData | null {
-  const { rows, columns, values } = shape
+  const { rows, columns, levels } = shape
   const span = Math.max(1, Math.round(width))
   if (columns === 0 || rows === 0) return null
 
@@ -1398,17 +1536,17 @@ export function buildWaveImage(
   const flat = packed(silhouette)
   const lut = laneLut(colormap)
 
-  for (let index = 0; index < columns; index += 1) {
-    const middle = index * column + column / 2
-    const base = index * rows
+  for (let row = 0; row < rows; row += 1) {
+    const line = row * span
+    const cells = row * columns
 
-    for (let row = 0; row < rows; row += 1) {
-      const value = values[base + row]
-      const half = value * reach
+    for (let index = 0; index < columns; index += 1) {
+      const level = levels[cells + index]
+      const middle = index * column + column / 2
+      const half = style === 'colour' ? column / 2 : (level / 255) * reach
       const from = Math.max(0, Math.round(middle - half))
       const until = Math.min(span, Math.max(from + 1, Math.round(middle + half)))
-      const paint = style === 'silhouette' ? flat : lut[(value * (LUT_SIZE - 1) + 0.5) | 0]
-      const line = row * span
+      const paint = style === 'silhouette' ? flat : lut[level]
 
       for (let x = from; x < until; x += 1) pixels[line + x] = paint
     }

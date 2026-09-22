@@ -2,8 +2,8 @@ import type { RefObject } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import RulerSlider from './RulerSlider'
-import { useLivePosition } from '../useLivePosition'
-import { MAX_BPM, MIN_BPM, sectionSpans, sortSections, type Section } from '../timing'
+import { useLiveSection } from '../useLiveSection'
+import { MAX_BPM, MIN_BPM, sortSections, type Section } from '../timing'
 
 type SectionTunerProps = {
   sections: Section[]
@@ -33,10 +33,7 @@ export default function SectionTuner({
   playing,
   onSectionsChange,
 }: SectionTunerProps) {
-  const at = useLivePosition(position, positionRef, playing)
-  const live =
-    sectionSpans(sections, duration).find((item) => at >= item.start && at <= item.end)?.section ??
-    null
+  const live = useLiveSection(sections, duration, position, positionRef, playing)
   const fraction = Math.round(((live?.bpm ?? 120) % 1) * 100)
 
   const tune = (patch: Partial<Section>) => {

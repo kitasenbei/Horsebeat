@@ -37,6 +37,10 @@ const STEADY_REACH = 0.7
 
 const EDGE = 3
 
+// a point every so many pixels along a wave: the curve between two is a
+// stroke's width off a sine at most, and a frame walks four waves
+const WAVE_STEP = 2
+
 
 // One wave a bar: the place the playhead stands in its own bar, and the same
 // place in the bars before it. Quarters of one bar were the first try and they
@@ -98,6 +102,10 @@ export default function LiveWave({
 }: LiveWaveProps) {
   const [reading, setReading] = useState<Reading>('amplitude')
   const lutRef = useRef({ signature: '', lut: shapeLut(curve) })
+  // a sine of each number of half turns, at unit height across the strip,
+  // built once and placed each frame with a matrix: the geometry is the same
+  // every frame, only how tall it stands changes
+  const unitsRef = useRef(new Map<string, Path2D>())
 
   const canvasRef = useCanvas(
     (context, width, height) => {
@@ -109,6 +117,22 @@ export default function LiveWave({
         lutRef.current = { signature, lut: shapeLut(curve) }
       }
 
+      const unitWave = (halves: number) => {
+        const name = `${halves}|${Math.round(plot)}`
+        const held = unitsRef.current.get(name)
+        if (held) return held
+
+        const path = new Path2D()
+        for (let x = 0; x <= plot; x += WAVE_STEP) {
+          const y = -Math.sin((x / plot) * halves * Math.PI)
+          if (x === 0) path.moveTo(x, y)
+          else path.lineTo(x, y)
+        }
+        if (plot % WAVE_STEP !== 0) path.lineTo(plot, -Math.sin(halves * Math.PI))
+        unitsRef.current.set(name, path)
+        return path
+      }
+
       const wave = (share: number) => {
         const full = middle - EDGE
         const reach = reading === 'period' ? full * STEADY_REACH : full * share
@@ -117,14 +141,11 @@ export default function LiveWave({
             ? Math.round(HALVES_QUIET + (HALVES_LOUD - HALVES_QUIET) * share)
             : HALVES
 
-        context.beginPath()
-        for (let x = 0; x <= plot; x += 1) {
-          const turn = (x / plot) * halves * Math.PI
-          const y = middle - Math.sin(turn) * reach
-          if (x === 0) context.moveTo(x, y)
-          else context.lineTo(x, y)
-        }
-        context.stroke()
+        // the unit wave stretched to its height on the way into the path, so
+        // the stroke itself stays a stroke and is not stretched with it
+        const placed = new Path2D()
+        placed.addPath(unitWave(halves), new DOMMatrix([1, 0, 0, reach, 0, middle]))
+        context.stroke(placed)
       }
 
       const at = positionRef.current

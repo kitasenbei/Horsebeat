@@ -27,9 +27,12 @@ export default function PlayheadRail({
   playing,
   enabled,
   onSeek,
-  range: givenRange = FULL,
+  range: givenRange,
 }: PlayheadRailProps) {
-  const range = useLiveRangeValue(givenRange)
+  // a rail given a window follows it while it moves; a rail given none runs
+  // over the whole song and must not pick the live window up by accident
+  const live = useLiveRangeValue(givenRange ?? FULL)
+  const range = givenRange ? live : FULL
   const draggingRef = useRef(false)
   const applySeek = useRafCallback(onSeek)
   const theme = useTheme()

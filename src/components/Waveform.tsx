@@ -61,7 +61,7 @@ export default function Waveform({
   sections,
   duration,
   curve = DEFAULT_CURVE,
-  range: givenRange = FULL,
+  range: givenRange,
   placing = null,
   ghost = null,
   onRangeChange,
@@ -74,9 +74,12 @@ export default function Waveform({
   const cacheRef = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null)
   // the window moves through the live store while it is dragged or zoomed,
   // and reaches the app once the gesture is over
-  const [range, editRange, settleRange] = useLiveRangeEdit(givenRange, (next) =>
+  const [live, editRange, settleRange] = useLiveRangeEdit(givenRange ?? FULL, (next) =>
     onRangeChange?.(next),
   )
+  // a waveform given no window shows the whole song and stays out of the
+  // live window, which belongs to the views that were given one
+  const range = givenRange ? live : FULL
   const applyRange = useRafCallback(editRange)
   const settleTimer = useRef(0)
   const applyGhost = useRafCallback((next: number | null) => onGhostChange?.(next))

@@ -52,7 +52,7 @@ import { useRafCallback } from '../useRafCallback'
 import { renderLanesGl, type LanePanel } from '../laneGl'
 import { applyCurve, type Curve } from '../curve'
 import type { Range } from '../range'
-import { measure, record, tick } from '../trace'
+import { measure, stopwatch, tick } from '../trace'
 
 type BarGridProps = {
   envelope: Float32Array | null
@@ -570,7 +570,7 @@ export default function BarGrid({
     const offset = -layout.head * column
 
     context.imageSmoothingEnabled = false
-    const blitted = performance.now()
+    const blitted = stopwatch('BarGrid blit')
     for (const layer of cache.layers) {
       const count = blockPanels(layer.block)
       const panelWidth = width / count
@@ -613,7 +613,7 @@ export default function BarGrid({
       }
     }
 
-    record('BarGrid blit', performance.now() - blitted)
+    blitted()
 
     const heights = cache.layers.map((layer) => layer.height)
     const tops = cache.layers.map((layer) => layer.top)
@@ -626,7 +626,7 @@ export default function BarGrid({
 
     drawSectionBounds(context, bars, width, height, theme.palette.info.dark, layout)
 
-    const cursored = performance.now()
+    const cursored = stopwatch('BarGrid cursor')
     drawColumnCursor(
       context,
       bars,
@@ -639,11 +639,11 @@ export default function BarGrid({
       cache.layers.map((layer) => !(layer.block === 0 && waveStyle === 'silhouette')),
       layout,
     )
-    record('BarGrid cursor', performance.now() - cursored)
+    cursored()
 
     context.restore()
 
-    const projected = performance.now()
+    const projected = stopwatch('BarGrid projections')
     for (const layer of cache.layers) {
       // how alike the bars are at each row on the left, how much they add up to
       // on the right
@@ -703,7 +703,7 @@ export default function BarGrid({
       }
     }
 
-    record('BarGrid projections', performance.now() - projected)
+    projected()
   }, playing, `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${position}|${blocks.join(',')}|${divisions}|${colormap}|${cursorMode}|${waveStyle}|${curveSignature(curve)}`)
 
   useEffect(() => {

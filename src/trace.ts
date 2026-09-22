@@ -46,9 +46,10 @@ function add(name: string, ms: number) {
 }
 
 // A stretch of work timed by the caller, for work that has no one function
-// to wrap.
-export function record(name: string, ms: number) {
-  add(name, ms)
+// to wrap: started here, recorded when the returned function is called.
+export function stopwatch(name: string): () => void {
+  const start = performance.now()
+  return () => add(name, performance.now() - start)
 }
 
 // A function run and timed under a name.

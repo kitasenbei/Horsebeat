@@ -62,6 +62,7 @@ export default function TracePanel() {
         <thead>
           <tr>
             <th>name</th>
+            <th>count</th>
             <th>/s</th>
             <th>ms/s</th>
             <th>avg</th>
@@ -72,6 +73,7 @@ export default function TracePanel() {
           {rows.map((row) => (
             <tr key={row.name}>
               <td>{row.name}</td>
+              <td>{row.total}</td>
               <td>{row.calls.toFixed(0)}</td>
               <td>{row.ms.toFixed(1)}</td>
               <td>{row.average.toFixed(2)}</td>
@@ -81,7 +83,8 @@ export default function TracePanel() {
         </tbody>
       </Box>
       <Box sx={{ color: 'text.secondary', mt: 1 }}>
-        /s is calls a second; ms/s is time on the thread a second; avg and max are per call.
+        count is every call since the page opened; /s is calls a second; ms/s is time on the
+        thread a second; avg and max are per call.
         Renders are counted, not timed.
       </Box>
     </Box>

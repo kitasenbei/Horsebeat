@@ -11,6 +11,8 @@ export type TraceRow = {
   // per call over that window
   average: number
   worst: number
+  // every call since the page opened
+  total: number
 }
 
 type Entry = {
@@ -22,6 +24,7 @@ type Entry = {
 const WINDOW_MS = 1000
 
 const live = new Map<string, Entry>()
+const totals = new Map<string, number>()
 let rolled: TraceRow[] = []
 let rolledAt = performance.now()
 
@@ -39,6 +42,7 @@ function add(name: string, ms: number) {
   held.calls += 1
   held.ms += ms
   if (ms > held.worst) held.worst = ms
+  totals.set(name, (totals.get(name) ?? 0) + 1)
 }
 
 // A function run and timed under a name.
@@ -69,8 +73,9 @@ export function snapshot(): TraceRow[] {
   const next: TraceRow[] = []
   for (const name of names) {
     const held = live.get(name)
+    const total = totals.get(name) ?? 0
     if (!held) {
-      next.push({ name, calls: 0, ms: 0, average: 0, worst: 0 })
+      next.push({ name, calls: 0, ms: 0, average: 0, worst: 0, total })
       continue
     }
     next.push({
@@ -79,6 +84,7 @@ export function snapshot(): TraceRow[] {
       ms: held.ms / seconds,
       average: held.calls > 0 ? held.ms / held.calls : 0,
       worst: held.worst,
+      total,
     })
   }
   next.sort((left, right) => right.ms - left.ms || right.calls - left.calls)

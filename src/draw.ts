@@ -1111,6 +1111,18 @@ export function peakBetween(
 // other, so a row says how much happens at that place in the bar across the
 // whole stretch. A grid on the music makes this a row of humps, one to a beat;
 // a grid off it smears them into one another.
+// A block's projections and where it sits, without a picture: what the GPU
+// path keeps, since the pixels are its own.
+export type ProjectionLayer = {
+  block: number
+  rows: number
+  top: number
+  height: number
+  profile: Float32Array
+  steady: Float32Array
+  both: Float32Array
+}
+
 export type BlockLayer = {
   // which block this is, because a block with nothing to draw leaves no layer
   // and the two stop lining up by position
@@ -1162,6 +1174,131 @@ function columnSteps(bars: Bar[], frames: number, rows: number) {
     steps[index] = ((bar.end - bar.start) * frames) / rows
   }
   return { starts, steps }
+}
+
+// What one panel of bars adds to a block's projections: the curved value of
+// every row summed over the bars, the squares of the same for the spread, and
+// how many bars were counted. Additive across panels and across runs of bars,
+// so a song's projections are the sum of its sections' and a change to one
+// section costs that section alone.
+export type Contribution = {
+  profile: Float64Array
+  squares: Float64Array
+  counted: number
+}
+
+export function barContribution(
+  source: Float32Array,
+  stride: number,
+  channel: number,
+  bars: Bar[],
+  rows: number,
+  curve: Curve,
+): Contribution {
+  const profile = new Float64Array(rows)
+  const squares = new Float64Array(rows)
+  if (bars.length === 0 || rows <= 0) return { profile, squares, counted: 0 }
+
+  const frames = source.length / stride
+  const last = frames - 1
+  const sums = prefixSums(source, stride, channel)
+  const shaped = shapeLut(curve)
+  const { starts, steps } = columnSteps(bars, frames, rows)
+  const top255 = LUT_SIZE - 1
+
+  for (let index = 0; index < bars.length; index += 1) {
+    const start = starts[index]
+    const step = steps[index]
+
+    for (let row = 0; row < rows; row += 1) {
+      const at = start + row * step
+      let from = at | 0
+      if (from > last) from = last
+      let until = (at + step) | 0
+      if (until <= from) until = from + 1
+      if (until > frames) until = frames
+
+      const value = (sums[until] - sums[from]) / (until - from)
+      const curved = shaped[((value < 1 ? value : 1) * top255 + 0.5) | 0]
+      profile[row] += curved
+      squares[row] += curved * curved
+    }
+  }
+
+  return { profile, squares, counted: bars.length }
+}
+
+export function addContribution(into: Contribution, part: Contribution) {
+  for (let row = 0; row < into.profile.length; row += 1) {
+    into.profile[row] += part.profile[row]
+    into.squares[row] += part.squares[row]
+  }
+  into.counted += part.counted
+}
+
+// The three projection graphs from a block's summed contribution.
+export function finishProjections(
+  profile: Float64Array,
+  squares: Float64Array,
+  counted: number,
+  rows: number,
+) {
+  // Read between its own quietest and loudest row rather than from nothing.
+  // Music never falls silent between beats, so the quietest row still carries
+  // most of what the loudest one does, and measuring from zero draws that
+  // shared floor as a slab with the shape a sliver on top of it. What the
+  // projection is for is the difference between the rows.
+  let least = Infinity
+  let most = -Infinity
+  for (const value of profile) {
+    if (value < least) least = value
+    if (value > most) most = value
+  }
+
+  const shape = new Float32Array(rows)
+  if (most > least) {
+    for (let row = 0; row < rows; row += 1) shape[row] = (profile[row] - least) / (most - least)
+  }
+
+  // How alike the bars are at each row, rather than how much they add up to.
+  // A row where every bar does the same thing is the grid holding; a row
+  // where they differ is the grid landing somewhere new each time. Measured
+  // against the row's own average, because a loud row varies by more than a
+  // quiet one without being any less steady.
+  let summed = 0
+  for (const value of profile) summed += value
+  const floor = (summed / Math.max(1, rows * counted)) * STEADY_FLOOR
+  const spread = new Float64Array(rows)
+  for (let row = 0; row < rows; row += 1) {
+    const mean = profile[row] / Math.max(1, counted)
+    const variance = Math.max(0, squares[row] / Math.max(1, counted) - mean * mean)
+    spread[row] = Math.sqrt(variance) / Math.max(mean, floor)
+  }
+
+  let calmest = Infinity
+  let wildest = -Infinity
+  for (const value of spread) {
+    if (value < calmest) calmest = value
+    if (value > wildest) wildest = value
+  }
+
+  // inverted: the steadiest row reads highest
+  const steady = new Float32Array(rows)
+  if (wildest > calmest) {
+    for (let row = 0; row < rows; row += 1) {
+      steady[row] = (wildest - spread[row]) / (wildest - calmest)
+    }
+  }
+
+  // The two read together: a row counts only where the bars both do a lot
+  // there and do the same thing there. Deliberately not stretched to fill the
+  // panel like the other two — left at its own size, it sits inside the sum
+  // it is drawn over, and the gap between them is the part of the picture
+  // that is loud without being repeated.
+  const both = new Float32Array(rows)
+  for (let row = 0; row < rows; row += 1) both[row] = shape[row] * steady[row]
+
+  return { shape, steady, both }
 }
 
 export function renderBarLayers(
@@ -1257,60 +1394,7 @@ export function renderBarLayers(
       }
     }
 
-    // Read between its own quietest and loudest row rather than from nothing.
-    // Music never falls silent between beats, so the quietest row still carries
-    // most of what the loudest one does, and measuring from zero draws that
-    // shared floor as a slab with the shape a sliver on top of it. What the
-    // projection is for is the difference between the rows.
-    let least = Infinity
-    let most = -Infinity
-    for (const value of profile) {
-      if (value < least) least = value
-      if (value > most) most = value
-    }
-
-    const shape = new Float32Array(rows)
-    if (most > least) {
-      for (let row = 0; row < rows; row += 1) shape[row] = (profile[row] - least) / (most - least)
-    }
-
-    // How alike the bars are at each row, rather than how much they add up to.
-    // A row where every bar does the same thing is the grid holding; a row
-    // where they differ is the grid landing somewhere new each time. Measured
-    // against the row's own average, because a loud row varies by more than a
-    // quiet one without being any less steady.
-    let summed = 0
-    for (const value of profile) summed += value
-    const floor = (summed / Math.max(1, rows * counted)) * STEADY_FLOOR
-    const spread = new Float64Array(rows)
-    for (let row = 0; row < rows; row += 1) {
-      const mean = profile[row] / Math.max(1, counted)
-      const variance = Math.max(0, squares[row] / Math.max(1, counted) - mean * mean)
-      spread[row] = Math.sqrt(variance) / Math.max(mean, floor)
-    }
-
-    let calmest = Infinity
-    let wildest = -Infinity
-    for (const value of spread) {
-      if (value < calmest) calmest = value
-      if (value > wildest) wildest = value
-    }
-
-    // inverted: the steadiest row reads highest
-    const steady = new Float32Array(rows)
-    if (wildest > calmest) {
-      for (let row = 0; row < rows; row += 1) {
-        steady[row] = (wildest - spread[row]) / (wildest - calmest)
-      }
-    }
-
-    // The two read together: a row counts only where the bars both do a lot
-    // there and do the same thing there. Deliberately not stretched to fill the
-    // panel like the other two — left at its own size, it sits inside the sum
-    // it is drawn over, and the gap between them is the part of the picture
-    // that is loud without being repeated.
-    const both = new Float32Array(rows)
-    for (let row = 0; row < rows; row += 1) both[row] = shape[row] * steady[row]
+    const { shape, steady, both } = finishProjections(profile, squares, counted, rows)
 
     layers.push({ block, image, rows, top, height: blockHeight, profile: shape, steady, both })
     top += blockHeight + BLOCK_GAP

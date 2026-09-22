@@ -20,10 +20,16 @@ import {
   colorChannels,
   laneLutBytes,
   peakBetween,
+  addContribution,
+  barContribution,
+  blockHeights,
+  finishProjections,
   BAND_ORDER,
+  BLOCK_GAP,
   type Bar,
   type BarSources,
-  type BlockLayer,
+  type Contribution,
+  type ProjectionLayer,
   type WaveStyle,
   renderBarLayers,
   PROJECTION_WIDTH,
@@ -128,11 +134,30 @@ function paintWave(
   return canvas
 }
 
+// A stable name for a source array, so a contribution read from one file is
+// never mistaken for the same slice of another of the same length.
+const SOURCE_IDS = new WeakMap<Float32Array, number>()
+let nextSourceId = 1
+
+function sourceId(source: Float32Array): number {
+  let id = SOURCE_IDS.get(source)
+  if (id === undefined) {
+    id = nextSourceId
+    nextSourceId += 1
+    SOURCE_IDS.set(source, id)
+  }
+  return id
+}
+
+// past this many held contributions the map is started afresh: a long drag
+// leaves one behind per frame, and none of those are read again
+const CONTRIBUTION_LIMIT = 4000
+
 // The whole compiled picture drawn by the GPU: one panel per block, or three
 // side by side for the bands, each reading its own source through the one
 // shader. Null where the GPU cannot take it, and the CPU paints instead.
 function paintLanes(
-  layers: BlockLayer[],
+  layers: ProjectionLayer[],
   sources: BarSources,
   bars: Bar[],
   width: number,
@@ -273,7 +298,11 @@ export default function BarGrid({
   // shows: the typical bar is the song's, and the window only decides which
   // columns are on screen. They are kept apart from the picture so a pan or a
   // zoom never reads the lanes again
-  const planRef = useRef<{ layers: BlockLayer[]; key: string } | null>(null)
+  const planRef = useRef<{ layers: ProjectionLayer[]; key: string } | null>(null)
+  // what each section adds to each block's projections, kept by everything it
+  // was read from: dragging one section re-reads that section and the one
+  // before it, whose end moved, and sums the rest as they were
+  const contributionsRef = useRef(new Map<string, Contribution>())
 
   const cacheRef = useRef<{
     layers: {
@@ -366,11 +395,53 @@ export default function BarGrid({
 
     let plan = planRef.current
     if (!plan || plan.key !== planKey) {
-      const whole = viewBars(spans, { start: 0, end: 1 }, slice, width)
-      plan = {
-        key: planKey,
-        layers: renderBarLayers(context, sources, whole, height, curve, blocks, colormap, false),
-      }
+      const held = contributionsRef.current
+      if (held.size > CONTRIBUTION_LIMIT) held.clear()
+      const curveKey = curve.points.map((point) => `${point.x}:${point.y}`).join(',')
+      const heights = blockHeights(height, blocks)
+      const layers: ProjectionLayer[] = []
+      let top = 0
+
+      blocks.forEach((block, slot) => {
+        const blockHeight = Math.max(1, heights[slot])
+        const source = block === 3 ? bands : [envelope, loudness, onsets][block]
+        if (!source) {
+          top += blockHeight + BLOCK_GAP
+          return
+        }
+
+        const rows = Math.max(1, Math.round(blockHeight))
+        const stride = block === 3 ? 3 : 1
+        const panels = blockPanels(block)
+        const total: Contribution = {
+          profile: new Float64Array(rows),
+          squares: new Float64Array(rows),
+          counted: 0,
+        }
+
+        for (let panel = 0; panel < panels; panel += 1) {
+          const channel = block === 3 ? BAND_ORDER[panel] : 0
+          for (const span of spans) {
+            const beats =
+              slice === 'auto'
+                ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
+                : slice
+            const name = `${sourceId(source)}|${block}|${panel}|${rows}|${beats}|${span.start}|${span.end}|${span.beat}|${curveKey}`
+            let part = held.get(name)
+            if (!part) {
+              part = barContribution(source, stride, channel, collectBars(span, beats), rows, curve)
+              held.set(name, part)
+            }
+            addContribution(total, part)
+          }
+        }
+
+        const { shape, steady, both } = finishProjections(total.profile, total.squares, total.counted, rows)
+        layers.push({ block, rows, top, height: blockHeight, profile: shape, steady, both })
+        top += blockHeight + BLOCK_GAP
+      })
+
+      plan = { key: planKey, layers }
       planRef.current = plan
     }
 

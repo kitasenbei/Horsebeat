@@ -357,10 +357,6 @@ export default function CurvePanel({
             })}
           </Box>
         </Box>
-        <Typography variant="caption" color="text.secondary">
-          Across is loudness in decibels, up is how much of it is drawn. Click adds a
-          point, drag moves it, double click removes it.
-        </Typography>
       </Box>
     </Paper>
   )

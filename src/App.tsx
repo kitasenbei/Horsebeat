@@ -380,7 +380,7 @@ export default function App() {
       {curveOpen ? (
         <CurvePanel
           curve={curve}
-          levels={levels}
+          sources={{ envelope: levels, loudness, onsets, bands: bandLevels }}
           onCurveChange={setCurve}
           onClose={() => setCurveOpen(false)}
         />

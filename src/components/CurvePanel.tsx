@@ -24,7 +24,9 @@ import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { measure, tick } from '../trace'
 import { FLOOR_DB } from '../audio'
-import { curveSignature } from '../draw'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
+import { BAND_COLORS, BLOCK_LABELS, curveSignature, type BarSources } from '../draw'
 import {
   applyCurve,
   CURVE_PRESETS,
@@ -39,9 +41,9 @@ import {
 
 type CurvePanelProps = {
   curve: Curve
-  // the track as levels, drawn behind the curve so the chart shows where the
-  // music sits on the axis the points are placed on
-  levels: Float32Array | null
+  // everything the compiled view draws through the curve, so the chart can
+  // show where any one of them sits on the axis the points are placed on
+  sources: BarSources
   onCurveChange: (curve: Curve) => void
   onClose?: () => void
   embedded?: boolean
@@ -81,6 +83,32 @@ const TRACK_PRESETS: { key: keyof ReturnType<typeof trackCurves>; title: string;
   { key: 'loudest', title: 'Loudest tenth only', icon: <WhatshotIcon fontSize="small" /> },
 ]
 
+// which of the compiled view's sources the mountain and the track presets
+// read. The bands are one array three wide, so each is a channel of it
+type Ground = { key: string; label: string; source: keyof BarSources; channel: number; decibels: boolean }
+const GROUNDS: Ground[] = [
+  { key: 'wave', label: BLOCK_LABELS[0], source: 'envelope', channel: 0, decibels: true },
+  { key: 'loud', label: BLOCK_LABELS[1], source: 'loudness', channel: 0, decibels: true },
+  { key: 'hits', label: BLOCK_LABELS[2], source: 'onsets', channel: 0, decibels: false },
+  ...BAND_COLORS.map((band, channel) => ({
+    key: `band${channel}`,
+    label: band.label,
+    source: 'bands' as const,
+    channel,
+    decibels: true,
+  })),
+]
+
+function groundLevels(sources: BarSources, ground: Ground): Float32Array | null {
+  const source = sources[ground.source]
+  if (!source) return null
+  if (ground.source !== 'bands') return source
+  const stride = BAND_COLORS.length
+  const levels = new Float32Array(source.length / stride)
+  for (let at = 0; at < levels.length; at += 1) levels[at] = source[at * stride + ground.channel]
+  return levels
+}
+
 const CHART_HEIGHT = 170
 const PANEL_WIDTH = 280
 const GRAB = 12
@@ -108,7 +136,7 @@ function histogram(levels: Float32Array | null): Float32Array {
 
 export default function CurvePanel({
   curve,
-  levels,
+  sources,
   onCurveChange,
   onClose,
   embedded = false,
@@ -119,6 +147,9 @@ export default function CurvePanel({
   const [spot, setSpot] = useState({ left: 32, top: 96 })
   const applyCurveChange = useRafCallback(onCurveChange)
   const applySpot = useRafCallback(setSpot)
+  const [groundKey, setGroundKey] = useState(GROUNDS[0].key)
+  const ground = GROUNDS.find((entry) => entry.key === groundKey) ?? GROUNDS[0]
+  const levels = useMemo(() => groundLevels(sources, ground), [sources, ground])
   const spread = useMemo(() => histogram(levels), [levels])
   const fromTrack = useMemo(() => (levels ? trackCurves(levels) : null), [levels])
   const signature = curveSignature(curve)
@@ -133,7 +164,7 @@ export default function CurvePanel({
     }
     context.globalAlpha = 1
 
-    const dbSteps = -FLOOR_DB / DB_STEP
+    const dbSteps = ground.decibels ? -FLOOR_DB / DB_STEP : 4
     context.strokeStyle = theme.palette.divider
     context.lineWidth = 1
     for (let step = 1; step < dbSteps; step += 1) {
@@ -156,7 +187,10 @@ export default function CurvePanel({
     context.textBaseline = 'bottom'
     for (let step = 0; step <= dbSteps; step += 1) {
       const db = FLOOR_DB + step * DB_STEP
-      const label = step === 0 ? `${db} dB` : step === dbSteps ? '0 dB' : `${db}`
+      const share = Math.round((step / dbSteps) * 100)
+      const label = ground.decibels
+        ? step === 0 ? `${db} dB` : step === dbSteps ? '0 dB' : `${db}`
+        : step === 0 ? '0 %' : step === dbSteps ? '100 %' : `${share}`
       context.textAlign = step === 0 ? 'left' : step === dbSteps ? 'right' : 'center'
       const x = step === 0 ? LABEL_INSET : step === dbSteps ? width - LABEL_INSET : (step / dbSteps) * width
       context.fillText(label, x, height - LABEL_INSET)
@@ -189,7 +223,7 @@ export default function CurvePanel({
       context.arc(point.x * width, height - point.y * height, POINT_RADIUS, 0, Math.PI * 2)
       context.fill()
     }
-  }, false, `${signature}|${levels?.length ?? 0}`)
+  }, false, `${signature}|${ground.key}|${levels?.length ?? 0}`)
 
   const spotAt = (event: React.PointerEvent<HTMLCanvasElement> | React.MouseEvent<HTMLCanvasElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -391,6 +425,25 @@ export default function CurvePanel({
             cursor: 'crosshair',
           }}
         />
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          fullWidth
+          value={groundKey}
+          onChange={(_, next: string | null) => next && setGroundKey(next)}
+          aria-label="Source the chart reads"
+        >
+          {GROUNDS.map((entry) => (
+            <ToggleButton
+              key={entry.key}
+              value={entry.key}
+              disabled={!sources[entry.source]}
+              sx={{ textTransform: 'none', px: 0.5, py: 0.25, fontSize: 11 }}
+            >
+              {entry.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
           {TRACK_PRESETS.map((preset) => {
             const shaped = fromTrack?.[preset.key]

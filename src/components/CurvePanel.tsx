@@ -4,6 +4,7 @@ import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import CloseIcon from '@mui/icons-material/Close'
+import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
@@ -22,6 +23,7 @@ import { curveSignature } from '../draw'
 import {
   applyCurve,
   CURVE_PRESETS,
+  DEFAULT_CURVE,
   MAX_POINTS,
   MIN_GAP,
   sortPoints,
@@ -300,6 +302,15 @@ export default function CurvePanel({
         <Typography variant="caption" sx={{ flex: 1 }}>
           Amplitude curve
         </Typography>
+        <IconButton
+          size="small"
+          aria-label="Reset amplitude curve"
+          title="Reset"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onCurveChange(DEFAULT_CURVE)}
+        >
+          <RestartAltIcon fontSize="small" />
+        </IconButton>
         {onClose ? (
           <IconButton
             size="small"

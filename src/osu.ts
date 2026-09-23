@@ -28,8 +28,11 @@ function readHeader(text: string): Header {
   }
 }
 
+// Timing points from a whole beatmap, its [TimingPoints] block, or bare
+// lines pasted from one: without the header the text is taken as the block
 export function readTimingPoints(text: string): Section[] {
-  const block = text.split(/^\[TimingPoints\]\s*$/m)[1]
+  const parts = text.split(/^\[TimingPoints\]\s*$/m)
+  const block = parts.length > 1 ? parts[1] : text
   if (!block) return []
 
   const sections: Section[] = []

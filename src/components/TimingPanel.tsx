@@ -13,7 +13,13 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import CheckIcon from '@mui/icons-material/Check'
-import { writeTimingPoints } from '../osu'
+import ContentPasteIcon from '@mui/icons-material/ContentPaste'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogTitle from '@mui/material/DialogTitle'
+import TextField from '@mui/material/TextField'
+import { readTimingPoints, writeTimingPoints } from '../osu'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
@@ -147,6 +153,15 @@ export default function TimingPanel({
   const [spot, setSpot] = useState({ left: 320, top: 96 })
   const [editingOffset, setEditingOffset] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  // pasted timing points, imported in place of the sections or alongside them
+  const [importOpen, setImportOpen] = useState(false)
+  const [importText, setImportText] = useState('')
+  const imported = readTimingPoints(importText)
+  const finishImport = (next: Section[]) => {
+    onSectionsChange(sortSections(next))
+    setImportOpen(false)
+    setImportText('')
+  }
   const [scroll, setScroll] = useState(0)
   const [viewport, setViewport] = useState(320)
   const listRef = useRef<HTMLDivElement>(null)
@@ -282,6 +297,15 @@ export default function TimingPanel({
           ) : (
             <ContentCopyIcon fontSize="small" />
           )}
+        </IconButton>
+        <IconButton
+          size="small"
+          title="Import timing points"
+          aria-label="Import timing points"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setImportOpen(true)}
+        >
+          <ContentPasteIcon fontSize="small" />
         </IconButton>
         {onClose ? (
           <IconButton
@@ -497,6 +521,57 @@ export default function TimingPanel({
           </Button>
         </Box>
       </Box>
+      <Dialog open={importOpen} onClose={() => setImportOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Import timing points</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            multiline
+            minRows={6}
+            maxRows={14}
+            fullWidth
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+            placeholder="0,500,4,2,0,60,1,0"
+            helperText={
+              importText.trim() === ''
+                ? 'Timing points as osu! writes them, a whole .osu file or just its lines'
+                : `${imported.length} ${imported.length === 1 ? 'section' : 'sections'} found`
+            }
+            slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: 13 } } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              void navigator.clipboard.readText().then(
+                (text) => setImportText(text),
+                () => undefined,
+              )
+            }}
+          >
+            Paste
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Button onClick={() => setImportOpen(false)}>Cancel</Button>
+          <Button
+            disabled={imported.length === 0}
+            onClick={() => {
+              // added beside the sections here, a pasted one landing on an
+              // existing offset takes its place
+              const kept = sections.filter(
+                (section) => !imported.some((next) => Math.abs(next.offsetMs - section.offsetMs) < 1),
+              )
+              finishImport([...kept, ...imported])
+            }}
+          >
+            Add
+          </Button>
+          <Button variant="contained" disabled={imported.length === 0} onClick={() => finishImport(imported)}>
+            Replace
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   )
 }

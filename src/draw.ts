@@ -349,6 +349,17 @@ function verticalLines(
   context.globalAlpha = 1
 }
 
+// The beat lines by their place in the bar: the downbeat black, then blue
+// and red turn about, so a bar of four reads black, blue, red, blue and the
+// eye counts without counting
+const BEAT_COLORS = ['#000000', '#1e88e5', '#e53935']
+
+function beatColor(index: number, meter: number): string {
+  const place = ((index % meter) + meter) % meter
+  if (place === 0) return BEAT_COLORS[0]
+  return place % 2 === 1 ? BEAT_COLORS[1] : BEAT_COLORS[2]
+}
+
 export function drawGrid(
   context: CanvasRenderingContext2D,
   sections: Section[],
@@ -356,14 +367,13 @@ export function drawGrid(
   range: Range,
   width: number,
   height: number,
-  color: string,
   accent: string,
   envelope: Float32Array | null = null,
 ) {
   const span = range.end - range.start
   if (span <= 0 || duration <= 0) return
 
-  const beats: number[] = []
+  const beats = new Map<string, number[]>()
   const starts: number[] = []
 
   for (const item of sectionSpans(sections, duration)) {
@@ -377,8 +387,12 @@ export function drawGrid(
       const firstIndex = Math.max(0, Math.ceil((from - item.start) / item.beat))
       const lastIndex = Math.floor((to - item.start) / item.beat)
 
+      const meter = Math.max(1, Math.round(item.section.meter))
       for (let index = firstIndex; index <= lastIndex; index += 1) {
-        beats.push(Math.round(((item.start + index * item.beat - range.start) / span) * width) + 0.5)
+        const paint = beatColor(index, meter)
+        const held = beats.get(paint) ?? []
+        held.push(Math.round(((item.start + index * item.beat - range.start) / span) * width) + 0.5)
+        beats.set(paint, held)
       }
     }
 
@@ -387,7 +401,7 @@ export function drawGrid(
     }
   }
 
-  verticalLines(context, beats, height, envelope, color, BEAT_LINE_WIDTH, 0.4)
+  for (const [paint, lines] of beats) verticalLines(context, lines, height, envelope, paint, BEAT_LINE_WIDTH, 0.6)
   verticalLines(context, starts, height, envelope, accent, BEAT_LINE_WIDTH * 2, 1)
 }
 

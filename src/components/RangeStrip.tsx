@@ -100,7 +100,6 @@ export default function RangeStrip({
         width,
         height,
         theme.palette.info.dark,
-        theme.palette.info.dark,
         halves,
       )
     },

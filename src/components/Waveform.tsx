@@ -107,7 +107,6 @@ export default function Waveform({
       width,
       height,
       theme.palette.info.dark,
-      theme.palette.info.dark,
       halves,
     )
     const shown = focus

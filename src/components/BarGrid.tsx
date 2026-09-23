@@ -314,6 +314,11 @@ function sameRange(left: Range, right: Range): boolean {
   return Math.abs(left.start - right.start) < 1e-9 && Math.abs(left.end - right.end) < 1e-9
 }
 
+// how long a division guide stays lit after the marker crosses it, in
+// milliseconds, and how wide it is drawn while lit
+const FLASH_MS = 220
+const FLASH_WIDTH = 4
+
 // where the playhead's column is held while the window follows it
 const FOLLOW_AT = 0.4
 // Following places the window exactly, frame by frame, except across a jump:
@@ -875,6 +880,10 @@ export default function BarGrid({
 
   // What moves with the playhead: the lanes with the cursor drawn into them
   // by the GPU, and the trace of the column the playhead is in
+  // the division guide the marker last crossed, and when: it is lit for a
+  // moment as the marker passes, so a beat is seen as well as heard
+  const flashRef = useRef<{ column: number; step: number; at: number } | null>(null)
+
   const { canvasRef } = useCanvasControl((context, full, height) => {
     if (bars.length === 0) return
     const { key, cache, width } = ensureCache(context, full, height)
@@ -930,6 +939,42 @@ export default function BarGrid({
       )
       cursored()
       context.restore()
+    }
+
+    if (atColumn >= 0 && playing) {
+      const bar = bars[atColumn]
+      const row = (positionRef.current - bar.start) / Math.max(1e-12, bar.end - bar.start)
+      const step = Math.min(divisions - 1, Math.floor(row * divisions))
+      const now = performance.now()
+      const flash = flashRef.current
+      const lit =
+        flash && flash.column === bar.start && flash.step === step
+          ? flash
+          : { column: bar.start, step, at: now }
+      flashRef.current = lit
+      const left = lit.at + FLASH_MS - now
+      if (left > 0) {
+        // lit across the whole plot, in white: the guide itself is black, so
+        // the light is its opposite for a moment
+        context.save()
+        context.translate(PROJECTION_WIDTH, 0)
+        context.beginPath()
+        context.rect(0, 0, width, height)
+        context.clip()
+        context.strokeStyle = '#ffffff'
+        context.lineWidth = FLASH_WIDTH
+        context.globalAlpha = left / FLASH_MS
+        context.beginPath()
+        for (const layer of cache.layers) {
+          const y = Math.round(layer.top + (lit.step / divisions) * layer.height)
+          context.moveTo(0, y)
+          context.lineTo(width, y)
+        }
+        context.stroke()
+        context.restore()
+      }
+    } else if (!playing) {
+      flashRef.current = null
     }
 
     // the one column the playhead is in, drawn as an outline over the rest:

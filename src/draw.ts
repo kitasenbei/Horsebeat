@@ -1683,22 +1683,6 @@ export const CURSOR_WIDTH = 3
 // a canvas stroke straddles its path, so the rect is grown by half the weight
 // to put the whole outline outside the column and leave the column itself whole
 export const CURSOR_OUTLINE = 2
-// the hue the column under the playhead is repainted in: hue blending keeps the
-// brightness and the saturation the lane drew, so the bar keeps its shape and
-// only its colour says it is the current one
-export const CURSOR_HUE = '#00e5ff'
-
-// How the column under the playhead is recoloured in the compiled view. The
-// turns keep every column apart from its neighbours whatever the map, the
-// fixed hue is one colour that says "here" but is lost wherever the map
-// comes near it.
-export type CursorTint = 'opposite' | 'quarter' | 'fixed'
-export const CURSOR_TINTS: { value: CursorTint; label: string }[] = [
-  { value: 'opposite', label: 'Opposite' },
-  { value: 'quarter', label: 'Quarter turn' },
-  { value: 'fixed', label: 'Fixed hue' },
-]
-
 // How the column cursor is blended into the lanes under it. Every one of these
 // keeps the cursor readable over a colourmap that owns any given hue; the plain
 // paint is last because it is the only one a lane can hide.
@@ -1832,9 +1816,6 @@ export function drawColumnCursor(
   width: number,
   mode: GlobalCompositeOperation,
   solid: string,
-  // per block, whether the column under the playhead is recoloured or only
-  // outlined: a silhouette is one flat colour and a hue on it says nothing
-  tinted: boolean[],
   layout: ColumnLayout = { head: 0, shown: bars.length },
 ) {
   const index = bars.findIndex((bar) => position >= bar.start && position < bar.end)
@@ -1863,14 +1844,6 @@ export function drawColumnCursor(
 
     for (let panel = 0; panel < panels; panel += 1) {
       const left = panel * panelWidth + (index - layout.head) * column
-
-      if (tinted[block]) {
-        context.save()
-        context.globalCompositeOperation = 'hue'
-        context.fillStyle = CURSOR_HUE
-        context.fillRect(left, top, column, heights[block])
-        context.restore()
-      }
 
       context.strokeRect(
         left - grow,

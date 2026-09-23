@@ -57,62 +57,16 @@ uniform float uPanelWidth;
 uniform float uPanelHeight;
 // the column the playhead is in (below nought for none), how far down it the
 // playhead is, how the mark is painted (0 inverts, 1 cuts out, 2 lays a
-// colour), whether the column is tinted, and the widths of the outline round
-// the column and the bar across it
+// colour), and the widths of the outline round the column and the bar across it
 uniform int uCursorColumn;
 uniform float uCursorRow;
 uniform int uCursorMode;
-uniform int uCursorTint;
-// how the tint is made (0 turns every hue to its opposite, 1 turns it a
-// quarter, 2 lays one hue) and the hue laid in the last case
-uniform int uTintMode;
-uniform vec3 uTintHue;
 uniform vec3 uSolid;
 uniform float uOutline;
 uniform float uBar;
 
 vec2 sumAt(int index) {
   return texelFetch(uSums, ivec2(index % uSumsWidth, index / uSumsWidth), 0).rg;
-}
-
-vec3 toHsl(vec3 c) {
-  float most = max(c.r, max(c.g, c.b));
-  float least = min(c.r, min(c.g, c.b));
-  float l = (most + least) * 0.5;
-  if (most == least) return vec3(0.0, 0.0, l);
-  float d = most - least;
-  float s = l > 0.5 ? d / (2.0 - most - least) : d / (most + least);
-  float h;
-  if (most == c.r) h = (c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0);
-  else if (most == c.g) h = (c.b - c.r) / d + 2.0;
-  else h = (c.r - c.g) / d + 4.0;
-  return vec3(h / 6.0, s, l);
-}
-
-float hueTo(float p, float q, float t) {
-  if (t < 0.0) t += 1.0;
-  if (t > 1.0) t -= 1.0;
-  if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
-  if (t < 0.5) return q;
-  if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
-  return p;
-}
-
-vec3 fromHsl(vec3 hsl) {
-  if (hsl.y == 0.0) return vec3(hsl.z);
-  float q = hsl.z < 0.5 ? hsl.z * (1.0 + hsl.y) : hsl.z + hsl.y - hsl.z * hsl.y;
-  float p = 2.0 * hsl.z - q;
-  return vec3(hueTo(p, q, hsl.x + 1.0 / 3.0), hueTo(p, q, hsl.x), hueTo(p, q, hsl.x - 1.0 / 3.0));
-}
-
-// every hue turned, or one hue laid, with the lightness and saturation the
-// lane drew: the column keeps its shape and its contrasts. A turn stands the
-// column apart from its neighbours whatever colours the map uses; the fixed
-// hue is lost wherever the map comes near it
-vec3 tinted(vec3 c) {
-  vec3 hsl = toHsl(c);
-  float hue = uTintMode == 0 ? fract(hsl.x + 0.5) : uTintMode == 1 ? fract(hsl.x + 0.25) : toHsl(uTintHue).x;
-  return fromHsl(vec3(hue, hsl.y, hsl.z));
 }
 
 vec3 marked(vec3 c) {
@@ -164,7 +118,6 @@ void main() {
     bool within = localX >= start && localX < stop;
     bool outline = (localX >= start - uOutline && localX < start) || (localX >= stop && localX < stop + uOutline);
     bool crossbar = within && abs(fromTop - uCursorRow * uPanelHeight) <= uBar * 0.5;
-    if (within && uCursorTint == 1) colour = tinted(colour);
     if (crossbar || outline) colour = marked(colour);
   }
 
@@ -186,9 +139,6 @@ export type LanePanel = {
   // what the curved level is multiplied by before it becomes a width, so the
   // loudest frame in view fills its column
   scale: number
-  // whether the column under the playhead is tinted: a silhouette is one flat
-  // colour and a hue on it says nothing
-  tinted: boolean
 }
 
 export type LaneCursor = {
@@ -197,8 +147,6 @@ export type LaneCursor = {
   row: number
   mode: 'inverse' | 'cut' | 'solid'
   solid: [number, number, number]
-  tint: 'opposite' | 'quarter' | 'fixed'
-  hue: [number, number, number]
   outline: number
   bar: number
 }
@@ -225,9 +173,6 @@ type Uniforms = Record<
   | 'cursorColumn'
   | 'cursorRow'
   | 'cursorMode'
-  | 'tintMode'
-  | 'tintHue'
-  | 'cursorTint'
   | 'solid'
   | 'outline'
   | 'bar',
@@ -329,9 +274,6 @@ function build(canvas: HTMLCanvasElement): Renderer | null {
     cursorColumn: at('uCursorColumn'),
     cursorRow: at('uCursorRow'),
     cursorMode: at('uCursorMode'),
-    tintMode: at('uTintMode'),
-    tintHue: at('uTintHue'),
-    cursorTint: at('uCursorTint'),
     solid: at('uSolid'),
     outline: at('uOutline'),
     bar: at('uBar'),
@@ -461,8 +403,6 @@ export function renderLanesGl(
     gl.uniform1f(uniforms.cursorRow, cursor.row)
     gl.uniform1i(uniforms.cursorMode, cursor.mode === 'inverse' ? 0 : cursor.mode === 'cut' ? 1 : 2)
     gl.uniform3fv(uniforms.solid, cursor.solid)
-    gl.uniform1i(uniforms.tintMode, cursor.tint === 'opposite' ? 0 : cursor.tint === 'quarter' ? 1 : 2)
-    gl.uniform3fv(uniforms.tintHue, cursor.hue)
     gl.uniform1f(uniforms.outline, cursor.outline * ratio)
     gl.uniform1f(uniforms.bar, cursor.bar * ratio)
   } else {
@@ -515,7 +455,6 @@ export function renderLanesGl(
     gl.uniform1f(uniforms.panelBottom, bottom)
     gl.uniform1f(uniforms.panelWidth, panelWidth)
     gl.uniform1f(uniforms.panelHeight, panelHeight)
-    gl.uniform1i(uniforms.cursorTint, panel.tinted ? 1 : 0)
 
     gl.viewport(left, bottom, panelWidth, panelHeight)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)

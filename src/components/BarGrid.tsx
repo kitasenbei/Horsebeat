@@ -951,8 +951,10 @@ export default function BarGrid({
     let block = tops.findIndex((top, index) => y >= top && y < top + heights[index])
     if (block < 0) block = 0
 
+    // the black rows past the section's end are not this column's time, so a
+    // press on them lands on the section's end
     const fraction = Math.min(
-      1,
+      target.bar.filled,
       Math.max(0, (y - (tops[block] ?? 0)) / Math.max(1, heights[block] ?? 1)),
     )
     const at = target.bar.start + fraction * (target.bar.end - target.bar.start)

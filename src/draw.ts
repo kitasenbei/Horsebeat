@@ -1468,17 +1468,25 @@ export function columnProfile(
   const sums = prefixSums(source, stride, 0)
 
   const values = new Float32Array(rows)
+  // the rows past the section's end are the column's black part and hold no
+  // trace: they are left at nought and kept out of the scaling
+  const limit = Math.min(frames, filledFrames(bar, base, step, rows))
+  let filled = rows
   let least = Infinity
   let most = -Infinity
   for (let row = 0; row < rows; row += 1) {
     // averaged over the row the same way the cells are, or the trace and the
     // picture it is read against disagree
     const at = base + row * step
+    if ((at | 0) >= limit) {
+      filled = row
+      break
+    }
     let from = at | 0
     if (from > last) from = last
     let until = (at + step) | 0
+    if (until > limit) until = limit
     if (until <= from) until = from + 1
-    if (until > frames) until = frames
 
     const value = (sums[until] - sums[from]) / (until - from)
     values[row] = value
@@ -1489,7 +1497,7 @@ export function columnProfile(
   // read between its own ends, like the graphs it is drawn over, so the shape
   // of this one bar can be compared with the shape of all of them
   if (most > least) {
-    for (let row = 0; row < rows; row += 1) values[row] = (values[row] - least) / (most - least)
+    for (let row = 0; row < filled; row += 1) values[row] = (values[row] - least) / (most - least)
   }
   return values
 }

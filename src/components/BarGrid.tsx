@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme, type Theme } from '@mui/material/styles'
 import Menu from '@mui/material/Menu'
@@ -7,8 +7,9 @@ import {
   ALL_BLOCKS,
   autoSliceBeats,
   collectBars,
+  barUntil,
   columnAt,
-  columnLayout,
+  type ColumnLayout,
   columnProfile,
   drawColumnCursor,
   drawProjection,
@@ -49,7 +50,6 @@ import {
   type Section,
   type SectionSpan,
 } from '../timing'
-import { clampRange } from '../range'
 import { useLiveSectionsEdit } from '../liveSections'
 import { useRafCallback } from '../useRafCallback'
 import {
@@ -234,12 +234,11 @@ function planPanels(
   return panels
 }
 
-// every section the window touches contributes its own slices, so the view is
-// continuous across tempo changes rather than one section at a time
-function viewBars(spans: SectionSpan[], range: Range, slice: number | 'auto', width: number): Bar[] {
-  const visible = spans.filter((span) => span.end > range.start && span.start < range.end)
-
-  return (visible.length > 0 ? visible : spans.slice(0, 1))
+// every section contributes its own slices, so the picture is continuous
+// across tempo changes rather than one section at a time. The whole song is
+// sliced; the window is a stretch of these columns
+function sliceBars(spans: SectionSpan[], slice: number | 'auto', width: number): Bar[] {
+  return spans
     .flatMap((span) => {
       // the automatic slice is settled on the whole song, not on the window:
       // zooming in then widens the columns and leaves what each one holds
@@ -251,53 +250,75 @@ function viewBars(spans: SectionSpan[], range: Range, slice: number | 'auto', wi
           : slice
       return collectBars(span, beats)
     })
-    .filter((bar) => bar.end > range.start && bar.start < range.end)
     .sort((left, right) => left.start - right.start)
 }
 
-// Where a moment sits across the columns, as a fraction of the plot: the
-// columns are equal in width whatever they last, so this is not where it sits
-// in time.
-function acrossColumns(bars: Bar[], moment: number, range: Range): number | null {
-  const at = columnAt(bars, moment)
-  if (at < 0) return null
-  const bar = bars[at]
-  const { head, shown } = columnLayout(bars, range)
-  return (at + (moment - bar.start) / Math.max(1e-12, bar.end - bar.start) - head) / shown
+// The window across the columns: where it starts, in columns and the fraction
+// of one, and how many columns it shows. The columns are the axis the picture
+// is drawn on, and the one the window is held on. Time is what the rest of the
+// app shares, and the two do not map one to one: a section's last column runs
+// on black past the section's end, and that stretch of the picture is no time
+// at all, since the time under it belongs to the next section's first column.
+// Held in time, a window whose edge sat on that black would have nowhere to
+// be; held in columns, it simply is there
+type Span = {
+  head: number
+  shown: number
 }
 
-// The window that puts a moment at a fraction of the plot, keeping a given
-// span. The first guess is made along the time axis; the window's own columns
-// then put the moment wherever their lengths do, so it is slid until the
-// moment lands where it was asked to, a column's length at a time.
-function windowPlacing(
-  spans: SectionSpan[],
-  slice: number | 'auto',
-  width: number,
-  moment: number,
-  ratio: number,
-  span: number,
-): Range {
-  let target = clampRange({ start: moment - ratio * span, end: moment + (1 - ratio) * span })
+const MIN_SHOWN = 0.05
 
-  for (let pass = 0; pass < 4; pass += 1) {
-    const after = viewBars(spans, target, slice, width)
-    const landed = acrossColumns(after, moment, target)
-    if (landed === null || Math.abs(landed - ratio) < 1e-4) break
-    const seat = columnLayout(after, target)
-    const at = Math.min(after.length - 1, Math.max(0, Math.floor(seat.head + landed * seat.shown)))
-    const length = after[at].end - after[at].start
-    const shift = (landed - ratio) * seat.shown * length
-    const slid = clampRange({ start: target.start + shift, end: target.end + shift })
-    if (slid.start === target.start) break
-    target = slid
+// where a moment sits across the song's columns, by the time each truly holds
+function columnPos(bars: Bar[], moment: number): number {
+  if (bars.length === 0) return 0
+  const at = columnAt(bars, moment)
+  if (at >= 0) {
+    const bar = bars[at]
+    return at + (moment - bar.start) / Math.max(1e-12, bar.end - bar.start)
   }
+  const last = bars[bars.length - 1]
+  return moment >= barUntil(last) ? bars.length - 1 + last.filled : 0
+}
 
-  return target
+// the moment at a place across the columns: a place on a column's black has
+// no time of its own and reads as the section's end
+function momentAt(bars: Bar[], place: number): number {
+  if (bars.length === 0) return 0
+  const index = Math.min(bars.length - 1, Math.max(0, Math.floor(place)))
+  const bar = bars[index]
+  const moment = bar.start + (place - index) * (bar.end - bar.start)
+  return Math.min(1, Math.max(0, Math.min(barUntil(bar), moment)))
+}
+
+function toWindow(bars: Bar[], range: Range): Span {
+  const head = columnPos(bars, range.start)
+  const tail = columnPos(bars, range.end)
+  return { head, shown: Math.max(MIN_SHOWN, tail - head) }
+}
+
+function toRange(bars: Bar[], window: Span): Range {
+  return { start: momentAt(bars, window.head), end: momentAt(bars, window.head + window.shown) }
+}
+
+function clampWindow(bars: Bar[], window: Span): Span {
+  const most = Math.max(MIN_SHOWN, bars.length)
+  const shown = Math.min(most, Math.max(MIN_SHOWN, window.shown))
+  const head = Math.min(most - shown, Math.max(0, window.head))
+  return { head, shown }
+}
+
+function sameRange(left: Range, right: Range): boolean {
+  return Math.abs(left.start - right.start) < 1e-9 && Math.abs(left.end - right.end) < 1e-9
 }
 
 // where the playhead's column is held while the window follows it
 const FOLLOW_AT = 0.4
+// Following places the window exactly, frame by frame, except across a jump:
+// where the marker leaves a part-filled column for the next section's first,
+// the window would move most of a column in one frame. A jump is spread over
+// about this many seconds instead, and playback's own steady drift is never
+// behind
+const FOLLOW_EASE = 0.18
 
 export default function BarGrid({
   envelope,
@@ -345,7 +366,48 @@ export default function BarGrid({
     return () => observer.disconnect()
   }, [])
 
-  const bars = measure('BarGrid bars', () => viewBars(spans, range, slice, width))
+  // kept by identity: the window below is re-read from time whenever the
+  // columns are cut afresh, and cutting them on every render would do that
+  // every frame
+  const songBars = useMemo(
+    () => measure('BarGrid bars', () => sliceBars(spans, slice, width)),
+    [spans, slice, width],
+  )
+  // The window lives here in columns, and the time range the app holds is its
+  // shadow: a change of the range from elsewhere, a drag on the strip say, is
+  // taken up; one that is this window's own shadow is left alone, so a window
+  // resting on a column's black is not pulled off it by its own reflection.
+  // Cut afresh, the columns are read against the range again
+  const windowRef = useRef<{ window: Span; published: Range | null; bars: Bar[] | null }>({
+    window: { head: 0, shown: 1 },
+    published: null,
+    bars: null,
+  })
+  if (
+    windowRef.current.bars !== songBars ||
+    !windowRef.current.published ||
+    !sameRange(windowRef.current.published, range)
+  ) {
+    windowRef.current = {
+      window: clampWindow(songBars, toWindow(songBars, range)),
+      published: range,
+      bars: songBars,
+    }
+  }
+  const span = windowRef.current.window
+  const first = Math.min(songBars.length, Math.floor(span.head))
+  const bars = songBars.slice(first, Math.min(songBars.length, Math.ceil(span.head + span.shown)))
+  const layout: ColumnLayout = { head: span.head - first, shown: span.shown }
+
+  // a change of window, through the live store while a gesture or the
+  // following lasts, or to the app once it is done
+  const placeWindow = (next: Span, apply: (range: Range) => void) => {
+    const all = zoomRef.current.songBars
+    const placed = clampWindow(all, next)
+    const published = toRange(all, placed)
+    windowRef.current = { window: placed, published, bars: all }
+    apply(published)
+  }
 
   const sources = { envelope, loudness, onsets, bands }
   // The projections are read over every bar of the song, whatever the window
@@ -411,13 +473,13 @@ export default function BarGrid({
     bpm: number
     tempo: boolean
     fine: boolean
-    start: number
-    span: number
+    head: number
+    shown: number
     axis: 'none' | 'vertical' | 'pan'
   } | null>(null)
-  const zoomRef = useRef({ range, applyRange, editRange, settle: settleRange, spans, slice, width })
+  const zoomRef = useRef({ applyRange, editRange, settle: settleRange, songBars })
   useEffect(() => {
-    zoomRef.current = { range, applyRange, editRange, settle: settleRange, spans, slice, width }
+    zoomRef.current = { applyRange, editRange, settle: settleRange, songBars }
   })
 
   // Following: every frame while the song plays the window is placed so the
@@ -426,11 +488,35 @@ export default function BarGrid({
   useEffect(() => {
     if (!follow || !playing) return
 
-    let frame = requestAnimationFrame(function tick() {
-      const { range: current, editRange: edit, spans: held, slice: cut, width: full } = zoomRef.current
-      const span = current.end - current.start
-      const target = windowPlacing(held, cut, full, positionRef.current, FOLLOW_AT, span)
-      if (Math.abs(target.start - current.start) > 1e-9) edit(target)
+    let last = performance.now()
+    // the column the playhead was in last frame, where following wanted the
+    // window, and how much of a jump is still to be closed
+    let column: number | null = null
+    let wanted: number | null = null
+    let pending = 0
+    let frame = requestAnimationFrame(function tick(now: number) {
+      const { songBars: all, editRange: edit } = zoomRef.current
+      const seconds = Math.max(0, now - last) / 1000
+      last = now
+
+      const at = columnAt(all, positionRef.current)
+      if (at >= 0) {
+        const { shown } = windowRef.current.window
+        const target = columnPos(all, positionRef.current) - FOLLOW_AT * shown
+        // a change of column is where the window jumps: off a part-filled
+        // column onto the next section's first, the picture moves by the
+        // black that was skipped. Within a column the window only drifts
+        if (wanted !== null && column !== null && all[at].start !== column) pending += target - wanted
+        wanted = target
+        column = all[at].start
+        // the same share of what is left of the jump is closed each frame,
+        // whatever the frame rate
+        pending *= Math.exp(-seconds / FOLLOW_EASE)
+        if (Math.abs(pending) < 1e-6) pending = 0
+
+        const head = target - pending
+        if (Math.abs(head - windowRef.current.window.head) > 1e-9) placeWindow({ head, shown }, edit)
+      }
       frame = requestAnimationFrame(tick)
     })
 
@@ -438,15 +524,17 @@ export default function BarGrid({
       cancelAnimationFrame(frame)
       zoomRef.current.settle()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [follow, playing, positionRef])
 
   // paused, a seek is followed once, straight to the app
   useEffect(() => {
     if (!follow || playing) return
-    const { range: current, spans: held, slice: cut, width: full } = zoomRef.current
-    const span = current.end - current.start
-    const target = windowPlacing(held, cut, full, position, FOLLOW_AT, span)
-    if (Math.abs(target.start - current.start) > 1e-9) onRangeChange(target)
+    const all = zoomRef.current.songBars
+    if (columnAt(all, position) < 0) return
+    const { shown } = windowRef.current.window
+    const head = columnPos(all, position) - FOLLOW_AT * shown
+    if (Math.abs(head - windowRef.current.window.head) > 1e-9) placeWindow({ head, shown }, onRangeChange)
     // only a change of position or of following is a reason to move the window
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [follow, playing, position])
@@ -460,7 +548,6 @@ export default function BarGrid({
       if (!hover || bars.length === 0) return
 
       const width = plotWidth(full)
-      const layout = columnLayout(bars, range)
       const column = width / layout.shown
       const offset = -layout.head * column
       const index = Math.min(
@@ -680,7 +767,7 @@ export default function BarGrid({
     return { key, plan, cache, width }
   }
 
-  const stillKey = `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${blocks.join(',')}|${divisions}|${colormap}|${waveStyle}|${slice}|${curveSignature(curve)}`
+  const stillKey = `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${span.head}|${span.shown}|${blocks.join(',')}|${divisions}|${colormap}|${waveStyle}|${slice}|${curveSignature(curve)}`
 
   // What stays put between frames: the guides, the section bounds, the three
   // projection graphs, and on a browser without WebGL2 the lanes themselves.
@@ -689,7 +776,6 @@ export default function BarGrid({
     if (bars.length === 0) return
     const { cache, width } = ensureCache(context, full, height)
 
-    const layout = columnLayout(bars, range)
     const column = width / layout.shown
     const offset = -layout.head * column
 
@@ -789,7 +875,6 @@ export default function BarGrid({
     if (bars.length === 0) return
     const { key, cache, width } = ensureCache(context, full, height)
 
-    const layout = columnLayout(bars, range)
     const atColumn = columnAt(bars, positionRef.current)
 
     const gl = glRef.current
@@ -889,29 +974,18 @@ export default function BarGrid({
       if (bounds.width === 0) return
       event.preventDefault()
 
-      const { range: current, applyRange: apply, spans: held, slice: cut, width: full } = zoomRef.current
+      const { applyRange: apply } = zoomRef.current
       const ratio = Math.min(
         1,
         Math.max(0, (event.clientX - bounds.left - PROJECTION_WIDTH) / plotWidth(bounds.width)),
       )
 
-      // the moment under the pointer is read off the column it is over, not
-      // off the time axis: the columns are equal in width and unequal in
-      // length, so the two agree only when every bar lasts the same
-      const before = viewBars(held, current, cut, full)
-      const placed = columnLayout(before, current)
-      const across = placed.head + ratio * placed.shown
-      const index = Math.min(before.length - 1, Math.max(0, Math.floor(across)))
-      const bar = before[index]
-      const anchor = bar
-        ? bar.start + (across - index) * (bar.end - bar.start)
-        : current.start + ratio * (current.end - current.start)
-
-      const span = current.end - current.start
-      const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
-      const target = windowPlacing(held, cut, full, anchor, ratio, next)
-
-      apply(target)
+      // the column under the pointer stays under it: the window is scaled
+      // about that place across the columns, not about a moment in time
+      const { head, shown } = windowRef.current.window
+      const across = head + ratio * shown
+      const next = shown * Math.exp(event.deltaY * ZOOM_RATE)
+      placeWindow({ head: across - ratio * next, shown: next }, apply)
 
       window.clearTimeout(settleTimer.current)
       settleTimer.current = window.setTimeout(() => zoomRef.current.settle(), GESTURE_END_MS)
@@ -931,7 +1005,7 @@ export default function BarGrid({
       0.999,
       Math.max(0, (event.clientX - bounds.left - PROJECTION_WIDTH) / plotWidth(bounds.width)),
     )
-    const { head, shown } = columnLayout(bars, range)
+    const { head, shown } = layout
     const bar = bars[Math.min(bars.length - 1, Math.max(0, Math.floor(head + ratio * shown)))]
     const span = spans.find((item) => item.section.id === bar.section)
     return span ? { span, bar } : null
@@ -1017,8 +1091,8 @@ export default function BarGrid({
       // mid-drag would jump the value by everything moved so far
       tempo: event.shiftKey,
       fine: event.ctrlKey || event.metaKey,
-      start: range.start,
-      span: range.end - range.start,
+      head: windowRef.current.window.head,
+      shown: windowRef.current.window.shown,
       axis: 'none',
     }
     setDragging(true)
@@ -1058,8 +1132,8 @@ export default function BarGrid({
       measure('drag BarGrid pan', () => {
         const width = plotWidth(event.currentTarget.clientWidth)
         if (width <= 1) return
-        const shift = (dx / width) * drag.span
-        applyRange(clampRange({ start: drag.start - shift, end: drag.start - shift + drag.span }))
+        const shift = (dx / width) * drag.shown
+        placeWindow({ head: drag.head - shift, shown: drag.shown }, applyRange)
       })
       return
     }

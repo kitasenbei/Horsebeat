@@ -93,7 +93,7 @@ type BarGridProps = {
   follow: boolean
 }
 
-const GUIDE_COLOR = '#ffffff'
+const GUIDE_COLOR = '#000000'
 const ZOOM_RATE = 0.002
 const HOVER_COLOR = '#ffffff'
 const HOVER_WIDTH = 3

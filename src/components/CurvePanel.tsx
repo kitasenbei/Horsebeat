@@ -218,7 +218,7 @@ export default function CurvePanel({
 
     applyCurveChange({
       points: points.map((point, current) =>
-        current === index ? { x: nextX, y: Math.min(1, Math.max(0, y)) } : point,
+        current === index ? { ...point, x: nextX, y: Math.min(1, Math.max(0, y)) } : point,
       ),
     })
   }

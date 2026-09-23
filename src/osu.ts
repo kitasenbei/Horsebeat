@@ -1,11 +1,20 @@
-import { unzipSync } from 'fflate'
+import { unzipSync, zipSync } from 'fflate'
 import { createSection, MAX_BPM, MIN_BPM, sortSections, type Section } from './timing'
+
+// The archive a beatmap came in and the chart read from it, kept so an
+// export can give the same archive back with only its timing changed
+export type BeatmapSource = {
+  archive: Uint8Array
+  chartName: string
+  chartText: string
+}
 
 export type Beatmap = {
   audio: File
   sections: Section[]
   title: string
   background: Blob | null
+  source: BeatmapSource
 }
 
 type Header = {
@@ -107,6 +116,7 @@ export async function readOsz(file: File): Promise<Beatmap> {
     sections: readTimingPoints(text),
     title: header.title || file.name,
     background,
+    source: { archive, chartName: names[0], chartText: text },
   }
 }
 
@@ -117,4 +127,107 @@ export function writeTimingPoints(sections: Section[]): string {
       return `${Math.round(section.offsetMs)},${beatLength},${section.meter},2,0,60,1,0`
     })
     .join('\n')
+}
+
+// The chart's timing block written afresh: the sections as its red lines,
+// and the green lines it had, the slider velocities, kept in their places
+function replaceTimingPoints(chartText: string, sections: Section[]): string {
+  const parts = chartText.split(/^\[TimingPoints\]\s*$/m)
+  if (parts.length < 2) return `${chartText.trimEnd()}\n\n[TimingPoints]\n${writeTimingPoints(sections)}\n`
+
+  const rest = parts.slice(1).join('[TimingPoints]')
+  const next = rest.search(/^\[/m)
+  const block = next >= 0 ? rest.slice(0, next) : rest
+  const after = next >= 0 ? rest.slice(next) : ''
+
+  const inherited = block
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      const fields = line.split(',')
+      return fields.length > 6 && fields[6].trim() === '0'
+    })
+  const lines = [...writeTimingPoints(sections).split('\n'), ...inherited].sort(
+    (left, right) => Number(left.split(',')[0]) - Number(right.split(',')[0]),
+  )
+  return `${parts[0]}[TimingPoints]\n${lines.join('\n')}\n\n${after}`
+}
+
+// A chart from nothing but the audio and the sections: enough for the editor
+// to open it and show the grid, with no objects placed
+function newChart(audioName: string, title: string, sections: Section[]): string {
+  return [
+    'osu file format v14',
+    '',
+    '[General]',
+    `AudioFilename: ${audioName}`,
+    'AudioLeadIn: 0',
+    'PreviewTime: -1',
+    'Countdown: 0',
+    'SampleSet: Normal',
+    'StackLeniency: 0.7',
+    'Mode: 0',
+    'LetterboxInBreaks: 0',
+    'WidescreenStoryboard: 0',
+    '',
+    '[Editor]',
+    'DistanceSpacing: 1',
+    'BeatDivisor: 4',
+    'GridSize: 32',
+    'TimelineZoom: 1',
+    '',
+    '[Metadata]',
+    `Title:${title}`,
+    `TitleUnicode:${title}`,
+    'Artist:',
+    'ArtistUnicode:',
+    'Creator:Horsebeat',
+    'Version:Timing',
+    'Source:',
+    'Tags:',
+    'BeatmapID:0',
+    'BeatmapSetID:-1',
+    '',
+    '[Difficulty]',
+    'HPDrainRate:5',
+    'CircleSize:4',
+    'OverallDifficulty:5',
+    'ApproachRate:5',
+    'SliderMultiplier:1.4',
+    'SliderTickRate:1',
+    '',
+    '[Events]',
+    '',
+    '[TimingPoints]',
+    writeTimingPoints(sections),
+    '',
+    '[HitObjects]',
+    '',
+  ].join('\n')
+}
+
+// The song and its sections as an osz: the archive it came from with the
+// chart's timing rewritten, or a new archive of the audio and a bare chart
+export async function writeOsz(
+  audio: File,
+  sections: Section[],
+  title: string,
+  source: BeatmapSource | null,
+): Promise<Uint8Array> {
+  const encode = (text: string) => new TextEncoder().encode(text)
+  if (source) {
+    const entries = unzipSync(source.archive)
+    entries[source.chartName] = encode(replaceTimingPoints(source.chartText, sections))
+    return zipSync(entries, { level: 6 })
+  }
+
+  const chart = newChart(audio.name, title, sections)
+  const chartName = `${title.replace(/[\\/:*?"<>|]/g, '_')} (Horsebeat) [Timing].osu`
+  return zipSync(
+    {
+      [chartName]: encode(chart),
+      [audio.name]: new Uint8Array(await audio.arrayBuffer()),
+    },
+    { level: 6 },
+  )
 }

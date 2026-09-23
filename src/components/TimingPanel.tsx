@@ -14,6 +14,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import CheckIcon from '@mui/icons-material/Check'
 import ContentPasteIcon from '@mui/icons-material/ContentPaste'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -36,6 +37,7 @@ type TimingPanelProps = {
   onSeekMs: (ms: number) => void
   onSectionsChange: (sections: Section[]) => void
   onEditingChange: (id: string | null) => void
+  onExport?: () => void
   onClose?: () => void
   embedded?: boolean
 }
@@ -86,6 +88,7 @@ export default function TimingPanel({
   onSeekMs,
   onSectionsChange,
   onEditingChange,
+  onExport,
   onClose,
   embedded = false,
 }: TimingPanelProps) {
@@ -297,6 +300,16 @@ export default function TimingPanel({
           ) : (
             <ContentCopyIcon fontSize="small" />
           )}
+        </IconButton>
+        <IconButton
+          size="small"
+          title="Export as .osz"
+          aria-label="Export as .osz"
+          disabled={!onExport || sections.length === 0}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onExport?.()}
+        >
+          <FileDownloadIcon fontSize="small" />
         </IconButton>
         <IconButton
           size="small"

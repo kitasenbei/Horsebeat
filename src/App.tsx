@@ -42,7 +42,7 @@ import {
 import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
-import { readOsz } from './osu'
+import { readOsz, writeOsz, type BeatmapSource } from './osu'
 import { fitTrack, type Fit, type Progress } from './fit'
 import {
   createSection,
@@ -91,6 +91,9 @@ export default function App() {
   tick('App render')
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
+  // the archive the song came in, if it came in one, and a name for it
+  const [source, setSource] = useState<BeatmapSource | null>(null)
+  const [title, setTitle] = useState('')
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [samples, setSamples] = useState<Float32Array | null>(null)
   const [envelope, setEnvelope] = useState<Float32Array | null>(null)
@@ -351,10 +354,25 @@ export default function App() {
       history.reset()
       setAnchorId(null)
       setFile(next)
+      setSource(beatmap ? beatmap.source : null)
+      setTitle(beatmap ? beatmap.title : source.name.replace(/\.[^.]+$/, ''))
     } finally {
       await context.close()
       setLoadingName(null)
     }
+  }
+
+  // the song and its sections handed back as an osz through the browser's
+  // downloads
+  const exportOsz = async () => {
+    if (!file) return
+    const archive = await writeOsz(file, sections, title, source)
+    const url = URL.createObjectURL(new Blob([archive as BlobPart], { type: 'application/octet-stream' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${title.replace(/[\\/:*?"<>|]/g, '_') || 'horsebeat'}.osz`
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -475,6 +493,7 @@ export default function App() {
                 }}
                 onSectionsChange={setSections}
                 onEditingChange={setEditingSection}
+                onExport={file ? exportOsz : undefined}
               />
             </Box>
           </Box>

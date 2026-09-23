@@ -43,7 +43,22 @@ export function computePeaks(samples: Float32Array): Float32Array {
 // finely as the envelope and stop looking stepped beside it.
 const ONSET_HOP = 512
 const LEVEL_HOP = 64
-const FLOOR_DB = -60
+// The quietest an amplitude is told from silence. Everything the amplitude
+// curve reads is a level on this scale, nought at the floor and one at full
+// scale, so a point at the middle of the curve is thirty decibels down rather
+// than half of full scale, which is six down and above most of any song.
+export const FLOOR_DB = -60
+
+export function levelOf(amplitude: number): number {
+  const db = 20 * Math.log10(Math.max(1e-6, amplitude))
+  return Math.min(1, Math.max(0, (db - FLOOR_DB) / -FLOOR_DB))
+}
+
+export function levelsOf(amplitudes: Float32Array): Float32Array {
+  const levels = new Float32Array(amplitudes.length)
+  for (let at = 0; at < amplitudes.length; at += 1) levels[at] = levelOf(amplitudes[at])
+  return levels
+}
 
 export function computeRms(samples: Float32Array, hop = ONSET_HOP): Float32Array {
   const frames = Math.max(1, Math.floor(samples.length / hop))
@@ -64,10 +79,7 @@ export function computeLoudness(samples: Float32Array): Float32Array {
   const energy = computeRms(samples, LEVEL_HOP)
   const loudness = new Float32Array(energy.length)
 
-  for (let frame = 0; frame < energy.length; frame += 1) {
-    const db = 20 * Math.log10(Math.max(1e-6, energy[frame]))
-    loudness[frame] = Math.min(1, Math.max(0, (db - FLOOR_DB) / -FLOOR_DB))
-  }
+  for (let frame = 0; frame < energy.length; frame += 1) loudness[frame] = levelOf(energy[frame])
 
   return loudness
 }

@@ -1,3 +1,7 @@
+// A curve maps a level to how much of it is drawn. Its x is a level in
+// decibels, nought at the floor and one at full scale, the same scale the
+// loudness lane is on; its y is the share drawn, nought to one. The presets
+// are placed on that scale: most music sits between a half and nine tenths.
 export type CurvePoint = {
   x: number
   y: number
@@ -101,56 +105,56 @@ export const CURVE_PRESETS = {
   lift: {
     points: [
       { x: 0, y: 0 },
-      { x: 0.25, y: 0.55 },
-      { x: 0.6, y: 0.85 },
+      { x: 0.45, y: 0.5 },
+      { x: 0.75, y: 0.85 },
       { x: 1, y: 1 },
     ],
   },
   contrast: {
     points: [
       { x: 0, y: 0 },
-      { x: 0.35, y: 0.16 },
-      { x: 0.7, y: 0.86 },
+      { x: 0.55, y: 0.18 },
+      { x: 0.8, y: 0.86 },
       { x: 1, y: 1 },
     ],
   },
   tame: {
     points: [
       { x: 0, y: 0 },
-      { x: 0.45, y: 0.12 },
-      { x: 0.8, y: 0.5 },
+      { x: 0.6, y: 0.3 },
+      { x: 0.85, y: 0.6 },
       { x: 1, y: 0.9 },
     ],
   },
   gate: {
     points: [
       { x: 0, y: 0 },
-      { x: 0.35, y: 0.02 },
-      { x: 0.55, y: 0.5 },
+      { x: 0.55, y: 0.02 },
+      { x: 0.7, y: 0.5 },
       { x: 1, y: 1 },
     ],
   },
   peaks: {
     points: [
       { x: 0, y: 0 },
-      { x: 0.6, y: 0.04 },
-      { x: 0.85, y: 0.55 },
+      { x: 0.75, y: 0.04 },
+      { x: 0.9, y: 0.55 },
       { x: 1, y: 1 },
     ],
   },
   flatten: {
     points: [
       { x: 0, y: 0 },
-      { x: 0.15, y: 0.45 },
-      { x: 0.5, y: 0.78 },
+      { x: 0.4, y: 0.45 },
+      { x: 0.7, y: 0.78 },
       { x: 1, y: 1 },
     ],
   },
   hard: {
     points: [
       { x: 0, y: 0 },
-      { x: 0.45, y: 0.04 },
-      { x: 0.55, y: 0.96 },
+      { x: 0.65, y: 0.04 },
+      { x: 0.72, y: 0.96 },
       { x: 1, y: 1 },
     ],
   },

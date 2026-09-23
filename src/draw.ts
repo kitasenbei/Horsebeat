@@ -1,5 +1,6 @@
 import type { Range } from './range'
 import { applyCurve, type Curve } from './curve'
+import { levelOf } from './audio'
 import { sectionSpans, type Section, type SectionSpan } from './timing'
 import { type PeakLevel, type Pyramid } from './audio'
 
@@ -412,7 +413,7 @@ export function drawPeaksAmplitude(
     for (let bin = start; bin < Math.min(end, bins); bin += 1) {
       amplitude = Math.max(amplitude, Math.abs(peaks[bin * 2]), Math.abs(peaks[bin * 2 + 1]))
     }
-    const half = applyCurve(amplitude, curve) * middle
+    const half = applyCurve(levelOf(amplitude), curve) * middle
     context.fillRect(x, middle - half, 1, Math.max(1, half * 2))
   }
 

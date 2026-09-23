@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import TopBar from './components/TopBar'
@@ -30,6 +30,8 @@ import {
   computeLoudness,
   computeEnvelope,
   computeOnsets,
+  levelOf,
+  levelsOf,
   computePeaks,
   toMono,
 } from './audio'
@@ -64,12 +66,12 @@ type Doc = {
   curve: Curve
 }
 
-// The envelope read through the curve, clamped first because the curve is drawn
+// The envelope read through the curve, as a level first because the curve is drawn
 // over nought to one and a loud master runs past it.
 function throughCurve(envelope: Float32Array, curve: Curve): Float32Array {
   const out = new Float32Array(envelope.length)
   for (let at = 0; at < envelope.length; at += 1) {
-    out[at] = applyCurve(Math.min(1, envelope[at]), curve)
+    out[at] = applyCurve(levelOf(envelope[at]), curve)
   }
   return out
 }
@@ -92,6 +94,10 @@ export default function App() {
   const [onsets, setOnsets] = useState<Float32Array | null>(null)
   const [loudness, setLoudness] = useState<Float32Array | null>(null)
   const [bands, setBands] = useState<Float32Array | null>(null)
+  // what is drawn: the amplitudes as levels in decibels, the scale the curve is
+  // on and the loudness lane already uses. The fitting reads the envelope as it is
+  const levels = useMemo(() => (envelope ? levelsOf(envelope) : null), [envelope])
+  const bandLevels = useMemo(() => (bands ? levelsOf(bands) : null), [bands])
   const [range, setRange] = useState<Range>(INITIAL_RANGE)
   const [loadingName, setLoadingName] = useState<string | null>(null)
   const [mode, setMode] = useState<EditMode>('none')
@@ -372,7 +378,12 @@ export default function App() {
         onFollowChange={setFollow}
       />
       {curveOpen ? (
-        <CurvePanel curve={curve} onCurveChange={setCurve} onClose={() => setCurveOpen(false)} />
+        <CurvePanel
+          curve={curve}
+          levels={levels}
+          onCurveChange={setCurve}
+          onClose={() => setCurveOpen(false)}
+        />
       ) : null}
       {framesOpen ? (
         <FloatingWindow
@@ -382,10 +393,10 @@ export default function App() {
           onClose={() => setFramesOpen(false)}
         >
           <BeatFrames
-            envelope={envelope}
+            envelope={levels}
             loudness={loudness}
             onsets={onsets}
-            bands={bands}
+            bands={bandLevels}
             sections={sections}
             duration={duration}
             position={position}
@@ -477,7 +488,7 @@ export default function App() {
             <Box sx={{ flex: 1, minHeight: 0, display: barGrid ? 'none' : 'block' }}>
               <Waveform
                 samples={samples}
-                envelope={envelope}
+                envelope={levels}
                 position={position}
                 positionRef={positionRef}
                 playing={playing}
@@ -517,10 +528,10 @@ export default function App() {
               <>
                 <Box sx={{ flex: 1, minHeight: 0 }}>
                   <BarGrid
-                    envelope={envelope}
+                    envelope={levels}
                     loudness={loudness}
                     onsets={onsets}
-                    bands={bands}
+                    bands={bandLevels}
                     sections={sections}
                     duration={duration}
                     position={position}
@@ -546,7 +557,7 @@ export default function App() {
           </Box>
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <LiveWave
-              envelope={envelope}
+              envelope={levels}
               curve={curve}
               colormap={colormap}
               sections={sections}
@@ -558,7 +569,7 @@ export default function App() {
             <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
               <VerticalWaveform
                 samples={samples}
-                envelope={envelope}
+                envelope={levels}
                 sections={sections}
                 position={position}
                 positionRef={positionRef}
@@ -688,7 +699,7 @@ export default function App() {
             onSeek={seek}
           />
           <RangeStrip
-            envelope={envelope}
+            envelope={levels}
             sections={sections}
             duration={duration}
             curve={curve}

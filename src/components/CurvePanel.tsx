@@ -1,6 +1,5 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -18,10 +17,11 @@ import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
 import { measure, tick } from '../trace'
+import { FLOOR_DB } from '../audio'
+import { curveSignature } from '../draw'
 import {
   applyCurve,
   CURVE_PRESETS,
-  DEFAULT_CURVE,
   MAX_POINTS,
   MIN_GAP,
   sortPoints,
@@ -30,6 +30,9 @@ import {
 
 type CurvePanelProps = {
   curve: Curve
+  // the track as levels, drawn behind the curve so the chart shows where the
+  // music sits on the axis the points are placed on
+  levels: Float32Array | null
   onCurveChange: (curve: Curve) => void
   onClose?: () => void
   embedded?: boolean
@@ -54,12 +57,31 @@ const PRESETS = [
 ]
 
 const CHART_HEIGHT = 170
-const PANEL_WIDTH = 250
+const PANEL_WIDTH = 280
 const GRAB = 12
 const POINT_RADIUS = 5
+// the x axis is marked every twenty decibels, the y axis every quarter
+const DB_STEP = 20
+const BUCKETS = 64
+const LABEL_INSET = 4
+
+// how much of the track sits at each level, tallest bucket at one
+function histogram(levels: Float32Array | null): Float32Array {
+  const counts = new Float32Array(BUCKETS)
+  if (!levels) return counts
+  for (let at = 0; at < levels.length; at += 1) {
+    const bucket = Math.min(BUCKETS - 1, (levels[at] * BUCKETS) | 0)
+    counts[bucket] += 1
+  }
+  let most = 0
+  for (let bucket = 0; bucket < BUCKETS; bucket += 1) if (counts[bucket] > most) most = counts[bucket]
+  if (most > 0) for (let bucket = 0; bucket < BUCKETS; bucket += 1) counts[bucket] /= most
+  return counts
+}
 
 export default function CurvePanel({
   curve,
+  levels,
   onCurveChange,
   onClose,
   embedded = false,
@@ -70,20 +92,50 @@ export default function CurvePanel({
   const [spot, setSpot] = useState({ left: 32, top: 96 })
   const applyCurveChange = useRafCallback(onCurveChange)
   const applySpot = useRafCallback(setSpot)
+  const spread = useMemo(() => histogram(levels), [levels])
+  const signature = curveSignature(curve)
 
   const canvasRef = useCanvas((context, width, height) => {
+    context.fillStyle = theme.palette.text.disabled
+    context.globalAlpha = 0.35
+    const bucketWidth = width / BUCKETS
+    for (let bucket = 0; bucket < BUCKETS; bucket += 1) {
+      const tall = spread[bucket] * height
+      if (tall > 0) context.fillRect(bucket * bucketWidth, height - tall, bucketWidth, tall)
+    }
+    context.globalAlpha = 1
+
+    const dbSteps = -FLOOR_DB / DB_STEP
     context.strokeStyle = theme.palette.divider
     context.lineWidth = 1
-    for (let step = 1; step < 4; step += 1) {
-      const column = Math.round((step / 4) * width) + 0.5
-      const row = Math.round((step / 4) * height) + 0.5
+    for (let step = 1; step < dbSteps; step += 1) {
+      const column = Math.round((step / dbSteps) * width) + 0.5
       context.beginPath()
       context.moveTo(column, 0)
       context.lineTo(column, height)
+      context.stroke()
+    }
+    for (let step = 1; step < 4; step += 1) {
+      const row = Math.round((step / 4) * height) + 0.5
+      context.beginPath()
       context.moveTo(0, row)
       context.lineTo(width, row)
       context.stroke()
     }
+
+    context.fillStyle = theme.palette.text.secondary
+    context.font = `11px ${theme.typography.fontFamily}`
+    context.textBaseline = 'bottom'
+    for (let step = 0; step <= dbSteps; step += 1) {
+      const db = FLOOR_DB + step * DB_STEP
+      const label = step === 0 ? `${db} dB` : step === dbSteps ? '0 dB' : `${db}`
+      context.textAlign = step === 0 ? 'left' : step === dbSteps ? 'right' : 'center'
+      const x = step === 0 ? LABEL_INSET : step === dbSteps ? width - LABEL_INSET : (step / dbSteps) * width
+      context.fillText(label, x, height - LABEL_INSET)
+    }
+    context.textAlign = 'left'
+    context.textBaseline = 'top'
+    context.fillText('100 % drawn', LABEL_INSET, LABEL_INSET)
 
     context.strokeStyle = theme.palette.text.disabled
     context.setLineDash([3, 3])
@@ -109,7 +161,7 @@ export default function CurvePanel({
       context.arc(point.x * width, height - point.y * height, POINT_RADIUS, 0, Math.PI * 2)
       context.fill()
     }
-  }, false, curve.points.map((point) => `${point.x}:${point.y}`).join(','))
+  }, false, `${signature}|${levels?.length ?? 0}`)
 
   const spotAt = (event: React.PointerEvent<HTMLCanvasElement> | React.MouseEvent<HTMLCanvasElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -286,26 +338,29 @@ export default function CurvePanel({
         />
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
-            {PRESETS.map((preset) => (
-              <IconButton
-                key={preset.title}
-                size="small"
-                title={preset.title}
-                aria-label={preset.title}
-                onClick={() => onCurveChange(preset.curve)}
-              >
-                {preset.icon}
-              </IconButton>
-            ))}
+            {PRESETS.map((preset) => {
+              const active = curveSignature(preset.curve) === signature
+              return (
+                <IconButton
+                  key={preset.title}
+                  size="small"
+                  title={preset.title}
+                  aria-label={preset.title}
+                  aria-pressed={active}
+                  color={active ? 'primary' : 'default'}
+                  onClick={() => onCurveChange(preset.curve)}
+                  sx={active ? { bgcolor: 'action.selected' } : undefined}
+                >
+                  {preset.icon}
+                </IconButton>
+              )
+            })}
           </Box>
-          <Button
-            size="small"
-            onClick={() => onCurveChange(DEFAULT_CURVE)}
-            sx={{ textTransform: 'none' }}
-          >
-            Reset
-          </Button>
         </Box>
+        <Typography variant="caption" color="text.secondary">
+          Across is loudness in decibels, up is how much of it is drawn. Click adds a
+          point, drag moves it, double click removes it.
+        </Typography>
       </Box>
     </Paper>
   )

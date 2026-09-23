@@ -315,9 +315,11 @@ function sameRange(left: Range, right: Range): boolean {
 }
 
 // how long a division guide stays lit after the marker crosses it, in
-// milliseconds, and how wide it is drawn while lit
+// milliseconds, how wide it is drawn while lit, and its colour: a magenta no
+// colourmap in the picker comes near, so it stands out on all of them
 const FLASH_MS = 220
 const FLASH_WIDTH = 4
+const FLASH_COLOR = '#ff2bd6'
 
 // where the playhead's column is held while the window follows it
 const FOLLOW_AT = 0.4
@@ -954,14 +956,13 @@ export default function BarGrid({
       flashRef.current = lit
       const left = lit.at + FLASH_MS - now
       if (left > 0) {
-        // lit across the whole plot, in white: the guide itself is black, so
-        // the light is its opposite for a moment
+        // lit across the whole plot
         context.save()
         context.translate(PROJECTION_WIDTH, 0)
         context.beginPath()
         context.rect(0, 0, width, height)
         context.clip()
-        context.strokeStyle = '#ffffff'
+        context.strokeStyle = FLASH_COLOR
         context.lineWidth = FLASH_WIDTH
         context.globalAlpha = left / FLASH_MS
         context.beginPath()

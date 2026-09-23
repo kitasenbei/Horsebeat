@@ -244,19 +244,38 @@ function planPanels(
 // across tempo changes rather than one section at a time. The whole song is
 // sliced; the window is a stretch of these columns
 function sliceBars(spans: SectionSpan[], slice: number | 'auto', width: number, early: number): Bar[] {
-  return spans
-    .flatMap((span) => {
-      // the automatic slice is settled on the whole song, not on the window:
-      // zooming in then widens the columns and leaves what each one holds
-      // alone, where re-slicing per window would halve a column's phrase the
-      // moment there was room to, and change the picture under the pointer
-      const beats =
-        slice === 'auto'
-          ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
-          : slice
-      return collectBars(span, beats, early)
-    })
-    .sort((left, right) => left.start - right.start)
+  const runs = spans.map((span) => {
+    // the automatic slice is settled on the whole song, not on the window:
+    // zooming in then widens the columns and leaves what each one holds
+    // alone, where re-slicing per window would halve a column's phrase the
+    // moment there was room to, and change the picture under the pointer
+    const beats =
+      slice === 'auto'
+        ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
+        : slice
+    return collectBars(span, beats, early)
+  })
+
+  // Started early, a section's first column opens on the last of the section
+  // before. That stretch is drawn in the first column, so it is the first
+  // column's time as well: the marker enters at the top of the column, and
+  // the column before ends where the next begins. Only the song's own first
+  // column keeps a lead, the black before the song
+  for (let index = 1; index < runs.length; index += 1) {
+    const before = runs[index - 1]
+    const after = runs[index]
+    if (before.length === 0 || after.length === 0) continue
+    const last = before[before.length - 1]
+    const first = after[0]
+    before[before.length - 1] = {
+      ...last,
+      filled: Math.min(last.filled, (first.start - last.start) / (last.end - last.start)),
+    }
+    after[0] = { ...first, lead: 0 }
+  }
+
+  // a column the next section's early start swallows whole has no time left
+  return runs.flat().filter((bar) => bar.filled > 1e-9)
 }
 
 // The window across the columns: where it starts, in columns and the fraction

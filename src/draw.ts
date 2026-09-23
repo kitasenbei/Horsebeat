@@ -982,7 +982,12 @@ export function columnAt(bars: Bar[], moment: number): number {
   return bars.findIndex((bar) => moment >= barFrom(bar) && moment < barUntil(bar))
 }
 
-// the frame a column's data stops at, from its start and its step
+// the frames a column's own data runs between, from its start and its step:
+// before the first, the column's lead, there is nothing of its own
+function leadFrames(bar: Bar, start: number, step: number, rows: number): number {
+  return Math.round(start + step * rows * bar.lead)
+}
+
 function filledFrames(bar: Bar, start: number, step: number, rows: number): number {
   return Math.round(start + step * rows * bar.filled)
 }
@@ -1309,10 +1314,11 @@ export function barContribution(
     const step = steps[index]
 
     const limit = Math.min(frames, filledFrames(bars[index], start, step, rows))
+    const begin = leadFrames(bars[index], start, step, rows)
 
     for (let row = 0; row < rows; row += 1) {
       const at = start + row * step
-      if (at < 0) continue
+      if (at < begin) continue
       if ((at | 0) >= limit) break
       let from = at | 0
       if (from > last) from = last
@@ -1484,12 +1490,13 @@ export function renderBarLayers(
         const step = steps[index]
         const column = offset + index
         const limit = Math.min(frames, filledFrames(bars[index], start, step, rows))
+        const begin = leadFrames(bars[index], start, step, rows)
 
         for (let row = 0; row < rows; row += 1) {
           // the mean of every frame the row covers: consecutive rows partition
           // the frames between them, so each frame counts once and once only
           const at = start + row * step
-          if (at < 0 || (at | 0) >= limit) {
+          if (at < begin || (at | 0) >= limit) {
             if (pixels) pixels[row * columns + column] = VOID_PACKED
             continue
           }
@@ -1552,6 +1559,7 @@ export function columnProfile(
   // the rows past the section's end are the column's black part and hold no
   // trace: they are left at nought and kept out of the scaling
   const limit = Math.min(frames, filledFrames(bar, base, step, rows))
+  const begin = leadFrames(bar, base, step, rows)
   let filled = rows
   let least = Infinity
   let most = -Infinity
@@ -1559,7 +1567,7 @@ export function columnProfile(
     // averaged over the row the same way the cells are, or the trace and the
     // picture it is read against disagree
     const at = base + row * step
-    if (at < 0) continue
+    if (at < begin) continue
     if ((at | 0) >= limit) {
       filled = row
       break
@@ -1682,13 +1690,14 @@ export function buildWaveShape(
   const values = new Float32Array(columns * rows)
   const voided = new Uint8Array(columns * rows)
   const limits = bars.map((bar, index) => Math.min(frames, filledFrames(bar, starts[index], steps[index], rows)))
+  const begins = bars.map((bar, index) => leadFrames(bar, starts[index], steps[index], rows))
   let most = 0
 
   for (let row = 0; row < rows; row += 1) {
     const line = row * columns
     for (let index = 0; index < columns; index += 1) {
       const at = starts[index] + row * steps[index]
-      if (at < 0 || (at | 0) >= limits[index]) {
+      if (at < begins[index] || (at | 0) >= limits[index]) {
         voided[line + index] = 1
         continue
       }

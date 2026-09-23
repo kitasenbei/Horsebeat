@@ -80,10 +80,12 @@ void main() {
   float column = clamp(floor(across), 0.0, uColumns - 1.0);
   // the bars are held as shares of the track, and become frames of this panel's
   // source here: the sources are not all cut to the same number of frames
-  vec3 held = texelFetch(uBars, ivec2(int(column), 0), 0).rgb;
+  vec4 held = texelFetch(uBars, ivec2(int(column), 0), 0);
   vec2 bar = held.rg * float(uFrames);
   float step = bar.g / uRows;
-  // the frame the column's own section ends at: past it the column is void
+  // the frames the column's own time runs between: before its lead and past
+  // its section's end the column is void
+  float begin = bar.r + bar.g * held.a;
   int limit = min(uFrames, int(bar.r + bar.g * held.b + 0.5));
 
   // the canvas has y up where the lane has time running down. Consecutive rows
@@ -91,8 +93,7 @@ void main() {
   float row = floor((1.0 - vUv.y) * uRows);
   float at = bar.r + row * step;
   // read before the clamp: a row past the last frame is empty, not the last frame
-  // before the song, or past the section: nothing of the column's own
-  bool empty = at < 0.0 || int(at) >= limit;
+  bool empty = at < begin || int(at) >= limit;
   int from = min(int(at), uFrames - 1);
   int until = max(min(int(at + step), limit), from + 1);
 
@@ -424,13 +425,14 @@ export function renderLanesGl(
   gl.activeTexture(gl.TEXTURE1)
   gl.bindTexture(gl.TEXTURE_2D, held.bars)
   if (held.barsKey !== barsKey) {
-    const data = new Float32Array(columns * 3)
+    const data = new Float32Array(columns * 4)
     for (let index = 0; index < columns; index += 1) {
-      data[index * 3] = bars[index].start
-      data[index * 3 + 1] = bars[index].end - bars[index].start
-      data[index * 3 + 2] = bars[index].filled
+      data[index * 4] = bars[index].start
+      data[index * 4 + 1] = bars[index].end - bars[index].start
+      data[index * 4 + 2] = bars[index].filled
+      data[index * 4 + 3] = bars[index].lead
     }
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, columns, 1, 0, gl.RGB, gl.FLOAT, data)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, columns, 1, 0, gl.RGBA, gl.FLOAT, data)
     held.barsKey = barsKey
   }
 

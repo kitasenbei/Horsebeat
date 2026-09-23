@@ -84,6 +84,7 @@ type BarGridProps = {
   slice: number | 'auto'
   lane: number | 'all'
   divisions: number
+  subdivisions: number
   colormap: number
   cursorMode: GlobalCompositeOperation
   waveStyle: WaveStyle
@@ -340,6 +341,7 @@ export default function BarGrid({
   slice,
   lane,
   divisions,
+  subdivisions,
   colormap,
   cursorMode,
   waveStyle,
@@ -769,7 +771,7 @@ export default function BarGrid({
     return { key, plan, cache, width }
   }
 
-  const stillKey = `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${span.head}|${span.shown}|${blocks.join(',')}|${divisions}|${colormap}|${waveStyle}|${slice}|${curveSignature(curve)}`
+  const stillKey = `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${span.head}|${span.shown}|${blocks.join(',')}|${divisions}|${subdivisions}|${colormap}|${waveStyle}|${slice}|${curveSignature(curve)}`
 
   // What stays put between frames: the guides, the section bounds, the three
   // projection graphs, and on a browser without WebGL2 the lanes themselves.
@@ -829,7 +831,7 @@ export default function BarGrid({
     layoutRef.current = { tops, heights }
 
     tops.forEach((top, index) =>
-      drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR, divisions),
+      drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR, divisions, subdivisions),
     )
     drawSectionBounds(context, bars, width, height, theme.palette.info.dark, layout)
 

@@ -27,6 +27,7 @@ import {
   COLORMAPS,
   CURSOR_MODES,
   DIVISION_STEPS,
+  SUBDIVISION_STEPS,
   SLICE_STEPS,
   WAVE_STYLES,
   type WaveStyle,
@@ -53,6 +54,8 @@ type TopBarProps = {
   onSliceChange: (slice: number | 'auto') => void
   divisions: number
   onDivisionsChange: (divisions: number) => void
+  subdivisions: number
+  onSubdivisionsChange: (subdivisions: number) => void
   colormap: number
   onColormapChange: (colormap: number) => void
   cursorMode: GlobalCompositeOperation
@@ -173,6 +176,8 @@ export default function TopBar({
   onSliceChange,
   divisions,
   onDivisionsChange,
+  subdivisions,
+  onSubdivisionsChange,
   colormap,
   onColormapChange,
   cursorMode,
@@ -321,6 +326,13 @@ export default function TopBar({
           divisions,
           DIVISION_STEPS.map((entry) => ({ value: entry, label: `/${entry}` })),
           onDivisionsChange,
+        )}
+
+        {picker<number>(
+          'Guide subdivisions',
+          subdivisions,
+          SUBDIVISION_STEPS.map((entry) => ({ value: entry, label: entry === 1 ? 'no sub' : `sub ${entry}` })),
+          onSubdivisionsChange,
         )}
 
         {lane === 0 || lane === 'all'

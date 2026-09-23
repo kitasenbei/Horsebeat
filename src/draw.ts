@@ -1890,6 +1890,7 @@ export function drawSectionHighlight(
 }
 
 export const DIVISION_STEPS = [2, 3, 4, 6, 8]
+export const SUBDIVISION_STEPS = [1, 2, 3, 4]
 
 export function drawSliceGuides(
   context: CanvasRenderingContext2D,
@@ -1898,16 +1899,31 @@ export function drawSliceGuides(
   width: number,
   color: string,
   divisions = 4,
+  // lines between the divisions, fainter: one means none
+  subdivisions = 1,
 ) {
   context.strokeStyle = color
   context.lineWidth = GUIDE_WIDTH
-  context.globalAlpha = 0.7
 
+  context.globalAlpha = 0.7
+  context.beginPath()
   for (let step = 1; step < divisions; step += 1) {
     const y = Math.round(top + (step / divisions) * height) + 0.5
-    context.beginPath()
     context.moveTo(0, y)
     context.lineTo(width, y)
+  }
+  context.stroke()
+
+  if (subdivisions > 1) {
+    context.globalAlpha = 0.28
+    context.beginPath()
+    const steps = divisions * subdivisions
+    for (let step = 1; step < steps; step += 1) {
+      if (step % subdivisions === 0) continue
+      const y = Math.round(top + (step / steps) * height) + 0.5
+      context.moveTo(0, y)
+      context.lineTo(width, y)
+    }
     context.stroke()
   }
 

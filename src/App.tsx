@@ -136,6 +136,7 @@ export default function App() {
   const [traceOpen, setTraceOpen] = useState(false)
   const [follow, setFollow] = useState(false)
   const [divisions, setDivisions] = useState(4)
+  const [subdivisions, setSubdivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // whether the next fit reads the envelope through the amplitude curve
@@ -359,6 +360,8 @@ export default function App() {
         onSliceChange={setSlice}
         divisions={divisions}
         onDivisionsChange={setDivisions}
+        subdivisions={subdivisions}
+        onSubdivisionsChange={setSubdivisions}
         colormap={colormap}
         onColormapChange={setColormap}
         cursorMode={cursorMode}
@@ -542,6 +545,7 @@ export default function App() {
                     slice={slice}
                     lane={lane}
                     divisions={divisions}
+                    subdivisions={subdivisions}
                     colormap={colormap}
                     cursorMode={cursorMode}
                     waveStyle={waveStyle}

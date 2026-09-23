@@ -591,6 +591,9 @@ export default function BarGrid({
       if (!hover || bars.length === 0) return
 
       const width = plotWidth(full)
+      // nothing over the projection panels: the bar says where in a column
+      // the pointer is, and there it is in none
+      if (hover.x < PROJECTION_WIDTH || hover.x >= PROJECTION_WIDTH + width) return
       const column = width / layout.shown
       const offset = -layout.head * column
       const index = Math.min(
@@ -1087,6 +1090,10 @@ export default function BarGrid({
   const sectionAt = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
     if (bounds.width === 0 || bars.length === 0) return null
+    // the projection panels either side are not the picture: a press on them
+    // is no column's, so it neither seeks nor drags nor opens a menu
+    const x = event.clientX - bounds.left
+    if (x < PROJECTION_WIDTH || x >= PROJECTION_WIDTH + plotWidth(bounds.width)) return null
 
     const ratio = Math.min(
       0.999,

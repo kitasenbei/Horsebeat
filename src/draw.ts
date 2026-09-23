@@ -589,6 +589,55 @@ export function drawSectionRuns(
   }
 }
 
+// The sections as blocks down the side of the falling view, the way the strip
+// under the page draws them along time: the future above the line, the past
+// below, each block from where its section starts to where it ends, with its
+// tempo turned on its side when there is room
+export function drawSectionColumn(
+  context: CanvasRenderingContext2D,
+  sections: Section[],
+  duration: number,
+  position: number,
+  span: number,
+  width: number,
+  height: number,
+  palette: BlockPalette,
+  font: string,
+) {
+  if (span <= 0 || height <= 0) return
+  const spans = sectionSpans(sections, duration)
+  const lineY = height * VERTICAL_LINE_RATIO
+  const project = (at: number) => lineY - ((at - position) / span) * height
+  const shown = { start: position - (lineY / height) * span, end: position + (1 - lineY / height) * span }
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.font = font
+
+  spans.forEach((item, index) => {
+    if (item.end < shown.start || item.start > shown.end) return
+    const top = Math.max(-4, project(item.end))
+    const bottom = Math.min(height + 4, project(item.start))
+    const box = Math.max(2, bottom - top - 2)
+    const live = position >= item.start && position < item.end
+
+    context.fillStyle = live ? palette.live : index % 2 === 0 ? palette.idle : palette.alt
+    context.beginPath()
+    if (context.roundRect) context.roundRect(1, top + 1, width - 2, box, 3)
+    else context.rect(1, top + 1, width - 2, box)
+    context.fill()
+
+    const label = item.section.bpm.toFixed(1)
+    if (box > labelWidth(context, font, label) + 10) {
+      context.save()
+      context.translate(width / 2 + 0.5, top + 1 + box / 2)
+      context.rotate(-Math.PI / 2)
+      context.fillStyle = palette.text
+      context.fillText(label, 0, 0)
+      context.restore()
+    }
+  })
+}
+
 export const VERTICAL_LINE_RATIO = 0.75
 export const VERTICAL_LINE_WIDTH = 2
 

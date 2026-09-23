@@ -4,6 +4,7 @@ import { useTheme } from '@mui/material/styles'
 import {
   drawGridVertical,
   drawSamplesVertical,
+  drawSectionColumn,
   drawVerticalPlayhead,
   sectionSignature,
 } from '../draw'
@@ -14,6 +15,7 @@ import { DEFAULT_CURVE } from '../curve'
 import type { Section } from '../timing'
 import { GRID_PURPLE } from '../theme'
 import { useLiveSectionsValue } from '../liveSections'
+import { BLOCK_HEIGHT, LIVE_COLOR } from './SectionBlocks'
 
 type VerticalWaveformProps = {
   samples: Float32Array | null
@@ -70,8 +72,29 @@ export default function VerticalWaveform({
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
-  const canvasRef = useCanvas((context, width, height) => {
+  const canvasRef = useCanvas((context, full, height) => {
     if (!samples || !envelope || span <= 0) return
+    // the sections down the left edge, the audio in what is left
+    drawSectionColumn(
+      context,
+      sections,
+      duration,
+      positionRef.current,
+      span,
+      BLOCK_HEIGHT,
+      height,
+      {
+        idle: theme.palette.info.main,
+        alt: theme.palette.info.dark,
+        live: LIVE_COLOR,
+        hover: theme.palette.info.light,
+        text: theme.palette.common.white,
+      },
+      `600 10px ${theme.typography.fontFamily}`,
+    )
+    context.save()
+    context.translate(BLOCK_HEIGHT, 0)
+    const width = full - BLOCK_HEIGHT
     drawSamplesVertical(
       context,
       envelope,
@@ -97,6 +120,7 @@ export default function VerticalWaveform({
       GRID_PURPLE,
     )
     drawVerticalPlayhead(context, width, height, theme.palette.error.main)
+    context.restore()
   }, playing, `${span}|${position}|${envelope?.length}|${sectionSignature(sections)}`)
 
   return (

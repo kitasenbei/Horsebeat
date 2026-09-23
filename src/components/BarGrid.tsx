@@ -7,6 +7,7 @@ import {
   ALL_BLOCKS,
   autoSliceBeats,
   collectBars,
+  columnAt,
   columnLayout,
   columnProfile,
   drawColumnCursor,
@@ -258,7 +259,7 @@ function viewBars(spans: SectionSpan[], range: Range, slice: number | 'auto', wi
 // columns are equal in width whatever they last, so this is not where it sits
 // in time.
 function acrossColumns(bars: Bar[], moment: number, range: Range): number | null {
-  const at = bars.findIndex((bar) => moment >= bar.start && moment < bar.end)
+  const at = columnAt(bars, moment)
   if (at < 0) return null
   const bar = bars[at]
   const { head, shown } = columnLayout(bars, range)
@@ -789,9 +790,7 @@ export default function BarGrid({
     const { key, cache, width } = ensureCache(context, full, height)
 
     const layout = columnLayout(bars, range)
-    const atColumn = bars.findIndex(
-      (bar) => positionRef.current >= bar.start && positionRef.current < bar.end,
-    )
+    const atColumn = columnAt(bars, positionRef.current)
 
     const gl = glRef.current
     if (cache.gpu && gl) {

@@ -902,6 +902,18 @@ export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar
 // to draw
 export const VOID_COLOR = '#000000'
 
+// the moment a column's own time ends: its section's end, not the end of the
+// slice it is drawn as. Past it the column is black and the time belongs to
+// the next section's first column, which overlaps it
+export function barUntil(bar: Bar): number {
+  return bar.start + (bar.end - bar.start) * bar.filled
+}
+
+// the column a moment is in, by the time each column truly holds
+export function columnAt(bars: Bar[], moment: number): number {
+  return bars.findIndex((bar) => moment >= bar.start && moment < barUntil(bar))
+}
+
 // the frame a column's data stops at, from its start and its step
 function filledFrames(bar: Bar, start: number, step: number, rows: number): number {
   return Math.round(start + step * rows * bar.filled)
@@ -1861,7 +1873,7 @@ export function drawColumnCursor(
   solid: string,
   layout: ColumnLayout = { head: 0, shown: bars.length },
 ) {
-  const index = bars.findIndex((bar) => position >= bar.start && position < bar.end)
+  const index = columnAt(bars, position)
   if (index < 0) return
 
   const bar = bars[index]

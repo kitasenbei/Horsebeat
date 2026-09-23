@@ -856,7 +856,6 @@ export function drawGridVertical(
   span: number,
   width: number,
   height: number,
-  color: string,
   accent: string,
 ) {
   if (span <= 0 || duration <= 0 || height <= 0) return
@@ -875,12 +874,14 @@ export function drawGridVertical(
       const firstIndex = Math.max(0, Math.ceil((from - item.start) / item.beat))
       const lastIndex = Math.floor((to - item.start) / item.beat)
 
-      context.strokeStyle = color
+      // by their place in the bar, as the lines along the page are
+      const meter = Math.max(1, Math.round(item.section.meter))
       context.lineWidth = VERTICAL_LINE_WIDTH
-      context.globalAlpha = 0.55
+      context.globalAlpha = 0.6
 
       for (let index = firstIndex; index <= lastIndex; index += 1) {
         const y = yOf(item.start + index * item.beat)
+        context.strokeStyle = beatColor(index, meter)
         context.beginPath()
         context.moveTo(0, y)
         context.lineTo(width, y)

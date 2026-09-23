@@ -117,7 +117,6 @@ export default function VerticalWaveform({
       width,
       height,
       GRID_PURPLE,
-      GRID_PURPLE,
     )
     drawVerticalPlayhead(context, width, height, theme.palette.error.main)
     context.restore()

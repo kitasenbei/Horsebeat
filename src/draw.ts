@@ -938,7 +938,7 @@ export type Bar = {
 
 // Slice a section into columns of so many beats. Started early by a share of
 // a column, every column begins that much before it would, so a beat that
-// fell on a guide falls between two
+// fell on a column's seam falls inside it
 export function collectBars(span: SectionSpan, beats: number, early = 0, limit = 4000): Bar[] {
   const available = span.end - span.start
   if (span.beat <= 0 || available <= 0) return []
@@ -1919,16 +1919,23 @@ export function drawSliceGuides(
   divisions = 4,
   // lines between the divisions, fainter: one means none
   subdivisions = 1,
+  // how far down, as a share of a division, the whole set of lines is moved
+  offset = 0,
 ) {
   context.strokeStyle = color
+  const steps = divisions * subdivisions
+  // every line sits on the finer grid, moved by the offset; a line on a
+  // division is drawn twice the weight of one between, laid on whole pixels
+  // so a two pixel line is two pixels and not three soft ones
+  const at = (index: number) => (index + offset * subdivisions) / steps
 
-  // the divisions twice the weight of what lies between them, laid on whole
-  // pixels so a two pixel line is two pixels and not three soft ones
   context.lineWidth = GUIDE_WIDTH * 2
   context.globalAlpha = 0.7
   context.beginPath()
-  for (let step = 1; step < divisions; step += 1) {
-    const y = Math.round(top + (step / divisions) * height)
+  for (let index = -steps; index < steps; index += subdivisions) {
+    const share = at(index)
+    if (share <= 0 || share >= 1) continue
+    const y = Math.round(top + share * height)
     context.moveTo(0, y)
     context.lineTo(width, y)
   }
@@ -1938,10 +1945,11 @@ export function drawSliceGuides(
     context.lineWidth = GUIDE_WIDTH
     context.globalAlpha = 0.28
     context.beginPath()
-    const steps = divisions * subdivisions
-    for (let step = 1; step < steps; step += 1) {
-      if (step % subdivisions === 0) continue
-      const y = Math.round(top + (step / steps) * height) + 0.5
+    for (let index = -steps; index < steps; index += 1) {
+      if (((index % subdivisions) + subdivisions) % subdivisions === 0) continue
+      const share = at(index)
+      if (share <= 0 || share >= 1) continue
+      const y = Math.round(top + share * height) + 0.5
       context.moveTo(0, y)
       context.lineTo(width, y)
     }

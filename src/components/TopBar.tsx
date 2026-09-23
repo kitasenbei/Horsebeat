@@ -353,8 +353,8 @@ export default function TopBar({
           onChange={() => onCentredChange(!centred)}
           sx={PILL}
         >
-          <ToggleButton value="centred" aria-label="Beats between the guides" sx={selected('secondary')}>
-            <Tooltip title="Start each column half a division early, so the beats sit between the guides">
+          <ToggleButton value="centred" aria-label="Beats away from the seams" sx={selected('secondary')}>
+            <Tooltip title="Move the picture and the guides down by half a division, so the beats sit away from the column seams">
               <span>{segment('Between', <VerticalAlignCenterIcon fontSize="small" />)}</span>
             </Tooltip>
           </ToggleButton>

@@ -85,8 +85,8 @@ type BarGridProps = {
   lane: number | 'all'
   divisions: number
   subdivisions: number
-  // start every column half a division early, so the beats sit between the
-  // guides rather than on them
+  // start every column half a division early and move the guides down by the
+  // same, so the beats keep their guides but sit away from the column seams
   centred: boolean
   colormap: number
   cursorMode: GlobalCompositeOperation
@@ -384,7 +384,11 @@ export default function BarGrid({
   // kept by identity: the window below is re-read from time whenever the
   // columns are cut afresh, and cutting them on every render would do that
   // every frame
-  const early = centred ? 0.5 / divisions : 0
+  // with the columns started early, the guides and the beat light move down
+  // by the same half division, so the beats stay on the guides and only the
+  // column's seams move away from them
+  const guideOffset = centred ? 0.5 : 0
+  const early = guideOffset / divisions
   const songBars = useMemo(
     () => measure('BarGrid bars', () => sliceBars(spans, slice, width, early)),
     [spans, slice, width, early],
@@ -843,7 +847,7 @@ export default function BarGrid({
     layoutRef.current = { tops, heights }
 
     tops.forEach((top, index) =>
-      drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR, divisions, subdivisions),
+      drawSliceGuides(context, top, heights[index], width, GUIDE_COLOR, divisions, subdivisions, guideOffset),
     )
     drawSectionBounds(context, bars, width, height, theme.palette.info.dark, layout)
 
@@ -951,7 +955,9 @@ export default function BarGrid({
     if (atColumn >= 0 && playing) {
       const bar = bars[atColumn]
       const row = (positionRef.current - bar.start) / Math.max(1e-12, bar.end - bar.start)
-      const step = Math.min(divisions - 1, Math.floor(row * divisions))
+      // the guide last passed, counted on the moved set: below the first
+      // there is none to light
+      const step = Math.min(divisions - 1, Math.floor(row * divisions - guideOffset))
       const now = performance.now()
       const flash = flashRef.current
       const lit =
@@ -960,7 +966,7 @@ export default function BarGrid({
           : { column: bar.start, step, at: now }
       flashRef.current = lit
       const left = lit.at + FLASH_MS - now
-      if (left > 0) {
+      if (left > 0 && lit.step >= 0) {
         // lit across the whole plot
         context.save()
         context.translate(PROJECTION_WIDTH, 0)
@@ -972,7 +978,7 @@ export default function BarGrid({
         context.globalAlpha = left / FLASH_MS
         context.beginPath()
         for (const layer of cache.layers) {
-          const y = Math.round(layer.top + (lit.step / divisions) * layer.height)
+          const y = Math.round(layer.top + ((lit.step + guideOffset) / divisions) * layer.height)
           context.moveTo(0, y)
           context.lineTo(width, y)
         }

@@ -872,6 +872,11 @@ export type Bar = {
   start: number
   end: number
   section: string
+  // how much of the column, from its start, the section fills: one for a whole
+  // slice, less for the last column of a section shorter than a whole number
+  // of slices. Past that the column holds no data of its own and is painted
+  // black rather than borrowing the next section's frames
+  filled: number
 }
 
 export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar[] {
@@ -879,16 +884,27 @@ export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar
   if (span.beat <= 0 || available <= 0) return []
 
   const length = span.beat * beats
-  if (length > available + 1e-9) {
-    return [{ start: span.start, end: span.end, section: span.section.id }]
-  }
-
   const bars: Bar[] = []
-  for (let at = span.start; at + length <= span.end + 1e-9 && bars.length < limit; at += length) {
-    bars.push({ start: at, end: Math.min(1, at + length * SLICE_SPAN), section: span.section.id })
+  for (let at = span.start; at < span.end - 1e-9 && bars.length < limit; at += length) {
+    const end = at + length * SLICE_SPAN
+    bars.push({
+      start: at,
+      end,
+      section: span.section.id,
+      filled: Math.min(1, (span.end - at) / (end - at)),
+    })
   }
 
   return bars
+}
+
+// the colour of a column's rows past the section's end, where there is nothing
+// to draw
+export const VOID_COLOR = '#000000'
+
+// the frame a column's data stops at, from its start and its step
+function filledFrames(bar: Bar, start: number, step: number, rows: number): number {
+  return Math.round(start + step * rows * bar.filled)
 }
 
 export const BLOCK_GAP = 8
@@ -1212,13 +1228,16 @@ export function barContribution(
     const start = starts[index]
     const step = steps[index]
 
+    const limit = Math.min(frames, filledFrames(bars[index], start, step, rows))
+
     for (let row = 0; row < rows; row += 1) {
       const at = start + row * step
+      if ((at | 0) >= limit) break
       let from = at | 0
       if (from > last) from = last
       let until = (at + step) | 0
+      if (until > limit) until = limit
       if (until <= from) until = from + 1
-      if (until > frames) until = frames
 
       const value = (sums[until] - sums[from]) / (until - from)
       const curved = shaped[((value < 1 ? value : 1) * top255 + 0.5) | 0]
@@ -1383,16 +1402,21 @@ export function renderBarLayers(
         const start = starts[index]
         const step = steps[index]
         const column = offset + index
+        const limit = Math.min(frames, filledFrames(bars[index], start, step, rows))
 
         for (let row = 0; row < rows; row += 1) {
           // the mean of every frame the row covers: consecutive rows partition
           // the frames between them, so each frame counts once and once only
           const at = start + row * step
+          if ((at | 0) >= limit) {
+            if (pixels) pixels[row * columns + column] = VOID_PACKED
+            continue
+          }
           let from = at | 0
           if (from > last) from = last
           let until = (at + step) | 0
+          if (until > limit) until = limit
           if (until <= from) until = from + 1
-          if (until > frames) until = frames
 
           const value = (sums[until] - sums[from]) / (until - from)
           const level = ((value < 1 ? value : 1) * top255 + 0.5) | 0
@@ -1542,6 +1566,8 @@ export type WaveShape = {
   // row-major, one byte per cell on nought to 255: what the texture and the
   // pixel fill both take as they are
   levels: Uint8Array
+  // row-major, one where the cell lies past its section's end and holds nothing
+  voided: Uint8Array
 }
 
 export function buildWaveShape(
@@ -1564,17 +1590,23 @@ export function buildWaveShape(
   const top255 = LUT_SIZE - 1
 
   const values = new Float32Array(columns * rows)
+  const voided = new Uint8Array(columns * rows)
+  const limits = bars.map((bar, index) => Math.min(frames, filledFrames(bar, starts[index], steps[index], rows)))
   let most = 0
 
   for (let row = 0; row < rows; row += 1) {
     const line = row * columns
     for (let index = 0; index < columns; index += 1) {
       const at = starts[index] + row * steps[index]
+      if ((at | 0) >= limits[index]) {
+        voided[line + index] = 1
+        continue
+      }
       let from = at | 0
       if (from > last) from = last
       let until = (at + steps[index]) | 0
+      if (until > limits[index]) until = limits[index]
       if (until <= from) until = from + 1
-      if (until > frames) until = frames
 
       const mean = (sums[until] - sums[from]) / (until - from)
       const value = shaped[((mean < 1 ? mean : 1) * top255 + 0.5) | 0]
@@ -1592,7 +1624,7 @@ export function buildWaveShape(
     levels[at] = level > 255 ? 255 : level
   }
 
-  return { rows, columns, levels }
+  return { rows, columns, levels, voided }
 }
 
 // Packed colours for the pixel fill. The shape is built the way the lanes are,
@@ -1638,6 +1670,8 @@ function packed(color: string): number {
   return (255 << 24) | (blue << 16) | (green << 8) | red
 }
 
+const VOID_PACKED = packed(VOID_COLOR)
+
 export function buildWaveImage(
   context: CanvasRenderingContext2D,
   shape: WaveShape,
@@ -1647,7 +1681,7 @@ export function buildWaveImage(
   style: WaveStyle,
   silhouette: string,
 ): ImageData | null {
-  const { rows, columns, levels } = shape
+  const { rows, columns, levels, voided } = shape
   const span = Math.max(1, Math.round(width))
   if (columns === 0 || rows === 0) return null
 
@@ -1667,10 +1701,11 @@ export function buildWaveImage(
     for (let index = 0; index < columns; index += 1) {
       const level = levels[cells + index]
       const middle = index * column + column / 2
-      const half = style === 'colour' ? column / 2 : (level / 255) * reach
+      const empty = voided[cells + index] === 1
+      const half = style === 'colour' || empty ? column / 2 : (level / 255) * reach
       const from = Math.max(0, Math.round(middle - half))
       const until = Math.min(span, Math.max(from + 1, Math.round(middle + half)))
-      const paint = style === 'silhouette' ? flat : lut[level]
+      const paint = empty ? VOID_PACKED : style === 'silhouette' ? flat : lut[level]
 
       for (let x = from; x < until; x += 1) pixels[line + x] = paint
     }

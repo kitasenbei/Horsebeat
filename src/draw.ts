@@ -537,6 +537,58 @@ export function drawSectionBlocks(
   })
 }
 
+// The sections as blocks along the columns, the way the strip under the page
+// draws them along time: one block per run of columns a section owns, with
+// its tempo when there is room for it.
+export function drawSectionRuns(
+  context: CanvasRenderingContext2D,
+  bars: Bar[],
+  spans: SectionSpan[],
+  position: number,
+  width: number,
+  height: number,
+  palette: BlockPalette,
+  hovered: string | null,
+  font: string,
+  layout: ColumnLayout = { head: 0, shown: bars.length },
+) {
+  if (bars.length === 0) return
+  const column = width / layout.shown
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.font = font
+
+  let from = 0
+  while (from < bars.length) {
+    const id = bars[from].section
+    let until = from + 1
+    while (until < bars.length && bars[until].section === id) until += 1
+
+    const index = spans.findIndex((item) => item.section.id === id)
+    const span = spans[index]
+    const left = Math.max(-4, (from - layout.head) * column)
+    const right = Math.min(width + 4, (until - layout.head) * column)
+    const box = Math.max(2, right - left - 2)
+    const live = span ? position >= span.start && position < span.end : false
+
+    context.fillStyle =
+      hovered === id ? palette.hover : live ? palette.live : index % 2 === 0 ? palette.idle : palette.alt
+    context.beginPath()
+    if (context.roundRect) context.roundRect(left + 1, 1, box, height - 2, 3)
+    else context.rect(left + 1, 1, box, height - 2)
+    context.fill()
+
+    if (span) {
+      const label = span.section.bpm.toFixed(1)
+      if (box > labelWidth(context, font, label) + 10) {
+        context.fillStyle = palette.text
+        context.fillText(label, left + 1 + box / 2, height / 2 + 0.5)
+      }
+    }
+    from = until
+  }
+}
+
 export const VERTICAL_LINE_RATIO = 0.75
 export const VERTICAL_LINE_WIDTH = 2
 

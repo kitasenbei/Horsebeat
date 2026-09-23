@@ -20,7 +20,7 @@ type SectionBlocksProps = {
 }
 
 export const BLOCK_HEIGHT = 18
-const LIVE_COLOR = '#e07c0a'
+export const LIVE_COLOR = '#e07c0a'
 
 export default function SectionBlocks({
   sections: givenSections,

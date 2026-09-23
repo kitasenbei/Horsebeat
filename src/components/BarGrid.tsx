@@ -12,6 +12,7 @@ import {
   type ColumnLayout,
   columnProfile,
   drawColumnCursor,
+  drawSectionRuns,
   drawProjection,
   drawSectionBounds,
   drawSectionHighlight,
@@ -63,6 +64,7 @@ import { applyCurve, curveSignature, type Curve } from '../curve'
 import type { Range } from '../range'
 import { measure, stopwatch, tick } from '../trace'
 import { useLiveRangeEdit } from '../liveRange'
+import { BLOCK_HEIGHT, LIVE_COLOR } from './SectionBlocks'
 
 type BarGridProps = {
   envelope: Float32Array | null
@@ -1177,66 +1179,110 @@ export default function BarGrid({
     if (spot) onSeek(spot.at)
   }
 
+  // The sections along the bottom, one block per run of columns, as the strip
+  // under the page shows them along time. Repainted with the playhead so the
+  // live section keeps its colour
+  const { canvasRef: runsRef } = useCanvasControl(
+    (context, full, height) => {
+      if (bars.length === 0) return
+      const width = plotWidth(full)
+      context.save()
+      context.translate(PROJECTION_WIDTH, 0)
+      context.beginPath()
+      context.rect(0, 0, width, height)
+      context.clip()
+      drawSectionRuns(
+        context,
+        bars,
+        spans,
+        positionRef.current,
+        width,
+        height,
+        {
+          idle: theme.palette.info.main,
+          alt: theme.palette.info.dark,
+          live: LIVE_COLOR,
+          hover: theme.palette.info.light,
+          text: theme.palette.common.white,
+        },
+        null,
+        `600 10px ${theme.typography.fontFamily}`,
+        layout,
+      )
+      context.restore()
+    },
+    playing,
+    `${stillKey}|${width}|${position}`,
+  )
+
   return (
-    <Box ref={wrapRef} sx={{ position: 'relative', height: '100%' }}>
+    <Box ref={wrapRef} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <Box
+          component="canvas"
+          ref={glRef}
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: PROJECTION_WIDTH,
+            width: `calc(100% - ${PROJECTION_WIDTH * 2}px)`,
+            height: '100%',
+            pointerEvents: 'none',
+          }}
+        />
+        <Box
+          component="canvas"
+          ref={stillRef}
+          data-trace="BarGrid still"
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+          }}
+        />
+        <Box
+          component="canvas"
+          ref={canvasRef}
+          data-trace="BarGrid"
+          onPointerDown={begin}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerCancel={end}
+          onPointerLeave={() => {
+            hoverRef.current = null
+            repaintOverlay()
+          }}
+          onContextMenu={openMenu}
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'block',
+            width: '100%',
+            height: '100%',
+            touchAction: 'none',
+            cursor: dragging ? 'move' : 'default',
+          }}
+        />
+        <Box
+          component="canvas"
+          ref={overlayRef}
+          data-trace="BarGrid overlay"
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+          }}
+        />
+      </Box>
       <Box
         component="canvas"
-        ref={glRef}
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: PROJECTION_WIDTH,
-          width: `calc(100% - ${PROJECTION_WIDTH * 2}px)`,
-          height: '100%',
-          pointerEvents: 'none',
-        }}
-      />
-      <Box
-        component="canvas"
-        ref={stillRef}
-        data-trace="BarGrid still"
-        sx={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-        }}
-      />
-      <Box
-        component="canvas"
-        ref={canvasRef}
-        data-trace="BarGrid"
-        onPointerDown={begin}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
-        onPointerLeave={() => {
-          hoverRef.current = null
-          repaintOverlay()
-        }}
-        onContextMenu={openMenu}
-        sx={{
-          position: 'absolute',
-          inset: 0,
-          display: 'block',
-          width: '100%',
-          height: '100%',
-          touchAction: 'none',
-          cursor: dragging ? 'move' : 'default',
-        }}
-      />
-      <Box
-        component="canvas"
-        ref={overlayRef}
-        data-trace="BarGrid overlay"
-        sx={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-        }}
+        ref={runsRef}
+        data-trace="BarGrid sections"
+        sx={{ display: 'block', width: '100%', height: BLOCK_HEIGHT, flex: '0 0 auto' }}
       />
       {menu ? (
       <Menu

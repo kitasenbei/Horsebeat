@@ -1903,18 +1903,21 @@ export function drawSliceGuides(
   subdivisions = 1,
 ) {
   context.strokeStyle = color
-  context.lineWidth = GUIDE_WIDTH
 
+  // the divisions twice the weight of what lies between them, laid on whole
+  // pixels so a two pixel line is two pixels and not three soft ones
+  context.lineWidth = GUIDE_WIDTH * 2
   context.globalAlpha = 0.7
   context.beginPath()
   for (let step = 1; step < divisions; step += 1) {
-    const y = Math.round(top + (step / divisions) * height) + 0.5
+    const y = Math.round(top + (step / divisions) * height)
     context.moveTo(0, y)
     context.lineTo(width, y)
   }
   context.stroke()
 
   if (subdivisions > 1) {
+    context.lineWidth = GUIDE_WIDTH
     context.globalAlpha = 0.28
     context.beginPath()
     const steps = divisions * subdivisions

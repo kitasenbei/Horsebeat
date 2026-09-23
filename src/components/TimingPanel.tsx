@@ -485,9 +485,12 @@ export default function TimingPanel({
                 <Box
                   onClick={(event) => event.stopPropagation()}
                   sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
+                    // three pills as a triangle: play and snap on the top row,
+                    // remove below between them, so the card stays two rows tall
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 34px)',
+                    justifyItems: 'center',
+                    alignContent: 'center',
                     gap: 0.5,
                     flex: '0 0 auto',
                   }}
@@ -518,7 +521,7 @@ export default function TimingPanel({
                     onClick={() =>
                       onSectionsChange(sections.filter((current) => current.id !== section.id))
                     }
-                    sx={actionPill}
+                    sx={{ ...actionPill, gridColumn: '1 / span 2' }}
                   >
                     <DeleteOutlinedIcon sx={{ fontSize: 20 }} />
                   </IconButton>

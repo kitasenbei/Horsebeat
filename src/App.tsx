@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
+import Tooltip from '@mui/material/Tooltip'
+import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
 import TopBar from './components/TopBar'
 import StatusBar from './components/StatusBar'
@@ -135,6 +138,19 @@ export default function App() {
   const [waveStyle, setWaveStyle] = useState<WaveStyle>('colour')
   const [traceOpen, setTraceOpen] = useState(false)
   const [follow, setFollow] = useState(false)
+  // the compiled view on the whole screen, through the browser's own full
+  // screen: leaving it by the key the browser gives is seen here as well
+  const compiledRef = useRef<HTMLDivElement>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === compiledRef.current)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void compiledRef.current?.requestFullscreen()
+  }
   const [divisions, setDivisions] = useState(4)
   const [subdivisions, setSubdivisions] = useState(4)
   const [colormap, setColormap] = useState(0)
@@ -376,6 +392,8 @@ export default function App() {
         onTraceOpenChange={setTraceOpen}
         follow={follow}
         onFollowChange={setFollow}
+        fullscreen={fullscreen}
+        onFullscreenChange={toggleFullscreen}
       />
       {curveOpen ? (
         <CurvePanel
@@ -526,7 +544,29 @@ export default function App() {
             </Box>
             {barGrid ? (
               <>
-                <Box sx={{ flex: 1, minHeight: 0 }}>
+                <Box
+                  ref={compiledRef}
+                  sx={{ position: 'relative', flex: 1, minHeight: 0, bgcolor: 'background.default' }}
+                >
+                  {fullscreen ? (
+                    <Tooltip title="Leave full screen">
+                      <IconButton
+                        size="small"
+                        aria-label="Leave full screen"
+                        onClick={toggleFullscreen}
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          zIndex: 1,
+                          bgcolor: 'background.paper',
+                          '&:hover': { bgcolor: 'action.hover' },
+                        }}
+                      >
+                        <FullscreenExitIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
                   <BarGrid
                     envelope={levels}
                     loudness={loudness}

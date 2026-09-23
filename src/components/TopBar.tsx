@@ -20,6 +20,8 @@ import ShowChartIcon from '@mui/icons-material/ShowChart'
 import GridOnIcon from '@mui/icons-material/GridOn'
 import SpeedIcon from '@mui/icons-material/Speed'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
+import FullscreenIcon from '@mui/icons-material/Fullscreen'
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import BeatLights from './BeatLights'
 import Gallop from './Gallop'
 import {
@@ -70,6 +72,8 @@ type TopBarProps = {
   onTraceOpenChange: (open: boolean) => void
   follow: boolean
   onFollowChange: (follow: boolean) => void
+  fullscreen: boolean
+  onFullscreenChange: () => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -192,6 +196,8 @@ export default function TopBar({
   onTraceOpenChange,
   follow,
   onFollowChange,
+  fullscreen,
+  onFullscreenChange,
   canUndo,
   canRedo,
   onUndo,
@@ -396,6 +402,30 @@ export default function TopBar({
           <ToggleButton value="follow" aria-label="Follow the playhead" sx={selected('info')}>
             <Tooltip title="Hold the playhead's column in place and move the window under it">
               <span>{segment('Follow', <CenterFocusStrongIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={fullscreen ? 'fullscreen' : null}
+          onChange={() => onFullscreenChange()}
+          sx={PILL}
+        >
+          <ToggleButton
+            value="fullscreen"
+            aria-label="Compiled view full screen"
+            disabled={!compiled}
+            sx={selected('info')}
+          >
+            <Tooltip title="Show the compiled view on the whole screen">
+              <span>
+                {segment(
+                  'Full',
+                  fullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />,
+                )}
+              </span>
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>

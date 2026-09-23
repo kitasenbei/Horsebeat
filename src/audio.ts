@@ -262,3 +262,90 @@ export function computeEnvelope(samples: Float32Array, sampleRate: number): Floa
 
   return envelope
 }
+
+// The tone of each moment: the spectral centre of a short window, the
+// frequency the energy balances about, in hertz. Placed on a log scale from
+// the low end of the bass to the top of the presence range, since an octave
+// is the same step wherever it lies. A frame is a stretch of samples like an
+// onset frame, since a spectrum wants a window of some length
+const TONE_HOP = 512
+const TONE_WINDOW = 2048
+const TONE_LOW_HZ = 40
+const TONE_HIGH_HZ = 8000
+
+// an in-place radix two transform of a power of two length
+function fft(real: Float32Array, imag: Float32Array) {
+  const n = real.length
+  for (let i = 1, j = 0; i < n; i += 1) {
+    let bit = n >> 1
+    for (; j & bit; bit >>= 1) j ^= bit
+    j ^= bit
+    if (i < j) {
+      const tr = real[i]
+      real[i] = real[j]
+      real[j] = tr
+      const ti = imag[i]
+      imag[i] = imag[j]
+      imag[j] = ti
+    }
+  }
+  for (let size = 2; size <= n; size <<= 1) {
+    const angle = (-2 * Math.PI) / size
+    const wr = Math.cos(angle)
+    const wi = Math.sin(angle)
+    for (let start = 0; start < n; start += size) {
+      let cr = 1
+      let ci = 0
+      for (let k = 0; k < size / 2; k += 1) {
+        const a = start + k
+        const b = a + size / 2
+        const xr = real[b] * cr - imag[b] * ci
+        const xi = real[b] * ci + imag[b] * cr
+        real[b] = real[a] - xr
+        imag[b] = imag[a] - xi
+        real[a] += xr
+        imag[a] += xi
+        const nr = cr * wr - ci * wi
+        ci = cr * wi + ci * wr
+        cr = nr
+      }
+    }
+  }
+}
+
+export function computeTone(samples: Float32Array, sampleRate: number): Float32Array {
+  const frames = Math.max(1, Math.floor(samples.length / TONE_HOP))
+  const tone = new Float32Array(frames)
+  const real = new Float32Array(TONE_WINDOW)
+  const imag = new Float32Array(TONE_WINDOW)
+  const window = new Float32Array(TONE_WINDOW)
+  for (let i = 0; i < TONE_WINDOW; i += 1) window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / TONE_WINDOW)
+  const bins = TONE_WINDOW / 2
+  const binHz = sampleRate / TONE_WINDOW
+  const low = Math.log2(TONE_LOW_HZ)
+  const span = Math.log2(TONE_HIGH_HZ) - low
+
+  for (let frame = 0; frame < frames; frame += 1) {
+    // the window centred on the frame, so a tone is read about its moment
+    const start = frame * TONE_HOP - TONE_WINDOW / 2
+    for (let i = 0; i < TONE_WINDOW; i += 1) {
+      const at = start + i
+      real[i] = at >= 0 && at < samples.length ? samples[at] * window[i] : 0
+      imag[i] = 0
+    }
+    fft(real, imag)
+
+    let weighted = 0
+    let total = 0
+    for (let bin = 1; bin < bins; bin += 1) {
+      const magnitude = Math.sqrt(real[bin] * real[bin] + imag[bin] * imag[bin])
+      weighted += magnitude * bin * binHz
+      total += magnitude
+    }
+    // a near silent frame has no tone to speak of and reads as the floor
+    if (total < 1e-3) continue
+    tone[frame] = Math.min(1, Math.max(0, (Math.log2(weighted / total) - low) / span))
+  }
+
+  return tone
+}

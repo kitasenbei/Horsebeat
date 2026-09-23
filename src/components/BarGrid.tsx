@@ -27,6 +27,8 @@ import {
   barContribution,
   emptyContribution,
   blockHeights,
+  blockIsLevel,
+  blockSource,
   finishProjections,
   takeContribution,
   BAND_ORDER,
@@ -72,6 +74,7 @@ type BarGridProps = {
   loudness: Float32Array | null
   onsets: Float32Array | null
   bands: Float32Array | null
+  tone: Float32Array | null
   sections: Section[]
   duration: number
   position: number
@@ -202,14 +205,11 @@ function planPanels(
   const panels: LanePanel[] = []
 
   for (const layer of layers) {
-    const source = layer.block === 3 ? sources.bands : [sources.envelope, sources.loudness, sources.onsets][layer.block]
+    const { source, stride } = blockSource(sources, layer.block)
     if (!source) continue
 
     const count = blockPanels(layer.block)
-    const stride = layer.block === 3 ? 3 : 1
-    // the wave and the loud lanes are the two whose source is a level, which
-    // is what a width can say; the hits and the bands stay colour
-    const style = layer.block === 0 || layer.block === 1 ? waveStyle : 'colour'
+    const style = blockIsLevel(layer.block) ? waveStyle : 'colour'
 
     // a shape is read against the loudest frame in view, curved the way the
     // levels are, so the loudest column fills its width and the rest are
@@ -358,6 +358,7 @@ export default function BarGrid({
   loudness,
   onsets,
   bands,
+  tone,
   sections,
   duration,
   position,
@@ -449,7 +450,7 @@ export default function BarGrid({
     apply(published)
   }
 
-  const sources = { envelope, loudness, onsets, bands }
+  const sources = { envelope, loudness, onsets, bands, tone }
   // The projections are read over every bar of the song, whatever the window
   // shows: the typical bar is the song's, and the window only decides which
   // columns are on screen. They are kept apart from the picture so a pan or a
@@ -637,6 +638,7 @@ export default function BarGrid({
       loudness?.length ?? 0,
       onsets?.length ?? 0,
       bands?.length ?? 0,
+      tone?.length ?? 0,
       blocks.join(','),
       colormap,
       waveStyle,
@@ -652,6 +654,7 @@ export default function BarGrid({
       loudness?.length ?? 0,
       onsets?.length ?? 0,
       bands?.length ?? 0,
+      tone?.length ?? 0,
       blocks.join(','),
       curveSignature(curve),
     ].join('|')
@@ -672,7 +675,7 @@ export default function BarGrid({
           slice,
           blocks.join(','),
           curveKey,
-          [envelope, loudness, onsets, bands].map((source) => (source ? sourceId(source) : 0)).join(','),
+          [envelope, loudness, onsets, bands, tone].map((source) => (source ? sourceId(source) : 0)).join(','),
         ].join('|')
         const running = runningRef.current
         if (running.generation !== generation) {
@@ -682,14 +685,13 @@ export default function BarGrid({
 
         blocks.forEach((block, slot) => {
           const blockHeight = Math.max(1, heights[slot])
-          const source = block === 3 ? bands : [envelope, loudness, onsets][block]
+          const { source, stride } = blockSource(sources, block)
           if (!source) {
             top += blockHeight + BLOCK_GAP
             return
           }
 
           const rows = Math.max(1, Math.round(blockHeight))
-          const stride = block === 3 ? 3 : 1
           const panels = blockPanels(block)
 
           let held = running.blocks.get(block)

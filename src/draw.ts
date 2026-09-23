@@ -1042,7 +1042,7 @@ function filledFrames(bar: Bar, start: number, step: number, rows: number): numb
 }
 
 export const BLOCK_GAP = 8
-const BLOCK_WEIGHTS = [0.3, 0.16, 0.16, 0.38]
+const BLOCK_WEIGHTS = [0.3, 0.16, 0.16, 0.38, 0.3]
 export const BAND_ORDER = [0, 1, 2]
 
 export type BarSources = {
@@ -1050,10 +1050,22 @@ export type BarSources = {
   loudness: Float32Array | null
   onsets: Float32Array | null
   bands: Float32Array | null
+  tone: Float32Array | null
 }
 
-export const BLOCK_LABELS = ['Wave', 'Loud', 'Hits', 'Band']
-export const ALL_BLOCKS = [0, 1, 2, 3]
+export const BLOCK_LABELS = ['Wave', 'Loud', 'Hits', 'Band', 'Tone']
+export const ALL_BLOCKS = [0, 1, 2, 3, 4]
+
+// what a block reads: its source, and how many values a frame of it holds
+export function blockSource(sources: BarSources, block: number): { source: Float32Array | null; stride: number } {
+  if (block === 3) return { source: sources.bands, stride: 3 }
+  return { source: [sources.envelope, sources.loudness, sources.onsets, null, sources.tone][block] ?? null, stride: 1 }
+}
+
+// the blocks whose source is a level a width can say: the others stay colour
+export function blockIsLevel(block: number): boolean {
+  return block === 0 || block === 1 || block === 4
+}
 
 // the chosen blocks share the height in proportion to their weights, so one
 // block on its own fills the view
@@ -1181,7 +1193,7 @@ function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
 // paint and a shape its width.
 export function laneLutBytes(block: number, panel: number, curve: Curve, colormap: number): Uint8Array {
   const color =
-    block === 0
+    block === 0 || block === 4
       ? (value: number) => waveRgb(value, colormap)
       : block === 1
         ? levelRgb
@@ -1496,13 +1508,14 @@ export function renderBarLayers(
 
   const heights = blockHeights(height, blocks)
   const shaped = shapeLut(curve)
+  const waveLut = buildLut(curve, (value) => waveRgb(value, colormap))
   const luts = [
-    buildLut(curve, (value) => waveRgb(value, colormap)),
+    waveLut,
     buildLut(curve, levelRgb),
     buildLut(curve, heatRgb),
     ...BAND_ORDER.map((band) => bandLut(curve, BAND_RGB[band])),
+    waveLut,
   ]
-  const values = [sources.envelope, sources.loudness, sources.onsets]
   const layers: BlockLayer[] = []
 
   let top = 0
@@ -1511,7 +1524,7 @@ export function renderBarLayers(
     const blockHeight = Math.max(1, heights[slot])
     const panels = blockPanels(block)
     const columns = bars.length * panels
-    const source = block === 3 ? sources.bands : values[block]
+    const { source, stride } = blockSource(sources, block)
 
     if (!source) {
       top += blockHeight + BLOCK_GAP
@@ -1520,7 +1533,6 @@ export function renderBarLayers(
 
     // a slice usually spans fewer source frames than the block has pixel rows,
     // so render one row per frame and let the canvas scale it up
-    const stride = block === 3 ? 3 : 1
     const frames = source.length / stride
     const slice = bars[0].end - bars[0].start
     const rows = Math.max(1, Math.min(blockHeight, Math.ceil(slice * frames)))
@@ -1537,7 +1549,7 @@ export function renderBarLayers(
     const last = frames - 1
 
     for (let panel = 0; panel < panels; panel += 1) {
-      const lut = block === 3 ? luts[3 + panel] : luts[block]
+      const lut = block === 3 ? luts[3 + panel] : block === 4 ? luts[6] : luts[block]
       const band = block === 3 ? BAND_ORDER[panel] : 0
       const sums = prefixSums(source, stride, band)
       const offset = panel * bars.length
@@ -1608,10 +1620,9 @@ export function columnProfile(
   bar: Bar,
   rows: number,
 ): Float32Array | null {
-  const source = block === 3 ? sources.bands : [sources.envelope, sources.loudness, sources.onsets][block]
+  const { source, stride } = blockSource(sources, block)
   if (!source || rows <= 0) return null
 
-  const stride = block === 3 ? 3 : 1
   const frames = source.length / stride
   const base = bar.start * frames
   const step = ((bar.end - bar.start) * frames) / rows

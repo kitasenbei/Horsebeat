@@ -1,13 +1,16 @@
 import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
-import MenuItem from '@mui/material/MenuItem'
-import Select from '@mui/material/Select'
+import ToggleButton from '@mui/material/ToggleButton'
+import Tooltip from '@mui/material/Tooltip'
 import PauseIcon from '@mui/icons-material/Pause'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import StopIcon from '@mui/icons-material/Stop'
 
-const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4]
+// every rate one press away: a menu asked for two, and a change of pace is
+// made often while a grid is being placed. Full speed is the one gone back
+// to, so it is the big square; the rest sit in two rows of four beside it
+const RATES = [0.25, 0.5, 0.75, 1.25, 1.5, 2, 3, 4]
 
 type TransportProps = {
   playing: boolean
@@ -33,16 +36,19 @@ export default function Transport({
   right,
 }: TransportProps) {
   return (
+    // three columns, the middle as wide as what it holds: the sides can never
+    // lie over the play button however wide the rates grow
     <Box
       sx={{
         position: 'relative',
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 0.5,
         minHeight: left ? 60 : 48,
       }}
     >
+      <Box sx={{ justifySelf: 'start' }}>{left}</Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
       <IconButton
         disabled={disabled}
         onClick={onToggle}
@@ -61,36 +67,55 @@ export default function Transport({
       <IconButton size="small" disabled={disabled} onClick={onReset} aria-label="Reset">
         <StopIcon fontSize="small" />
       </IconButton>
-      <Select
-        size="small"
-        value={rate}
-        disabled={disabled}
-        onChange={(event) => onRateChange(event.target.value as number)}
-        inputProps={{ 'aria-label': 'Playback rate' }}
-        sx={{
-          ml: 0.5,
-          fontSize: 13,
-          '& .MuiSelect-select': { py: 0.25, pl: 1 },
-        }}
-      >
-        {RATES.map((entry) => (
-          <MenuItem key={entry} value={entry}>
-            {entry}x
-          </MenuItem>
-        ))}
-      </Select>
-      {left ? (
+      <Tooltip title="Playback rate">
         <Box
+          role="group"
+          aria-label="Playback rate"
           sx={{
-            position: 'absolute',
-            left: 0,
-            top: '50%',
-            transform: 'translateY(-50%)',
+            ml: 0.5,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, auto)',
+            gridAutoRows: 'auto',
+            gap: '2px',
+            '& .MuiToggleButton-root': {
+              px: 0.75,
+              py: 0,
+              minWidth: 34,
+              fontSize: 12,
+              lineHeight: '20px',
+              textTransform: 'none',
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 1,
+            },
           }}
         >
-          {left}
+          <ToggleButton
+            value={1}
+            selected={rate === 1}
+            disabled={disabled}
+            onChange={() => onRateChange(1)}
+            aria-label="1 times"
+            sx={{ gridColumn: '1 / span 2', gridRow: '1 / span 2', fontSize: 14 }}
+          >
+            1×
+          </ToggleButton>
+          {RATES.map((entry) => (
+            <ToggleButton
+              key={entry}
+              value={entry}
+              selected={rate === entry}
+              disabled={disabled}
+              onChange={() => onRateChange(entry)}
+              aria-label={`${entry} times`}
+            >
+              {entry}×
+            </ToggleButton>
+          ))}
         </Box>
-      ) : null}
+      </Tooltip>
+      </Box>
+      <Box sx={{ justifySelf: 'end' }}>{right}</Box>
       {above ? (
         <Box
           sx={{
@@ -103,18 +128,6 @@ export default function Transport({
           }}
         >
           {above}
-        </Box>
-      ) : null}
-      {right ? (
-        <Box
-          sx={{
-            position: 'absolute',
-            right: 0,
-            top: '50%',
-            transform: 'translateY(-50%)',
-          }}
-        >
-          {right}
         </Box>
       ) : null}
     </Box>

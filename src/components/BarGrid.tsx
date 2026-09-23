@@ -58,7 +58,7 @@ import {
   type LaneCursor,
   type LanePanel,
 } from '../laneGl'
-import { applyCurve, curveFor, curvesSignature, type Curve, type CurveSet } from '../curve'
+import { applyCurve, curveSignature, type Curve } from '../curve'
 import type { Range } from '../range'
 import { measure, stopwatch, tick } from '../trace'
 import { useLiveRangeEdit } from '../liveRange'
@@ -73,7 +73,7 @@ type BarGridProps = {
   position: number
   positionRef: RefObject<number>
   playing: boolean
-  curves: CurveSet
+  curve: Curve
   range: Range
   onRangeChange: (range: Range) => void
   onSectionsChange: (sections: Section[]) => void
@@ -187,7 +187,7 @@ function planPanels(
   sources: BarSources,
   bars: Bar[],
   width: number,
-  curves: CurveSet,
+  curve: Curve,
   colormap: number,
   waveStyle: WaveStyle,
 ): LanePanel[] {
@@ -210,7 +210,7 @@ function planPanels(
     if (style !== 'colour') {
       const frames = source.length
       const peak = peakBetween(source, 1, 0, bars[0].start * frames, bars[bars.length - 1].end * frames)
-      const curved = applyCurve(Math.min(1, peak), curveFor(curves, layer.block))
+      const curved = applyCurve(Math.min(1, peak), curve)
       scale = curved > 0 ? 1 / curved : 1
     }
 
@@ -219,7 +219,7 @@ function planPanels(
         source,
         stride,
         channel: layer.block === 3 ? BAND_ORDER[panel] : 0,
-        lut: laneLutBytes(layer.block, panel, curveFor(curves, layer.block, layer.block === 3 ? BAND_ORDER[panel] : 0), colormap),
+        lut: laneLutBytes(layer.block, panel, curve, colormap),
         left: (panel * width) / count,
         top: layer.top,
         width: width / count,
@@ -308,7 +308,7 @@ export default function BarGrid({
   position,
   positionRef,
   playing,
-  curves,
+  curve,
   range: givenRange,
   onRangeChange,
   onSectionsChange,
@@ -512,7 +512,7 @@ export default function BarGrid({
       blocks.join(','),
       colormap,
       waveStyle,
-      curvesSignature(curves),
+      curveSignature(curve),
     ].join('|')
 
     const planKey = [
@@ -525,13 +525,13 @@ export default function BarGrid({
       onsets?.length ?? 0,
       bands?.length ?? 0,
       blocks.join(','),
-      curvesSignature(curves),
+      curveSignature(curve),
     ].join('|')
 
     let plan = planRef.current
     if (!plan || plan.key !== planKey) {
       plan = measure('BarGrid plan', () => {
-        const curveKey = curvesSignature(curves)
+        const curveKey = curveSignature(curve)
         const heights = blockHeights(height, blocks)
         const layers: ProjectionLayer[] = []
         let top = 0
@@ -602,7 +602,7 @@ export default function BarGrid({
               channel,
               collectBars(entry.span, entry.beats),
               rows,
-              curveFor(curves, block, channel),
+              curve,
             )
             held.members.set(name, part)
             addContribution(held.total, part)
@@ -623,7 +623,7 @@ export default function BarGrid({
     let cache = cacheRef.current
     if (!cache || cache.key !== key) {
       const panels = measure('BarGrid picture', () =>
-        planPanels(plan.layers, sources, bars, width, curves, colormap, waveStyle),
+        planPanels(plan.layers, sources, bars, width, curve, colormap, waveStyle),
       )
       const gl = glRef.current
       const gpu = Boolean(gl && canRenderLanesGl(gl, bars, panels))
@@ -631,7 +631,7 @@ export default function BarGrid({
       // only a browser the GPU cannot serve reads the visible bars to paint them
       const painted = gpu
         ? null
-        : renderBarLayers(context, sources, bars, height, curves, blocks, colormap, true)
+        : renderBarLayers(context, sources, bars, height, curve, blocks, colormap, true)
       const waveLayer = plan.layers.find((layer) => layer.block === 0)
 
       cache = {
@@ -646,7 +646,7 @@ export default function BarGrid({
                 bars,
                 waveLayer.height,
                 width,
-                curves.wave,
+                curve,
                 colormap,
                 waveStyle,
                 theme,
@@ -679,7 +679,7 @@ export default function BarGrid({
     return { key, plan, cache, width }
   }
 
-  const stillKey = `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${blocks.join(',')}|${divisions}|${colormap}|${waveStyle}|${slice}|${curvesSignature(curves)}`
+  const stillKey = `${bars.length}|${sectionSignature(live)}|${bars[0]?.start ?? 0}|${bars[bars.length - 1]?.end ?? 0}|${range.start}|${range.end}|${blocks.join(',')}|${divisions}|${colormap}|${waveStyle}|${slice}|${curveSignature(curve)}`
 
   // What stays put between frames: the guides, the section bounds, the three
   // projection graphs, and on a browser without WebGL2 the lanes themselves.

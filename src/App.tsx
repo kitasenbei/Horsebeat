@@ -50,7 +50,7 @@ import {
   type Section,
 } from './timing'
 import type { EditMode } from './mode'
-import { DEFAULT_CURVES, applyCurve, type Curve, type CurveKey, type CurveSet } from './curve'
+import { DEFAULT_CURVE, applyCurve, type Curve } from './curve'
 import { useHistory } from './useHistory'
 import { tick, TRACING } from './trace'
 
@@ -63,7 +63,7 @@ const FALL_RANGE = 10.5
 type Doc = {
   markers: number[]
   sections: Section[]
-  curves: CurveSet
+  curve: Curve
 }
 
 // The envelope read through the curve, as a level first because the curve is drawn
@@ -104,9 +104,9 @@ export default function App() {
   const [doc, setDoc, history] = useHistory<Doc>({
     markers: [],
     sections: [],
-    curves: DEFAULT_CURVES,
+    curve: DEFAULT_CURVE,
   })
-  const { markers, sections, curves } = doc
+  const { markers, sections, curve } = doc
 
   const setMarkers = (next: number[] | ((current: number[]) => number[])) =>
     setDoc((current) => ({
@@ -120,8 +120,7 @@ export default function App() {
       sections: typeof next === 'function' ? next(current.sections) : next,
     }))
 
-  const setCurve = (key: CurveKey, next: Curve) =>
-    setDoc((current) => ({ ...current, curves: { ...current.curves, [key]: next } }))
+  const setCurve = (next: Curve) => setDoc((current) => ({ ...current, curve: next }))
 
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [anchorId, setAnchorId] = useState<string | null>(null)
@@ -258,7 +257,7 @@ export default function App() {
     // to 38.7 — because the curve flattens both ends and the ends carry what
     // tells one grid from another. It is here to be tried on material where
     // that is wrong.
-    const read = curved ? throughCurve(envelope, curves.wave) : envelope
+    const read = curved ? throughCurve(envelope, curve) : envelope
     const run = fitTrack(read, sampleRate, durationMs, fitRef.current.meter)
 
     const publish = (found: Fit[]) => {
@@ -300,7 +299,7 @@ export default function App() {
     })
 
     return () => cancelAnimationFrame(frame)
-  }, [fitting, envelope, duration, sampleRate, curved, curves.wave])
+  }, [fitting, envelope, duration, sampleRate, curved, curve])
 
   const load = async (source: File) => {
     setLoadingName(source.name)
@@ -323,7 +322,7 @@ export default function App() {
         // a plain audio file arrives with no timing at all, so it opens on a
         // grid that can be dragged into place rather than on an empty view
         sections: beatmap ? beatmap.sections : [createSection(0, DEFAULT_BPM)],
-        curves: current.curves,
+        curve: current.curve,
       }))
       history.reset()
       setAnchorId(null)
@@ -377,8 +376,8 @@ export default function App() {
       />
       {curveOpen ? (
         <CurvePanel
-          curves={curves}
-          sources={{ envelope: levels, loudness, onsets, bands: bandLevels }}
+          curve={curve}
+          levels={levels}
           onCurveChange={setCurve}
           onClose={() => setCurveOpen(false)}
         />
@@ -494,7 +493,7 @@ export default function App() {
                 focus={focus}
                 sections={sections}
                 duration={duration}
-                curve={curves.wave}
+                curve={curve}
                 range={range}
                 placing={mode === 'none' ? null : mode}
                 ghost={mode === 'none' ? null : ghost}
@@ -535,7 +534,7 @@ export default function App() {
                     position={position}
                     positionRef={positionRef}
                     playing={playing}
-                    curves={curves}
+                    curve={curve}
                     range={range}
                     onRangeChange={changeRange}
                     onSectionsChange={setSections}
@@ -555,7 +554,7 @@ export default function App() {
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <LiveWave
               envelope={levels}
-              curve={curves.wave}
+              curve={curve}
               colormap={colormap}
               sections={sections}
               duration={duration}
@@ -699,7 +698,7 @@ export default function App() {
             envelope={levels}
             sections={sections}
             duration={duration}
-            curve={curves.wave}
+            curve={curve}
             range={range}
             position={position}
             positionRef={positionRef}
@@ -719,7 +718,7 @@ export default function App() {
               position={position}
               positionRef={positionRef}
               playing={playing}
-              curve={curves.wave}
+              curve={curve}
               range={range}
               onRangeChange={changeRange}
             />

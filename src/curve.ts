@@ -23,38 +23,8 @@ export const DEFAULT_CURVE: Curve = {
   ],
 }
 
-// One curve for each source the compiled view draws: the wave, the loudness,
-// the hits and the three bands. A lane reads its own.
-export const CURVE_KEYS = ['wave', 'loud', 'hits', 'low', 'mid', 'high'] as const
-export type CurveKey = (typeof CURVE_KEYS)[number]
-export type CurveSet = Record<CurveKey, Curve>
-
-export const DEFAULT_CURVES: CurveSet = {
-  wave: DEFAULT_CURVE,
-  loud: DEFAULT_CURVE,
-  hits: DEFAULT_CURVE,
-  low: DEFAULT_CURVE,
-  mid: DEFAULT_CURVE,
-  high: DEFAULT_CURVE,
-}
-
-const BAND_KEYS: CurveKey[] = ['low', 'mid', 'high']
-
-// the curve a block's panel is drawn through: blocks are the wave, the
-// loudness, the hits and the bands, and a band block's panels are its bands
-export function curveFor(curves: CurveSet, block: number, panel = 0): Curve {
-  if (block === 0) return curves.wave
-  if (block === 1) return curves.loud
-  if (block === 2) return curves.hits
-  return curves[BAND_KEYS[panel] ?? 'low']
-}
-
 export function curveSignature(curve: Curve): string {
   return curve.points.map((point) => `${point.x}:${point.y}:${point.spread ?? 1}`).join(',')
-}
-
-export function curvesSignature(curves: CurveSet): string {
-  return CURVE_KEYS.map((key) => curveSignature(curves[key])).join(';')
 }
 
 export const MIN_GAP = 0.02

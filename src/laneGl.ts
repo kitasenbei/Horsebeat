@@ -78,7 +78,9 @@ vec3 marked(vec3 c) {
 void main() {
   float across = uHead + vUv.x * uShown;
   float column = clamp(floor(across), 0.0, uColumns - 1.0);
-  vec2 bar = texelFetch(uBars, ivec2(int(column), 0), 0).rg;
+  // the bars are held as shares of the track, and become frames of this panel's
+  // source here: the sources are not all cut to the same number of frames
+  vec2 bar = texelFetch(uBars, ivec2(int(column), 0), 0).rg * float(uFrames);
   float step = bar.g / uRows;
 
   // the canvas has y up where the lane has time running down. Consecutive rows
@@ -409,20 +411,18 @@ export function renderLanesGl(
     gl.uniform1i(uniforms.cursorColumn, -1)
   }
 
-  // the columns in frames: every source here has the same frame count, and
-  // the upload is skipped while the window holds the same bars
-  const frames = panels.length > 0 ? panels[0].source.length / panels[0].stride : 0
-  const uploadKey = `${barsKey}|${frames}`
+  // the columns as shares of the track, turned into each panel's own frames in
+  // the shader; the upload is skipped while the window holds the same bars
   gl.activeTexture(gl.TEXTURE1)
   gl.bindTexture(gl.TEXTURE_2D, held.bars)
-  if (held.barsKey !== uploadKey) {
+  if (held.barsKey !== barsKey) {
     const data = new Float32Array(columns * 2)
     for (let index = 0; index < columns; index += 1) {
-      data[index * 2] = bars[index].start * frames
-      data[index * 2 + 1] = (bars[index].end - bars[index].start) * frames
+      data[index * 2] = bars[index].start
+      data[index * 2 + 1] = bars[index].end - bars[index].start
     }
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, columns, 1, 0, gl.RG, gl.FLOAT, data)
-    held.barsKey = uploadKey
+    held.barsKey = barsKey
   }
 
   panels.forEach((panel, slot) => {

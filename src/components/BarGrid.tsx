@@ -105,6 +105,15 @@ const GUIDE_COLOR = '#000000'
 const ZOOM_RATE = 0.002
 const HOVER_COLOR = '#ffffff'
 const HOVER_WIDTH = 3
+// Rulers: lines laid across the whole canvas by a click on the left panel, to
+// hold a height in the eye while the picture moves under them. Each has a
+// diamond on the panel to drag it by, this far across and this big, caught
+// this close. They are the reader's own marks and belong to no document
+const RULER_COLOR = '#2e7d32'
+const RULER_SIZE = 6
+const RULER_GRAB = 8
+// two presses on a diamond within this many milliseconds take its ruler away
+const RULER_DOUBLE_MS = 350
 const GESTURE_END_MS = 140
 const AXIS_SLOP = 4
 // BPM a pixel of a shift drag moves, and with ctrl held as well: a hundredth
@@ -505,6 +514,15 @@ export default function BarGrid({
   // drawing every frame. Playing, the loop reads it next frame; paused, the move
   // asks for the one repaint itself
   const hoverRef = useRef<{ x: number; y: number } | null>(null)
+  // where the rulers lie, as shares of the height, and the one being dragged
+  const [rulers, setRulers] = useState<number[]>([])
+  const rulersRef = useRef(rulers)
+  rulersRef.current = rulers
+  const rulerDragRef = useRef<{ index: number; moved: boolean } | null>(null)
+  // the last press on a diamond, so a second one soon after reads as a
+  // double press: the press takes the pointer, and a double click event
+  // does not come through it
+  const rulerPressRef = useRef<{ index: number; at: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const layoutRef = useRef<{ tops: number[]; heights: number[] }>({ tops: [], heights: [] })
   const dragRef = useRef<{
@@ -587,6 +605,27 @@ export default function BarGrid({
   // the guides, the cursor and the projections
   const { canvasRef: overlayRef, repaint: repaintOverlay } = useCanvasControl(
     (context, full, height) => {
+      for (const share of rulersRef.current) {
+        const y = Math.round(share * height) + 0.5
+        context.strokeStyle = RULER_COLOR
+        context.fillStyle = RULER_COLOR
+        context.lineWidth = 1
+        context.globalAlpha = 0.9
+        context.beginPath()
+        context.moveTo(0, y)
+        context.lineTo(full, y)
+        context.stroke()
+        const cx = PROJECTION_WIDTH / 2
+        context.beginPath()
+        context.moveTo(cx, y - RULER_SIZE)
+        context.lineTo(cx + RULER_SIZE, y)
+        context.lineTo(cx, y + RULER_SIZE)
+        context.lineTo(cx - RULER_SIZE, y)
+        context.closePath()
+        context.fill()
+        context.globalAlpha = 1
+      }
+
       const hover = hoverRef.current
       if (!hover || bars.length === 0) return
 
@@ -621,6 +660,10 @@ export default function BarGrid({
       context.restore()
     },
   )
+  // a ruler added, moved or removed shows at once, hover or no hover
+  useEffect(() => {
+    repaintOverlay()
+  }, [rulers, repaintOverlay])
 
   // The picture, the plan and the window cache are settled once per change
   // and shared by every canvas that draws from them
@@ -1169,6 +1212,29 @@ export default function BarGrid({
     // drag edited the section on its way to opening the menu
     if (event.button !== 0) return
 
+    // on the left panel a press takes hold of a ruler's diamond, or lays a
+    // new ruler where there is none
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const x = event.clientX - bounds.left
+    if (x < PROJECTION_WIDTH) {
+      const y = event.clientY - bounds.top
+      const hit = rulers.findIndex((share) => Math.abs(share * bounds.height - y) <= RULER_GRAB)
+      const now = performance.now()
+      const last = rulerPressRef.current
+      if (hit >= 0 && last && last.index === hit && now - last.at < RULER_DOUBLE_MS) {
+        rulerPressRef.current = null
+        setRulers(rulers.filter((_, index) => index !== hit))
+      } else if (hit >= 0) {
+        rulerPressRef.current = { index: hit, at: now }
+        rulerDragRef.current = { index: hit, moved: false }
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } else {
+        rulerPressRef.current = null
+        setRulers([...rulers, Math.min(1, Math.max(0, y / bounds.height))])
+      }
+      return
+    }
+
     // whichever section is under the pointer is the one the drag edits
     const target = sectionAt(event)
     if (!target) return
@@ -1194,6 +1260,16 @@ export default function BarGrid({
   }
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const rulerDrag = rulerDragRef.current
+    if (rulerDrag) {
+      const bounds = event.currentTarget.getBoundingClientRect()
+      const share = Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height))
+      rulerDrag.moved = true
+      rulersRef.current = rulersRef.current.map((held, index) => (index === rulerDrag.index ? share : held))
+      repaintOverlay()
+      return
+    }
+
     const drag = dragRef.current
 
     if (!drag) {
@@ -1257,6 +1333,13 @@ export default function BarGrid({
   }
 
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (rulerDragRef.current) {
+      rulerDragRef.current = null
+      event.currentTarget.releasePointerCapture(event.pointerId)
+      setRulers(rulersRef.current)
+      return
+    }
+
     const drag = dragRef.current
     dragRef.current = null
     setDragging(false)

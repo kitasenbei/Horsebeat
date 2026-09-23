@@ -26,6 +26,8 @@ import {
   BLOCK_LABELS,
   COLORMAPS,
   CURSOR_MODES,
+  CURSOR_TINTS,
+  type CursorTint,
   DIVISION_STEPS,
   SLICE_STEPS,
   WAVE_STYLES,
@@ -57,6 +59,8 @@ type TopBarProps = {
   onColormapChange: (colormap: number) => void
   cursorMode: GlobalCompositeOperation
   onCursorModeChange: (mode: GlobalCompositeOperation) => void
+  cursorTint: CursorTint
+  onCursorTintChange: (tint: CursorTint) => void
   curveOpen: boolean
   onCurveOpenChange: (open: boolean) => void
   framesOpen: boolean
@@ -177,6 +181,8 @@ export default function TopBar({
   onColormapChange,
   cursorMode,
   onCursorModeChange,
+  cursorTint,
+  onCursorTintChange,
   curveOpen,
   onCurveOpenChange,
   framesOpen,
@@ -372,6 +378,13 @@ export default function TopBar({
           cursorMode,
           CURSOR_MODES.map((entry) => ({ value: entry.value, label: entry.label })),
           onCursorModeChange,
+        )}
+
+        {picker<CursorTint>(
+          'Current column tint',
+          cursorTint,
+          CURSOR_TINTS.map((entry) => ({ value: entry.value, label: entry.label })),
+          onCursorTintChange,
         )}
 
         <ToggleButtonGroup

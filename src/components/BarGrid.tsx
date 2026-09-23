@@ -28,11 +28,13 @@ import {
   takeContribution,
   BAND_ORDER,
   BLOCK_GAP,
+  CURSOR_HUE,
   CURSOR_OUTLINE,
   CURSOR_WIDTH,
   type Bar,
   type BarSources,
   type Contribution,
+  type CursorTint,
   type ProjectionLayer,
   type WaveStyle,
   renderBarLayers,
@@ -84,6 +86,7 @@ type BarGridProps = {
   divisions: number
   colormap: number
   cursorMode: GlobalCompositeOperation
+  cursorTint: CursorTint
   waveStyle: WaveStyle
   // keep the playhead's column at a fixed place across the plot and move the
   // window under it, rather than the playhead across a still window
@@ -320,6 +323,7 @@ export default function BarGrid({
   divisions,
   colormap,
   cursorMode,
+  cursorTint,
   waveStyle,
   follow,
 }: BarGridProps) {
@@ -804,6 +808,8 @@ export default function BarGrid({
             row: (positionRef.current - bar.start) / Math.max(1e-12, bar.end - bar.start),
             mode: cursorMode === 'xor' ? 'cut' : cursorMode === 'source-over' ? 'solid' : 'inverse',
             solid: colorChannels(theme.palette.error.main),
+            tint: cursorTint,
+            hue: colorChannels(CURSOR_HUE),
             outline: CURSOR_OUTLINE,
             bar: CURSOR_WIDTH,
           }
@@ -882,7 +888,7 @@ export default function BarGrid({
       })
       projected()
     }
-  }, playing, `${stillKey}|${width}|${position}|${cursorMode}`)
+  }, playing, `${stillKey}|${width}|${position}|${cursorMode}|${cursorTint}`)
 
   useEffect(() => {
     const canvas = canvasRef.current

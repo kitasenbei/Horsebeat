@@ -18,7 +18,7 @@ import RulerSlider from './components/RulerSlider'
 import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
-import type { WaveStyle } from './draw'
+import type { CursorTint, WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
 import FloatingWindow from './components/FloatingWindow'
 import TracePanel from './components/TracePanel'
@@ -124,6 +124,7 @@ export default function App() {
   const [slice, setSlice] = useState<number | 'auto'>(16)
   const [lane, setLane] = useState<number | 'all'>(0)
   const [cursorMode, setCursorMode] = useState<GlobalCompositeOperation>('difference')
+  const [cursorTint, setCursorTint] = useState<CursorTint>('opposite')
   const [curveOpen, setCurveOpen] = useState(false)
   const [framesOpen, setFramesOpen] = useState(false)
   const [waveStyle, setWaveStyle] = useState<WaveStyle>('colour')
@@ -357,6 +358,8 @@ export default function App() {
         onColormapChange={setColormap}
         cursorMode={cursorMode}
         onCursorModeChange={setCursorMode}
+        cursorTint={cursorTint}
+        onCursorTintChange={setCursorTint}
         curveOpen={curveOpen}
         onCurveOpenChange={setCurveOpen}
         framesOpen={framesOpen}
@@ -533,6 +536,7 @@ export default function App() {
                     divisions={divisions}
                     colormap={colormap}
                     cursorMode={cursorMode}
+                    cursorTint={cursorTint}
                     waveStyle={waveStyle}
                     follow={follow}
                   />

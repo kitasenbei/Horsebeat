@@ -63,6 +63,10 @@ uniform int uCursorColumn;
 uniform float uCursorRow;
 uniform int uCursorMode;
 uniform int uCursorTint;
+// how the tint is made (0 turns every hue to its opposite, 1 turns it a
+// quarter, 2 lays one hue) and the hue laid in the last case
+uniform int uTintMode;
+uniform vec3 uTintHue;
 uniform vec3 uSolid;
 uniform float uOutline;
 uniform float uBar;
@@ -101,13 +105,14 @@ vec3 fromHsl(vec3 hsl) {
   return vec3(hueTo(p, q, hsl.x + 1.0 / 3.0), hueTo(p, q, hsl.x), hueTo(p, q, hsl.x - 1.0 / 3.0));
 }
 
-// every hue turned to its opposite, with the lightness and saturation the
-// lane drew: the column keeps its shape and its contrasts, and stands apart
-// from its neighbours whatever colours the map uses. One fixed hue was lost
-// wherever the map came near it
+// every hue turned, or one hue laid, with the lightness and saturation the
+// lane drew: the column keeps its shape and its contrasts. A turn stands the
+// column apart from its neighbours whatever colours the map uses; the fixed
+// hue is lost wherever the map comes near it
 vec3 tinted(vec3 c) {
   vec3 hsl = toHsl(c);
-  return fromHsl(vec3(fract(hsl.x + 0.5), hsl.y, hsl.z));
+  float hue = uTintMode == 0 ? fract(hsl.x + 0.5) : uTintMode == 1 ? fract(hsl.x + 0.25) : toHsl(uTintHue).x;
+  return fromHsl(vec3(hue, hsl.y, hsl.z));
 }
 
 vec3 marked(vec3 c) {
@@ -192,6 +197,8 @@ export type LaneCursor = {
   row: number
   mode: 'inverse' | 'cut' | 'solid'
   solid: [number, number, number]
+  tint: 'opposite' | 'quarter' | 'fixed'
+  hue: [number, number, number]
   outline: number
   bar: number
 }
@@ -218,6 +225,8 @@ type Uniforms = Record<
   | 'cursorColumn'
   | 'cursorRow'
   | 'cursorMode'
+  | 'tintMode'
+  | 'tintHue'
   | 'cursorTint'
   | 'solid'
   | 'outline'
@@ -320,6 +329,8 @@ function build(canvas: HTMLCanvasElement): Renderer | null {
     cursorColumn: at('uCursorColumn'),
     cursorRow: at('uCursorRow'),
     cursorMode: at('uCursorMode'),
+    tintMode: at('uTintMode'),
+    tintHue: at('uTintHue'),
     cursorTint: at('uCursorTint'),
     solid: at('uSolid'),
     outline: at('uOutline'),
@@ -450,6 +461,8 @@ export function renderLanesGl(
     gl.uniform1f(uniforms.cursorRow, cursor.row)
     gl.uniform1i(uniforms.cursorMode, cursor.mode === 'inverse' ? 0 : cursor.mode === 'cut' ? 1 : 2)
     gl.uniform3fv(uniforms.solid, cursor.solid)
+    gl.uniform1i(uniforms.tintMode, cursor.tint === 'opposite' ? 0 : cursor.tint === 'quarter' ? 1 : 2)
+    gl.uniform3fv(uniforms.tintHue, cursor.hue)
     gl.uniform1f(uniforms.outline, cursor.outline * ratio)
     gl.uniform1f(uniforms.bar, cursor.bar * ratio)
   } else {

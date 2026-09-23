@@ -158,4 +158,11 @@ export const CURVE_PRESETS = {
       { x: 1, y: 1 },
     ],
   },
+  // every level drawn in full: the lanes show only their structure
+  flat: {
+    points: [
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+    ],
+  },
 } satisfies Record<string, Curve>

@@ -14,6 +14,7 @@ import FilterAltIcon from '@mui/icons-material/FilterAlt'
 import BoltIcon from '@mui/icons-material/Bolt'
 import TonalityIcon from '@mui/icons-material/Tonality'
 import ContrastIcon from '@mui/icons-material/Contrast'
+import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
@@ -56,6 +57,7 @@ const PRESETS = [
   { curve: CURVE_PRESETS.peaks, title: 'Peaks only', icon: <BoltIcon fontSize="small" /> },
   { curve: CURVE_PRESETS.flatten, title: 'Flatten', icon: <TonalityIcon fontSize="small" /> },
   { curve: CURVE_PRESETS.hard, title: 'Hard threshold', icon: <ContrastIcon fontSize="small" /> },
+  { curve: CURVE_PRESETS.flat, title: 'Flat', icon: <HorizontalRuleIcon fontSize="small" /> },
 ]
 
 const CHART_HEIGHT = 170

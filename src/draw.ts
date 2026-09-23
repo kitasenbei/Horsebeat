@@ -1,5 +1,6 @@
 import type { Range } from './range'
-import { applyCurve, type Curve } from './curve'
+import { applyCurve, curveFor, curveSignature, type Curve, type CurveSet } from './curve'
+export { curveSignature }
 import { levelOf } from './audio'
 import { sectionSpans, type Section, type SectionSpan } from './timing'
 import { type PeakLevel, type Pyramid } from './audio'
@@ -1315,7 +1316,7 @@ export function renderBarLayers(
   sources: BarSources,
   bars: Bar[],
   height: number,
-  curve: Curve,
+  curves: CurveSet,
   blocks: number[] = ALL_BLOCKS,
   colormap = 0,
   // the wave block's picture can come from the GPU instead; its projections
@@ -1325,12 +1326,11 @@ export function renderBarLayers(
   if (bars.length === 0) return []
 
   const heights = blockHeights(height, blocks)
-  const shaped = shapeLut(curve)
   const luts = [
-    buildLut(curve, (value) => waveRgb(value, colormap)),
-    buildLut(curve, levelRgb),
-    buildLut(curve, heatRgb),
-    ...BAND_ORDER.map((band) => bandLut(curve, BAND_RGB[band])),
+    buildLut(curves.wave, (value) => waveRgb(value, colormap)),
+    buildLut(curves.loud, levelRgb),
+    buildLut(curves.hits, heatRgb),
+    ...BAND_ORDER.map((band) => bandLut(curveFor(curves, 3, band), BAND_RGB[band])),
   ]
   const values = [sources.envelope, sources.loudness, sources.onsets]
   const layers: BlockLayer[] = []
@@ -1369,6 +1369,7 @@ export function renderBarLayers(
     for (let panel = 0; panel < panels; panel += 1) {
       const lut = block === 3 ? luts[3 + panel] : luts[block]
       const band = block === 3 ? BAND_ORDER[panel] : 0
+      const shaped = shapeLut(curveFor(curves, block, band))
       const sums = prefixSums(source, stride, band)
       const offset = panel * bars.length
       counted += bars.length
@@ -1886,9 +1887,6 @@ export function drawColumnCursor(
 
 // Signatures for useCanvas. They have to cover everything a draw reads, or the
 // canvas keeps a stale picture: cheap to build, and wrong only if incomplete.
-export function curveSignature(curve: Curve): string {
-  return curve.points.map((point) => `${point.x}:${point.y}:${point.spread ?? 1}`).join(',')
-}
 
 const signatureCache = new WeakMap<Section[], string>()
 

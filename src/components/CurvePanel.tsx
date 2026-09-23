@@ -37,14 +37,16 @@ import {
   sortPoints,
   trackCurves,
   type Curve,
+  type CurveKey,
+  type CurveSet,
 } from '../curve'
 
 type CurvePanelProps = {
-  curve: Curve
+  curves: CurveSet
   // everything the compiled view draws through the curve, so the chart can
   // show where any one of them sits on the axis the points are placed on
   sources: BarSources
-  onCurveChange: (curve: Curve) => void
+  onCurveChange: (key: CurveKey, curve: Curve) => void
   onClose?: () => void
   embedded?: boolean
 }
@@ -85,13 +87,14 @@ const TRACK_PRESETS: { key: keyof ReturnType<typeof trackCurves>; title: string;
 
 // which of the compiled view's sources the mountain and the track presets
 // read. The bands are one array three wide, so each is a channel of it
-type Ground = { key: string; label: string; source: keyof BarSources; channel: number; decibels: boolean }
+type Ground = { key: CurveKey; label: string; source: keyof BarSources; channel: number; decibels: boolean }
+const BAND_KEYS: CurveKey[] = ['low', 'mid', 'high']
 const GROUNDS: Ground[] = [
   { key: 'wave', label: BLOCK_LABELS[0], source: 'envelope', channel: 0, decibels: true },
   { key: 'loud', label: BLOCK_LABELS[1], source: 'loudness', channel: 0, decibels: true },
   { key: 'hits', label: BLOCK_LABELS[2], source: 'onsets', channel: 0, decibels: false },
   ...BAND_COLORS.map((band, channel) => ({
-    key: `band${channel}`,
+    key: BAND_KEYS[channel],
     label: band.label,
     source: 'bands' as const,
     channel,
@@ -135,9 +138,9 @@ function histogram(levels: Float32Array | null): Float32Array {
 }
 
 export default function CurvePanel({
-  curve,
+  curves,
   sources,
-  onCurveChange,
+  onCurveChange: onCurvesChange,
   onClose,
   embedded = false,
 }: CurvePanelProps) {
@@ -145,10 +148,12 @@ export default function CurvePanel({
   const moveRef = useRef<Move | null>(null)
   const dragRef = useRef<Drag | null>(null)
   const [spot, setSpot] = useState({ left: 32, top: 96 })
-  const applyCurveChange = useRafCallback(onCurveChange)
   const applySpot = useRafCallback(setSpot)
-  const [groundKey, setGroundKey] = useState(GROUNDS[0].key)
+  const [groundKey, setGroundKey] = useState<CurveKey>(GROUNDS[0].key)
   const ground = GROUNDS.find((entry) => entry.key === groundKey) ?? GROUNDS[0]
+  const curve = curves[ground.key]
+  const onCurveChange = (next: Curve) => onCurvesChange(ground.key, next)
+  const applyCurveChange = useRafCallback(onCurvesChange)
   const levels = useMemo(() => groundLevels(sources, ground), [sources, ground])
   const spread = useMemo(() => histogram(levels), [levels])
   const fromTrack = useMemo(() => (levels ? trackCurves(levels) : null), [levels])
@@ -251,7 +256,7 @@ export default function CurvePanel({
   const spreadTo = (index: number, by: number) => {
     const point = curve.points[index]
     const spread = Math.min(1, Math.max(MIN_SPREAD, (point.spread ?? 1) + by))
-    applyCurveChange({
+    applyCurveChange(ground.key, {
       points: curve.points.map((held, current) => (current === index ? { ...held, spread } : held)),
     })
   }
@@ -264,7 +269,7 @@ export default function CurvePanel({
     const upper = isLast ? 1 : points[index + 1].x - MIN_GAP
     const nextX = isFirst || isLast ? points[index].x : Math.min(upper, Math.max(lower, x))
 
-    applyCurveChange({
+    applyCurveChange(ground.key, {
       points: points.map((point, current) =>
         current === index ? { ...point, x: nextX, y: Math.min(1, Math.max(0, y)) } : point,
       ),
@@ -430,7 +435,7 @@ export default function CurvePanel({
           exclusive
           fullWidth
           value={groundKey}
-          onChange={(_, next: string | null) => next && setGroundKey(next)}
+          onChange={(_, next: CurveKey | null) => next && setGroundKey(next)}
           aria-label="Source the chart reads"
         >
           {GROUNDS.map((entry) => (

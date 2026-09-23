@@ -83,7 +83,7 @@ export default function RangeStrip({
     (context, width, height) => {
       if (!envelope) return
 
-      const halves = drawEnvelopeAmplitude(
+      drawEnvelopeAmplitude(
         context,
         envelope,
         range,
@@ -100,7 +100,6 @@ export default function RangeStrip({
         width,
         height,
         theme.palette.info.dark,
-        halves,
       )
     },
     false,

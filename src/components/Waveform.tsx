@@ -88,17 +88,9 @@ export default function Waveform({
 
   const paintStatic = (context: CanvasRenderingContext2D, width: number, height: number) => {
     if (!samples) return
-    const halves = envelope
-      ? drawEnvelopeAmplitude(
-          context,
-          envelope,
-          range,
-          width,
-          height,
-          theme.palette.primary.main,
-          curve,
-        )
-      : null
+    if (envelope) {
+      drawEnvelopeAmplitude(context, envelope, range, width, height, theme.palette.primary.main, curve)
+    }
     drawGrid(
       context,
       sections,
@@ -107,7 +99,6 @@ export default function Waveform({
       width,
       height,
       theme.palette.info.dark,
-      halves,
     )
     const shown = focus
       ? markers.filter((marker) => marker >= focus.start && marker <= focus.end)

@@ -310,42 +310,25 @@ function verticalLines(
   context: CanvasRenderingContext2D,
   xs: number[],
   height: number,
-  envelope: Float32Array | null,
   color: string,
   lineWidth: number,
   alpha: number,
 ) {
   if (xs.length === 0) return
 
-  const middle = height / 2
-  const outside = new Path2D()
-  const across = new Path2D()
-  let crossed = false
-
+  // one colour top to bottom, over the audio as well as beside it: the line
+  // says which beat it is by its colour, and a colour that flipped where the
+  // wave was said something else
+  const path = new Path2D()
   for (const x of xs) {
-    const half = envelope ? (envelope[Math.floor(x)] ?? 0) : 0
-    if (half > 0) {
-      outside.moveTo(x, 0)
-      outside.lineTo(x, middle - half)
-      outside.moveTo(x, middle + half)
-      outside.lineTo(x, height)
-      across.moveTo(x, middle - half)
-      across.lineTo(x, middle + half)
-      crossed = true
-    } else {
-      outside.moveTo(x, 0)
-      outside.lineTo(x, height)
-    }
+    path.moveTo(x, 0)
+    path.lineTo(x, height)
   }
 
   context.lineWidth = lineWidth
   context.globalAlpha = alpha
   context.strokeStyle = color
-  context.stroke(outside)
-  if (crossed) {
-    context.strokeStyle = invertColor(color)
-    context.stroke(across)
-  }
+  context.stroke(path)
   context.globalAlpha = 1
 }
 
@@ -368,7 +351,6 @@ export function drawGrid(
   width: number,
   height: number,
   accent: string,
-  envelope: Float32Array | null = null,
 ) {
   const span = range.end - range.start
   if (span <= 0 || duration <= 0) return
@@ -401,8 +383,8 @@ export function drawGrid(
     }
   }
 
-  for (const [paint, lines] of beats) verticalLines(context, lines, height, envelope, paint, BEAT_LINE_WIDTH, 0.6)
-  verticalLines(context, starts, height, envelope, accent, BEAT_LINE_WIDTH * 2, 1)
+  for (const [paint, lines] of beats) verticalLines(context, lines, height, paint, BEAT_LINE_WIDTH, 0.6)
+  verticalLines(context, starts, height, accent, BEAT_LINE_WIDTH * 2, 1)
 }
 
 export function drawPeaksAmplitude(

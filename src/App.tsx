@@ -43,6 +43,7 @@ import { useAudio } from './useAudio'
 import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz, writeOsz, type BeatmapSource } from './osu'
+import { snapSection } from './fit/snap'
 import { fitTrack, type Fit, type Progress } from './fit'
 import {
   createSection,
@@ -362,6 +363,22 @@ export default function App() {
     }
   }
 
+  // one section's grid settled onto the music between it and the next
+  const snap = (id: string) => {
+    if (!envelope || duration <= 0) return
+    const sorted = sortSections(sections)
+    const index = sorted.findIndex((section) => section.id === id)
+    if (index < 0) return
+    const section = sorted[index]
+    const toMs = sorted[index + 1]?.offsetMs ?? duration * 1000
+    const found = snapSection(envelope, sampleRate, section.offsetMs, toMs, {
+      bpm: section.bpm,
+      offsetMs: section.offsetMs,
+    })
+    if (!found) return
+    setSections(sorted.map((held) => (held.id === id ? { ...held, ...found } : held)))
+  }
+
   // the song and its sections handed back as an osz through the browser's
   // downloads
   const exportOsz = async () => {
@@ -494,6 +511,7 @@ export default function App() {
                 onSectionsChange={setSections}
                 onEditingChange={setEditingSection}
                 onExport={file ? exportOsz : undefined}
+                onSnap={envelope ? snap : undefined}
               />
             </Box>
           </Box>

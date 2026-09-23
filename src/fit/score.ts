@@ -38,13 +38,16 @@ export function scoreFit(
   fromMs: number,
   toMs: number,
   fit: Fit,
+  // how far either side of a beat a hit still counts: narrower reads finer,
+  // once a grid is nearly right
+  reachMs = BEAT_REACH_MS,
 ): number {
   const envelope = riseOf(levels)
   const frames = envelope.length
   if (frames === 0 || fit.bpm <= 0 || toMs <= fromMs) return 0
 
   const perMs = sampleRate / 1000 / envelopeHop(sampleRate)
-  const reach = Math.max(1, Math.round(BEAT_REACH_MS * perMs))
+  const reach = Math.max(1, Math.round(reachMs * perMs))
   const lag = Math.round(ENVELOPE_LAG_MS * perMs)
   const beatMs = 60000 / fit.bpm
   const first = Math.ceil((fromMs - fit.offsetMs) / beatMs)

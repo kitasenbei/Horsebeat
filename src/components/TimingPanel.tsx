@@ -15,6 +15,7 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import CheckIcon from '@mui/icons-material/Check'
 import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -38,6 +39,8 @@ type TimingPanelProps = {
   onSectionsChange: (sections: Section[]) => void
   onEditingChange: (id: string | null) => void
   onExport?: () => void
+  // snap one section's tempo and offset onto the music it covers
+  onSnap?: (id: string) => void
   onClose?: () => void
   embedded?: boolean
 }
@@ -89,6 +92,7 @@ export default function TimingPanel({
   onSectionsChange,
   onEditingChange,
   onExport,
+  onSnap,
   onClose,
   embedded = false,
 }: TimingPanelProps) {
@@ -496,6 +500,16 @@ export default function TimingPanel({
                     sx={actionPill}
                   >
                     <PlayArrowIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    title="Snap to the music"
+                    aria-label="Snap section to the music"
+                    disabled={!onSnap}
+                    onClick={() => onSnap?.(section.id)}
+                    sx={actionPill}
+                  >
+                    <AutoFixHighIcon sx={{ fontSize: 20 }} />
                   </IconButton>
                   <IconButton
                     size="small"

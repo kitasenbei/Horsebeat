@@ -518,7 +518,7 @@ export default function BarGrid({
       blocks.join(','),
       colormap,
       waveStyle,
-      curve.points.map((point) => `${point.x}:${point.y}`).join(','),
+      curveSignature(curve),
     ].join('|')
 
     const planKey = [
@@ -531,13 +531,13 @@ export default function BarGrid({
       onsets?.length ?? 0,
       bands?.length ?? 0,
       blocks.join(','),
-      curve.points.map((point) => `${point.x}:${point.y}`).join(','),
+      curveSignature(curve),
     ].join('|')
 
     let plan = planRef.current
     if (!plan || plan.key !== planKey) {
       plan = measure('BarGrid plan', () => {
-        const curveKey = curve.points.map((point) => `${point.x}:${point.y}`).join(',')
+        const curveKey = curveSignature(curve)
         const heights = blockHeights(height, blocks)
         const layers: ProjectionLayer[] = []
         let top = 0

@@ -27,6 +27,7 @@ import {
   DEFAULT_CURVE,
   MAX_POINTS,
   MIN_GAP,
+  MIN_SPREAD,
   sortPoints,
   type Curve,
 } from '../curve'
@@ -39,6 +40,13 @@ type CurvePanelProps = {
   onCurveChange: (curve: Curve) => void
   onClose?: () => void
   embedded?: boolean
+}
+
+// a drag on a point: which one, and where the pointer was last, so a shift
+// drag can be read as a sideways distance
+type Drag = {
+  index: number
+  lastX: number
 }
 
 type Move = {
@@ -64,6 +72,10 @@ const CHART_HEIGHT = 170
 const PANEL_WIDTH = 280
 const GRAB = 12
 const POINT_RADIUS = 5
+// the halo round a point grows with its spread, up to this far out
+const HALO = 10
+// pixels of shift drag from no spread to full
+const SPREAD_DRAG = 120
 // the x axis is marked every twenty decibels, the y axis every quarter
 const DB_STEP = 20
 const BUCKETS = 64
@@ -92,7 +104,7 @@ export default function CurvePanel({
 }: CurvePanelProps) {
   const theme = useTheme()
   const moveRef = useRef<Move | null>(null)
-  const pointRef = useRef<number | null>(null)
+  const dragRef = useRef<Drag | null>(null)
   const [spot, setSpot] = useState({ left: 32, top: 96 })
   const applyCurveChange = useRafCallback(onCurveChange)
   const applySpot = useRafCallback(setSpot)
@@ -159,10 +171,17 @@ export default function CurvePanel({
     }
     context.stroke()
 
-    context.fillStyle = theme.palette.primary.main
     for (const point of curve.points) {
+      const x = point.x * width
+      const y = height - point.y * height
+      context.fillStyle = theme.palette.primary.main
+      context.globalAlpha = 0.25
       context.beginPath()
-      context.arc(point.x * width, height - point.y * height, POINT_RADIUS, 0, Math.PI * 2)
+      context.arc(x, y, POINT_RADIUS + (point.spread ?? 1) * HALO, 0, Math.PI * 2)
+      context.fill()
+      context.globalAlpha = 1
+      context.beginPath()
+      context.arc(x, y, POINT_RADIUS, 0, Math.PI * 2)
       context.fill()
     }
   }, false, `${signature}|${levels?.length ?? 0}`)
@@ -190,6 +209,14 @@ export default function CurvePanel({
     return found
   }
 
+  const spreadTo = (index: number, by: number) => {
+    const point = curve.points[index]
+    const spread = Math.min(1, Math.max(MIN_SPREAD, (point.spread ?? 1) + by))
+    applyCurveChange({
+      points: curve.points.map((held, current) => (current === index ? { ...held, spread } : held)),
+    })
+  }
+
   const shapeTo = (index: number, x: number, y: number) => {
     const points = curve.points
     const isFirst = index === 0
@@ -211,28 +238,37 @@ export default function CurvePanel({
     event.currentTarget.setPointerCapture(event.pointerId)
 
     if (index >= 0) {
-      pointRef.current = index
+      dragRef.current = { index, lastX: event.clientX }
       return
     }
 
     if (curve.points.length >= MAX_POINTS) return
     if (curve.points.some((point) => Math.abs(point.x - x) < MIN_GAP)) return
     const points = sortPoints([...curve.points, { x, y }])
-    pointRef.current = points.findIndex((point) => point.x === x && point.y === y)
+    dragRef.current = {
+      index: points.findIndex((point) => point.x === x && point.y === y),
+      lastX: event.clientX,
+    }
     onCurveChange({ points })
   }
 
   const shape = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const index = pointRef.current
-    if (index === null) return
+    const drag = dragRef.current
+    if (!drag) return
     measure('drag CurvePanel point', () => {
-      const { x, y } = spotAt(event)
-      shapeTo(index, x, y)
+      // with shift held the sideways motion is the point's spread, not its place
+      if (event.shiftKey) {
+        spreadTo(drag.index, (event.clientX - drag.lastX) / SPREAD_DRAG)
+      } else {
+        const { x, y } = spotAt(event)
+        shapeTo(drag.index, x, y)
+      }
+      drag.lastX = event.clientX
     })
   }
 
   const release = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    pointRef.current = null
+    dragRef.current = null
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
 

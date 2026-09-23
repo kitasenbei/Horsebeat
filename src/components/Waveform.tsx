@@ -146,7 +146,7 @@ export default function Waveform({
       focus ? `${focus.start}:${focus.end}` : '',
       markers.join(','),
       sections.map((section) => `${section.offsetMs}:${section.bpm}`).join(','),
-      curve.points.map((point) => `${point.x}:${point.y}`).join(','),
+      curveSignature(curve),
     ].join('|')
 
     let cache = cacheRef.current

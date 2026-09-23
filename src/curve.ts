@@ -5,6 +5,11 @@
 export type CurvePoint = {
   x: number
   y: number
+  // how far the point's pull reaches into the segments either side, one by
+  // default. At nought the curve arrives flat and leaves flat, and the
+  // neighbours' slopes take no account of it, so moving the point bends only
+  // the two segments that touch it
+  spread?: number
 }
 
 export type Curve = {
@@ -27,6 +32,8 @@ function clamp01(value: number) {
   return Math.min(1, Math.max(0, value))
 }
 
+export const MIN_SPREAD = 0
+
 export function sortPoints(points: CurvePoint[]): CurvePoint[] {
   return [...points].sort((left, right) => left.x - right.x)
 }
@@ -36,6 +43,7 @@ function tangents(curve: Curve): number[] {
   if (cached) return cached
 
   const points = curve.points
+  const spreads = points.map((point) => point.spread ?? 1)
   const slopes: number[] = []
   for (let index = 0; index < points.length - 1; index += 1) {
     const run = points[index + 1].x - points[index].x
@@ -44,10 +52,19 @@ function tangents(curve: Curve): number[] {
 
   const result: number[] = []
   for (let index = 0; index < points.length; index += 1) {
-    if (index === 0) result.push(slopes[0] ?? 0)
-    else if (index === points.length - 1) result.push(slopes[slopes.length - 1] ?? 0)
-    else if (slopes[index - 1] * slopes[index] <= 0) result.push(0)
-    else result.push((slopes[index - 1] + slopes[index]) / 2)
+    let tangent: number
+    if (index === 0) tangent = (slopes[0] ?? 0) * (spreads[1] ?? 1)
+    else if (index === points.length - 1) tangent = (slopes[slopes.length - 1] ?? 0) * spreads[index - 1]
+    else if (slopes[index - 1] * slopes[index] <= 0) tangent = 0
+    else {
+      // a slope toward a narrow neighbour counts for less, so that neighbour
+      // is free to move without turning this point's tangent
+      const before = spreads[index - 1]
+      const after = spreads[index + 1]
+      const weight = before + after
+      tangent = weight > 0 ? (slopes[index - 1] * before + slopes[index] * after) / weight : 0
+    }
+    result.push(tangent * spreads[index])
   }
 
   for (let index = 0; index < slopes.length; index += 1) {

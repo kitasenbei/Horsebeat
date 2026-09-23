@@ -1887,7 +1887,7 @@ export function drawColumnCursor(
 // Signatures for useCanvas. They have to cover everything a draw reads, or the
 // canvas keeps a stale picture: cheap to build, and wrong only if incomplete.
 export function curveSignature(curve: Curve): string {
-  return curve.points.map((point) => `${point.x}:${point.y}`).join(',')
+  return curve.points.map((point) => `${point.x}:${point.y}:${point.spread ?? 1}`).join(',')
 }
 
 const signatureCache = new WeakMap<Section[], string>()

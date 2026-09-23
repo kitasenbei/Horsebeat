@@ -929,21 +929,31 @@ export type Bar = {
   // of slices. Past that the column holds no data of its own and is painted
   // black rather than borrowing the next section's frames
   filled: number
+  // how much of the column, from its start, comes before the section: nought
+  // unless the columns are started early, when the first column of a section
+  // begins by that share before the section does. That stretch is the time
+  // before, drawn but not the column's own; before the song it is black
+  lead: number
 }
 
-export function collectBars(span: SectionSpan, beats: number, limit = 4000): Bar[] {
+// Slice a section into columns of so many beats. Started early by a share of
+// a column, every column begins that much before it would, so a beat that
+// fell on a guide falls between two
+export function collectBars(span: SectionSpan, beats: number, early = 0, limit = 4000): Bar[] {
   const available = span.end - span.start
   if (span.beat <= 0 || available <= 0) return []
 
   const length = span.beat * beats
   const bars: Bar[] = []
-  for (let at = span.start; at < span.end - 1e-9 && bars.length < limit; at += length) {
+  const first = span.start - early * length
+  for (let at = first; at < span.end - 1e-9 && bars.length < limit; at += length) {
     const end = at + length * SLICE_SPAN
     bars.push({
       start: at,
       end,
       section: span.section.id,
       filled: Math.min(1, (span.end - at) / (end - at)),
+      lead: at === first ? early : 0,
     })
   }
 
@@ -961,9 +971,15 @@ export function barUntil(bar: Bar): number {
   return bar.start + (bar.end - bar.start) * bar.filled
 }
 
+// the moment a column's own time begins: its section's start, not the start
+// of the slice it is drawn as, when the columns are started early
+export function barFrom(bar: Bar): number {
+  return bar.start + (bar.end - bar.start) * bar.lead
+}
+
 // the column a moment is in, by the time each column truly holds
 export function columnAt(bars: Bar[], moment: number): number {
-  return bars.findIndex((bar) => moment >= bar.start && moment < barUntil(bar))
+  return bars.findIndex((bar) => moment >= barFrom(bar) && moment < barUntil(bar))
 }
 
 // the frame a column's data stops at, from its start and its step
@@ -1296,6 +1312,7 @@ export function barContribution(
 
     for (let row = 0; row < rows; row += 1) {
       const at = start + row * step
+      if (at < 0) continue
       if ((at | 0) >= limit) break
       let from = at | 0
       if (from > last) from = last
@@ -1472,7 +1489,7 @@ export function renderBarLayers(
           // the mean of every frame the row covers: consecutive rows partition
           // the frames between them, so each frame counts once and once only
           const at = start + row * step
-          if ((at | 0) >= limit) {
+          if (at < 0 || (at | 0) >= limit) {
             if (pixels) pixels[row * columns + column] = VOID_PACKED
             continue
           }
@@ -1542,6 +1559,7 @@ export function columnProfile(
     // averaged over the row the same way the cells are, or the trace and the
     // picture it is read against disagree
     const at = base + row * step
+    if (at < 0) continue
     if ((at | 0) >= limit) {
       filled = row
       break
@@ -1670,7 +1688,7 @@ export function buildWaveShape(
     const line = row * columns
     for (let index = 0; index < columns; index += 1) {
       const at = starts[index] + row * steps[index]
-      if ((at | 0) >= limits[index]) {
+      if (at < 0 || (at | 0) >= limits[index]) {
         voided[line + index] = 1
         continue
       }

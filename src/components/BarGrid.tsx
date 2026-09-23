@@ -85,6 +85,9 @@ type BarGridProps = {
   lane: number | 'all'
   divisions: number
   subdivisions: number
+  // start every column half a division early, so the beats sit between the
+  // guides rather than on them
+  centred: boolean
   colormap: number
   cursorMode: GlobalCompositeOperation
   waveStyle: WaveStyle
@@ -240,7 +243,7 @@ function planPanels(
 // every section contributes its own slices, so the picture is continuous
 // across tempo changes rather than one section at a time. The whole song is
 // sliced; the window is a stretch of these columns
-function sliceBars(spans: SectionSpan[], slice: number | 'auto', width: number): Bar[] {
+function sliceBars(spans: SectionSpan[], slice: number | 'auto', width: number, early: number): Bar[] {
   return spans
     .flatMap((span) => {
       // the automatic slice is settled on the whole song, not on the window:
@@ -251,7 +254,7 @@ function sliceBars(spans: SectionSpan[], slice: number | 'auto', width: number):
         slice === 'auto'
           ? autoSliceBeats(span, Math.max(120, plotWidth(width) * (span.end - span.start)))
           : slice
-      return collectBars(span, beats)
+      return collectBars(span, beats, early)
     })
     .sort((left, right) => left.start - right.start)
 }
@@ -349,6 +352,7 @@ export default function BarGrid({
   lane,
   divisions,
   subdivisions,
+  centred,
   colormap,
   cursorMode,
   waveStyle,
@@ -380,9 +384,10 @@ export default function BarGrid({
   // kept by identity: the window below is re-read from time whenever the
   // columns are cut afresh, and cutting them on every render would do that
   // every frame
+  const early = centred ? 0.5 / divisions : 0
   const songBars = useMemo(
-    () => measure('BarGrid bars', () => sliceBars(spans, slice, width)),
-    [spans, slice, width],
+    () => measure('BarGrid bars', () => sliceBars(spans, slice, width, early)),
+    [spans, slice, width, early],
   )
   // The window lives here in columns, and the time range the app holds is its
   // shadow: a change of the range from elsewhere, a drag on the strip say, is

@@ -21,6 +21,7 @@ import GridOnIcon from '@mui/icons-material/GridOn'
 import SpeedIcon from '@mui/icons-material/Speed'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
+import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import BeatLights from './BeatLights'
 import Gallop from './Gallop'
@@ -58,6 +59,8 @@ type TopBarProps = {
   onDivisionsChange: (divisions: number) => void
   subdivisions: number
   onSubdivisionsChange: (subdivisions: number) => void
+  centred: boolean
+  onCentredChange: (centred: boolean) => void
   colormap: number
   onColormapChange: (colormap: number) => void
   cursorMode: GlobalCompositeOperation
@@ -182,6 +185,8 @@ export default function TopBar({
   onDivisionsChange,
   subdivisions,
   onSubdivisionsChange,
+  centred,
+  onCentredChange,
   colormap,
   onColormapChange,
   cursorMode,
@@ -340,6 +345,20 @@ export default function TopBar({
           SUBDIVISION_STEPS.map((entry) => ({ value: entry, label: entry === 1 ? 'no sub' : `sub ${entry}` })),
           onSubdivisionsChange,
         )}
+
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={centred ? 'centred' : null}
+          onChange={() => onCentredChange(!centred)}
+          sx={PILL}
+        >
+          <ToggleButton value="centred" aria-label="Beats between the guides" sx={selected('secondary')}>
+            <Tooltip title="Start each column half a division early, so the beats sit between the guides">
+              <span>{segment('Between', <VerticalAlignCenterIcon fontSize="small" />)}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
 
         {lane === 0 || lane === 'all'
           ? picker<number>(

@@ -153,6 +153,7 @@ export default function App() {
   }
   const [divisions, setDivisions] = useState(4)
   const [subdivisions, setSubdivisions] = useState(4)
+  const [centred, setCentred] = useState(false)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // whether the next fit reads the envelope through the amplitude curve
@@ -378,6 +379,8 @@ export default function App() {
         onDivisionsChange={setDivisions}
         subdivisions={subdivisions}
         onSubdivisionsChange={setSubdivisions}
+        centred={centred}
+        onCentredChange={setCentred}
         colormap={colormap}
         onColormapChange={setColormap}
         cursorMode={cursorMode}
@@ -586,6 +589,7 @@ export default function App() {
                     lane={lane}
                     divisions={divisions}
                     subdivisions={subdivisions}
+                    centred={centred}
                     colormap={colormap}
                     cursorMode={cursorMode}
                     waveStyle={waveStyle}

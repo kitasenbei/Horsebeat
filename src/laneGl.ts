@@ -91,7 +91,8 @@ void main() {
   float row = floor((1.0 - vUv.y) * uRows);
   float at = bar.r + row * step;
   // read before the clamp: a row past the last frame is empty, not the last frame
-  bool empty = int(at) >= limit;
+  // before the song, or past the section: nothing of the column's own
+  bool empty = at < 0.0 || int(at) >= limit;
   int from = min(int(at), uFrames - 1);
   int until = max(min(int(at + step), limit), from + 1);
 

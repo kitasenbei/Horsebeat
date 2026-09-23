@@ -5,10 +5,10 @@
 export type CurvePoint = {
   x: number
   y: number
-  // how far the point's pull reaches into the segments either side, one by
-  // default. At nought the curve arrives flat and leaves flat, and the
-  // neighbours' slopes take no account of it, so moving the point bends only
-  // the two segments that touch it
+  // how wide the point's bump is, as a share of the way to each neighbour, one
+  // by default. Narrower than one, the curve holds the straight line between
+  // the neighbours until that close to the point, then rises to it and falls
+  // back, so the point is a peak that leaves the rest of the curve alone
   spread?: number
 }
 
@@ -25,25 +25,46 @@ export const DEFAULT_CURVE: Curve = {
 
 export const MIN_GAP = 0.02
 export const MAX_POINTS = 10
+export const MIN_SPREAD = 0.02
 
-const tangentCache = new WeakMap<Curve, number[]>()
+type Knots = {
+  points: CurvePoint[]
+  slopes: number[]
+}
+
+const knotCache = new WeakMap<Curve, Knots>()
 
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value))
 }
 
-export const MIN_SPREAD = 0
-
 export function sortPoints(points: CurvePoint[]): CurvePoint[] {
   return [...points].sort((left, right) => left.x - right.x)
 }
 
-function tangents(curve: Curve): number[] {
-  const cached = tangentCache.get(curve)
-  if (cached) return cached
+// The points the spline runs through: every point of the curve, and for an
+// inner point narrower than full, a knot each side on the chord between its
+// neighbours where its bump begins and ends
+function expand(points: CurvePoint[]): CurvePoint[] {
+  const knots: CurvePoint[] = []
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index]
+    const spread = point.spread ?? 1
+    if (index === 0 || index === points.length - 1 || spread >= 1) {
+      knots.push(point)
+      continue
+    }
+    const before = points[index - 1]
+    const after = points[index + 1]
+    const chord = (x: number) => before.y + ((after.y - before.y) * (x - before.x)) / (after.x - before.x)
+    const left = point.x - spread * (point.x - before.x)
+    const right = point.x + spread * (after.x - point.x)
+    knots.push({ x: left, y: chord(left) }, point, { x: right, y: chord(right) })
+  }
+  return sortPoints(knots)
+}
 
-  const points = curve.points
-  const spreads = points.map((point) => point.spread ?? 1)
+function tangents(points: CurvePoint[]): number[] {
   const slopes: number[] = []
   for (let index = 0; index < points.length - 1; index += 1) {
     const run = points[index + 1].x - points[index].x
@@ -52,19 +73,10 @@ function tangents(curve: Curve): number[] {
 
   const result: number[] = []
   for (let index = 0; index < points.length; index += 1) {
-    let tangent: number
-    if (index === 0) tangent = (slopes[0] ?? 0) * (spreads[1] ?? 1)
-    else if (index === points.length - 1) tangent = (slopes[slopes.length - 1] ?? 0) * spreads[index - 1]
-    else if (slopes[index - 1] * slopes[index] <= 0) tangent = 0
-    else {
-      // a slope toward a narrow neighbour counts for less, so that neighbour
-      // is free to move without turning this point's tangent
-      const before = spreads[index - 1]
-      const after = spreads[index + 1]
-      const weight = before + after
-      tangent = weight > 0 ? (slopes[index - 1] * before + slopes[index] * after) / weight : 0
-    }
-    result.push(tangent * spreads[index])
+    if (index === 0) result.push(slopes[0] ?? 0)
+    else if (index === points.length - 1) result.push(slopes[slopes.length - 1] ?? 0)
+    else if (slopes[index - 1] * slopes[index] <= 0) result.push(0)
+    else result.push((slopes[index - 1] + slopes[index]) / 2)
   }
 
   for (let index = 0; index < slopes.length; index += 1) {
@@ -82,13 +94,21 @@ function tangents(curve: Curve): number[] {
     }
   }
 
-  tangentCache.set(curve, result)
   return result
 }
 
+function knotsOf(curve: Curve): Knots {
+  const cached = knotCache.get(curve)
+  if (cached) return cached
+  const points = expand(curve.points)
+  const knots = { points, slopes: tangents(points) }
+  knotCache.set(curve, knots)
+  return knots
+}
+
 export function applyCurve(value: number, curve: Curve): number {
-  const points = curve.points
-  if (points.length < 2) return clamp01(value)
+  if (curve.points.length < 2) return clamp01(value)
+  const { points, slopes } = knotsOf(curve)
 
   const x = clamp01(value)
   if (x <= points[0].x) return clamp01(points[0].y)
@@ -102,7 +122,6 @@ export function applyCurve(value: number, curve: Curve): number {
   const run = right.x - left.x
   if (run === 0) return clamp01(right.y)
 
-  const slopes = tangents(curve)
   const t = (x - left.x) / run
   const t2 = t * t
   const t3 = t2 * t

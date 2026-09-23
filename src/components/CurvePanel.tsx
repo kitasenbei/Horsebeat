@@ -72,8 +72,6 @@ const CHART_HEIGHT = 170
 const PANEL_WIDTH = 280
 const GRAB = 12
 const POINT_RADIUS = 5
-// the halo round a point grows with its spread, up to this far out
-const HALO = 10
 // pixels of shift drag from no spread to full
 const SPREAD_DRAG = 120
 // the x axis is marked every twenty decibels, the y axis every quarter
@@ -171,17 +169,10 @@ export default function CurvePanel({
     }
     context.stroke()
 
+    context.fillStyle = theme.palette.primary.main
     for (const point of curve.points) {
-      const x = point.x * width
-      const y = height - point.y * height
-      context.fillStyle = theme.palette.primary.main
-      context.globalAlpha = 0.25
       context.beginPath()
-      context.arc(x, y, POINT_RADIUS + (point.spread ?? 1) * HALO, 0, Math.PI * 2)
-      context.fill()
-      context.globalAlpha = 1
-      context.beginPath()
-      context.arc(x, y, POINT_RADIUS, 0, Math.PI * 2)
+      context.arc(point.x * width, height - point.y * height, POINT_RADIUS, 0, Math.PI * 2)
       context.fill()
     }
   }, false, `${signature}|${levels?.length ?? 0}`)
@@ -256,7 +247,8 @@ export default function CurvePanel({
     const drag = dragRef.current
     if (!drag) return
     measure('drag CurvePanel point', () => {
-      // with shift held the sideways motion is the point's spread, not its place
+      // with shift held the sideways motion is the width of the point's bump,
+      // not its place
       if (event.shiftKey) {
         spreadTo(drag.index, (event.clientX - drag.lastX) / SPREAD_DRAG)
       } else {

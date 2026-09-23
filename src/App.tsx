@@ -640,7 +640,9 @@ export default function App() {
             <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
               <VerticalWaveform
                 samples={samples}
-                envelope={levels}
+                // the falling view reads the envelope as it is, a width for an
+                // amplitude, where the compiled view reads it in decibels
+                envelope={envelope}
                 sections={sections}
                 position={position}
                 positionRef={positionRef}

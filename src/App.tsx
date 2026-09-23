@@ -33,7 +33,7 @@ import {
   computeLoudness,
   computeEnvelope,
   computeOnsets,
-  computeTone,
+  computeSpectra,
   levelOf,
   levelsOf,
   computePeaks,
@@ -99,6 +99,7 @@ export default function App() {
   const [loudness, setLoudness] = useState<Float32Array | null>(null)
   const [bands, setBands] = useState<Float32Array | null>(null)
   const [tone, setTone] = useState<Float32Array | null>(null)
+  const [noise, setNoise] = useState<Float32Array | null>(null)
   // what is drawn: the amplitudes as levels in decibels, the scale the curve is
   // on and the loudness lane already uses. The fitting reads the envelope as it is
   const levels = useMemo(() => (envelope ? levelsOf(envelope) : null), [envelope])
@@ -335,7 +336,9 @@ export default function App() {
       setOnsets(computeOnsets(mono))
       setLoudness(computeLoudness(mono))
       setBands(computeBands(mono, buffer.sampleRate))
-      setTone(computeTone(mono, buffer.sampleRate))
+      const spectra = computeSpectra(mono, buffer.sampleRate)
+      setTone(spectra.tone)
+      setNoise(spectra.noise)
       setSampleRate(buffer.sampleRate)
       setRange(beatmap ? WHOLE_RANGE : INITIAL_RANGE)
       setDoc((current) => ({
@@ -579,6 +582,7 @@ export default function App() {
                     onsets={onsets}
                     bands={bandLevels}
                     tone={tone}
+                    noise={noise}
                     sections={sections}
                     duration={duration}
                     position={position}

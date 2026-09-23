@@ -360,7 +360,7 @@ export default function TopBar({
           </ToggleButton>
         </ToggleButtonGroup>
 
-        {lane === 0 || lane === 4 || lane === 'all'
+        {lane === 0 || lane === 4 || lane === 5 || lane === 'all'
           ? picker<number>(
               'Colours',
               colormap,

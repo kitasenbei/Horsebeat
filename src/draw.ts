@@ -1042,7 +1042,7 @@ function filledFrames(bar: Bar, start: number, step: number, rows: number): numb
 }
 
 export const BLOCK_GAP = 8
-const BLOCK_WEIGHTS = [0.3, 0.16, 0.16, 0.38, 0.3]
+const BLOCK_WEIGHTS = [0.3, 0.16, 0.16, 0.38, 0.3, 0.3]
 export const BAND_ORDER = [0, 1, 2]
 
 export type BarSources = {
@@ -1051,20 +1051,24 @@ export type BarSources = {
   onsets: Float32Array | null
   bands: Float32Array | null
   tone: Float32Array | null
+  noise: Float32Array | null
 }
 
-export const BLOCK_LABELS = ['Wave', 'Loud', 'Hits', 'Band', 'Tone']
-export const ALL_BLOCKS = [0, 1, 2, 3, 4]
+export const BLOCK_LABELS = ['Wave', 'Loud', 'Hits', 'Band', 'Tone', 'Noise']
+export const ALL_BLOCKS = [0, 1, 2, 3, 4, 5]
 
 // what a block reads: its source, and how many values a frame of it holds
 export function blockSource(sources: BarSources, block: number): { source: Float32Array | null; stride: number } {
   if (block === 3) return { source: sources.bands, stride: 3 }
-  return { source: [sources.envelope, sources.loudness, sources.onsets, null, sources.tone][block] ?? null, stride: 1 }
+  return {
+    source: [sources.envelope, sources.loudness, sources.onsets, null, sources.tone, sources.noise][block] ?? null,
+    stride: 1,
+  }
 }
 
 // the blocks whose source is a level a width can say: the others stay colour
 export function blockIsLevel(block: number): boolean {
-  return block === 0 || block === 1 || block === 4
+  return block === 0 || block === 1 || block === 4 || block === 5
 }
 
 // the chosen blocks share the height in proportion to their weights, so one
@@ -1193,7 +1197,7 @@ function bandLut(curve: Curve, rgb: [number, number, number]): Uint32Array {
 // paint and a shape its width.
 export function laneLutBytes(block: number, panel: number, curve: Curve, colormap: number): Uint8Array {
   const color =
-    block === 0 || block === 4
+    block === 0 || block === 4 || block === 5
       ? (value: number) => waveRgb(value, colormap)
       : block === 1
         ? levelRgb
@@ -1549,7 +1553,7 @@ export function renderBarLayers(
     const last = frames - 1
 
     for (let panel = 0; panel < panels; panel += 1) {
-      const lut = block === 3 ? luts[3 + panel] : block === 4 ? luts[6] : luts[block]
+      const lut = block === 3 ? luts[3 + panel] : block >= 4 ? luts[6] : luts[block]
       const band = block === 3 ? BAND_ORDER[panel] : 0
       const sums = prefixSums(source, stride, band)
       const offset = panel * bars.length

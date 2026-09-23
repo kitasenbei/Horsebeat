@@ -263,15 +263,25 @@ export function computeEnvelope(samples: Float32Array, sampleRate: number): Floa
   return envelope
 }
 
-// The tone of each moment: the spectral centre of a short window, the
-// frequency the energy balances about, in hertz. Placed on a log scale from
-// the low end of the bass to the top of the presence range, since an octave
-// is the same step wherever it lies. A frame is a stretch of samples like an
-// onset frame, since a spectrum wants a window of some length
+// Two readings of each moment's spectrum, from one transform of a short
+// window. The tone is the spectral centre, the frequency the energy balances
+// about, in hertz, placed on a log scale from the low end of the bass to the
+// top of the presence range, since an octave is the same step wherever it
+// lies. The noise is the spectral flatness, the geometric over the arithmetic
+// mean of the spectrum: near one for hiss and a snare, near nought for a held
+// note, whatever the loudness or the pitch. It is placed on a decibel scale
+// like the levels are, since music lives in its lower decades. A frame is a
+// stretch of samples like an onset frame, since a spectrum wants a window
 const TONE_HOP = 512
 const TONE_WINDOW = 2048
 const TONE_LOW_HZ = 40
 const TONE_HIGH_HZ = 8000
+const NOISE_FLOOR_DB = -60
+
+export type Spectra = {
+  tone: Float32Array
+  noise: Float32Array
+}
 
 // an in-place radix two transform of a power of two length
 function fft(real: Float32Array, imag: Float32Array) {
@@ -313,9 +323,10 @@ function fft(real: Float32Array, imag: Float32Array) {
   }
 }
 
-export function computeTone(samples: Float32Array, sampleRate: number): Float32Array {
+export function computeSpectra(samples: Float32Array, sampleRate: number): Spectra {
   const frames = Math.max(1, Math.floor(samples.length / TONE_HOP))
   const tone = new Float32Array(frames)
+  const noise = new Float32Array(frames)
   const real = new Float32Array(TONE_WINDOW)
   const imag = new Float32Array(TONE_WINDOW)
   const window = new Float32Array(TONE_WINDOW)
@@ -337,15 +348,20 @@ export function computeTone(samples: Float32Array, sampleRate: number): Float32A
 
     let weighted = 0
     let total = 0
+    let logs = 0
     for (let bin = 1; bin < bins; bin += 1) {
       const magnitude = Math.sqrt(real[bin] * real[bin] + imag[bin] * imag[bin])
       weighted += magnitude * bin * binHz
       total += magnitude
+      logs += Math.log(magnitude + 1e-9)
     }
-    // a near silent frame has no tone to speak of and reads as the floor
+    // a near silent frame has no tone or texture to speak of and reads as the floor
     if (total < 1e-3) continue
     tone[frame] = Math.min(1, Math.max(0, (Math.log2(weighted / total) - low) / span))
+    const flatness = Math.exp(logs / (bins - 1)) / (total / (bins - 1))
+    const db = 10 * Math.log10(Math.max(1e-9, flatness))
+    noise[frame] = Math.min(1, Math.max(0, (db - NOISE_FLOOR_DB) / -NOISE_FLOOR_DB))
   }
 
-  return tone
+  return { tone, noise }
 }

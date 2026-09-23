@@ -75,6 +75,7 @@ type BarGridProps = {
   onsets: Float32Array | null
   bands: Float32Array | null
   tone: Float32Array | null
+  noise: Float32Array | null
   sections: Section[]
   duration: number
   position: number
@@ -359,6 +360,7 @@ export default function BarGrid({
   onsets,
   bands,
   tone,
+  noise,
   sections,
   duration,
   position,
@@ -450,7 +452,7 @@ export default function BarGrid({
     apply(published)
   }
 
-  const sources = { envelope, loudness, onsets, bands, tone }
+  const sources = { envelope, loudness, onsets, bands, tone, noise }
   // The projections are read over every bar of the song, whatever the window
   // shows: the typical bar is the song's, and the window only decides which
   // columns are on screen. They are kept apart from the picture so a pan or a
@@ -639,6 +641,7 @@ export default function BarGrid({
       onsets?.length ?? 0,
       bands?.length ?? 0,
       tone?.length ?? 0,
+      noise?.length ?? 0,
       blocks.join(','),
       colormap,
       waveStyle,
@@ -655,6 +658,7 @@ export default function BarGrid({
       onsets?.length ?? 0,
       bands?.length ?? 0,
       tone?.length ?? 0,
+      noise?.length ?? 0,
       blocks.join(','),
       curveSignature(curve),
     ].join('|')
@@ -675,7 +679,7 @@ export default function BarGrid({
           slice,
           blocks.join(','),
           curveKey,
-          [envelope, loudness, onsets, bands, tone].map((source) => (source ? sourceId(source) : 0)).join(','),
+          [envelope, loudness, onsets, bands, tone, noise].map((source) => (source ? sourceId(source) : 0)).join(','),
         ].join('|')
         const running = runningRef.current
         if (running.generation !== generation) {

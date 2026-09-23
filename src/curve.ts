@@ -202,3 +202,64 @@ export const CURVE_PRESETS = {
     ],
   },
 } satisfies Record<string, Curve>
+
+// the level a given share of the track sits below, read off sorted levels
+function quantile(sorted: Float32Array, share: number): number {
+  if (sorted.length === 0) return share
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(share * (sorted.length - 1))))]
+}
+
+// the points pushed apart to the least gap the editor keeps, so a curve built
+// from a track whose levels crowd together is still one the editor can hold
+function spaced(points: CurvePoint[]): CurvePoint[] {
+  const out = points.map((point) => ({ ...point }))
+  for (let index = 1; index < out.length; index += 1) {
+    out[index].x = Math.max(out[index].x, out[index - 1].x + MIN_GAP)
+  }
+  for (let index = out.length - 2; index >= 0; index -= 1) {
+    out[index].x = Math.min(out[index].x, out[index + 1].x - MIN_GAP)
+  }
+  out[0].x = Math.max(0, out[0].x)
+  out[out.length - 1].x = Math.min(1, out[out.length - 1].x)
+  return out
+}
+
+// Curves shaped by where a track's levels lie, rather than by fixed places on
+// the axis: each is a reading of the same sorted levels the editor draws as
+// the mountain behind the curve.
+export function trackCurves(levels: Float32Array): Record<'stretch' | 'equalise' | 'median' | 'loudest', Curve> {
+  const sorted = Float32Array.from(levels).sort()
+  const at = (share: number) => quantile(sorted, share)
+
+  // the loudest and the quietest of the track to the two ends of the range
+  const stretch = spaced([
+    { x: 0, y: 0 },
+    { x: at(0.02), y: 0 },
+    { x: at(0.98), y: 1 },
+    { x: 1, y: 1 },
+  ])
+
+  // every share of the drawn range gets the same share of the track's time
+  const equalise = spaced([
+    { x: 0, y: 0 },
+    ...Array.from({ length: 8 }, (_, step) => ({ x: at((step + 1) / 9), y: (step + 1) / 9 })),
+    { x: 1, y: 1 },
+  ])
+
+  // the middle of the track's time drawn at the middle of the range
+  const median = spaced([
+    { x: 0, y: 0 },
+    { x: at(0.5), y: 0.5 },
+    { x: 1, y: 1 },
+  ])
+
+  // only the loudest tenth of the track drawn, the rest held at the floor
+  const loudest = spaced([
+    { x: 0, y: 0 },
+    { x: at(0.9), y: 0.04 },
+    { x: at(0.99), y: 1 },
+    { x: 1, y: 1 },
+  ])
+
+  return { stretch: { points: stretch }, equalise: { points: equalise }, median: { points: median }, loudest: { points: loudest } }
+}

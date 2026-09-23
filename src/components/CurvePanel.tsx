@@ -15,6 +15,10 @@ import BoltIcon from '@mui/icons-material/Bolt'
 import TonalityIcon from '@mui/icons-material/Tonality'
 import ContrastIcon from '@mui/icons-material/Contrast'
 import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule'
+import ExpandIcon from '@mui/icons-material/Expand'
+import EqualizerIcon from '@mui/icons-material/Equalizer'
+import BalanceIcon from '@mui/icons-material/Balance'
+import WhatshotIcon from '@mui/icons-material/Whatshot'
 import { useTheme } from '@mui/material/styles'
 import { useCanvas } from '../useCanvas'
 import { useRafCallback } from '../useRafCallback'
@@ -29,6 +33,7 @@ import {
   MIN_GAP,
   MIN_SPREAD,
   sortPoints,
+  trackCurves,
   type Curve,
 } from '../curve'
 
@@ -66,6 +71,14 @@ const PRESETS = [
   { curve: CURVE_PRESETS.flatten, title: 'Flatten', icon: <TonalityIcon fontSize="small" /> },
   { curve: CURVE_PRESETS.hard, title: 'Hard threshold', icon: <ContrastIcon fontSize="small" /> },
   { curve: CURVE_PRESETS.flat, title: 'Flat', icon: <HorizontalRuleIcon fontSize="small" /> },
+]
+
+// presets read off the track's own levels
+const TRACK_PRESETS: { key: keyof ReturnType<typeof trackCurves>; title: string; icon: React.ReactNode }[] = [
+  { key: 'stretch', title: 'Stretch the track across the range', icon: <ExpandIcon fontSize="small" /> },
+  { key: 'equalise', title: 'Give every level the same share', icon: <EqualizerIcon fontSize="small" /> },
+  { key: 'median', title: 'Put the median in the middle', icon: <BalanceIcon fontSize="small" /> },
+  { key: 'loudest', title: 'Loudest tenth only', icon: <WhatshotIcon fontSize="small" /> },
 ]
 
 const CHART_HEIGHT = 170
@@ -107,6 +120,7 @@ export default function CurvePanel({
   const applyCurveChange = useRafCallback(onCurveChange)
   const applySpot = useRafCallback(setSpot)
   const spread = useMemo(() => histogram(levels), [levels])
+  const fromTrack = useMemo(() => (levels ? trackCurves(levels) : null), [levels])
   const signature = curveSignature(curve)
 
   const canvasRef = useCanvas((context, width, height) => {
@@ -377,6 +391,27 @@ export default function CurvePanel({
             cursor: 'crosshair',
           }}
         />
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
+          {TRACK_PRESETS.map((preset) => {
+            const shaped = fromTrack?.[preset.key]
+            const active = shaped ? curveSignature(shaped) === signature : false
+            return (
+              <IconButton
+                key={preset.key}
+                size="small"
+                title={preset.title}
+                aria-label={preset.title}
+                aria-pressed={active}
+                disabled={!shaped}
+                color={active ? 'primary' : 'default'}
+                onClick={() => shaped && onCurveChange(shaped)}
+                sx={active ? { bgcolor: 'action.selected' } : undefined}
+              >
+                {preset.icon}
+              </IconButton>
+            )
+          })}
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
             {PRESETS.map((preset) => {

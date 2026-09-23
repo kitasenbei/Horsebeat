@@ -25,6 +25,7 @@ import {
   peakBetween,
   addContribution,
   barContribution,
+  emptyContribution,
   blockHeights,
   finishProjections,
   takeContribution,
@@ -694,7 +695,7 @@ export default function BarGrid({
           let held = running.blocks.get(block)
           if (!held || held.total.profile.length !== rows || held.moves >= RESUM_EVERY) {
             held = {
-              total: { profile: new Float64Array(rows), squares: new Float64Array(rows), counted: 0 },
+              total: emptyContribution(rows),
               members: new Map(),
               moves: 0,
             }
@@ -736,7 +737,7 @@ export default function BarGrid({
           }
 
           const { total } = held
-          const { shape, steady, both } = finishProjections(total.profile, total.squares, total.counted, rows)
+          const { shape, steady, both } = finishProjections(total.profile, total.squares, total.counts, rows)
           layers.push({ block, rows, top, height: blockHeight, profile: shape, steady, both })
           top += blockHeight + BLOCK_GAP
         })

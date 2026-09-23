@@ -1330,13 +1330,16 @@ function columnSteps(bars: Bar[], frames: number, rows: number) {
 
 // What one panel of bars adds to a block's projections: the curved value of
 // every row summed over the bars, the squares of the same for the spread, and
-// how many bars were counted. Additive across panels and across runs of bars,
-// so a song's projections are the sum of its sections' and a change to one
-// section costs that section alone.
+// how many bars gave that row anything. Counted row by row, because a
+// column's void rows, before its lead or past its section's end, give
+// nothing, and a row an absent column is counted in reads quieter than it is.
+// Additive across panels and across runs of bars, so a song's projections
+// are the sum of its sections' and a change to one section costs that
+// section alone.
 export type Contribution = {
   profile: Float64Array
   squares: Float64Array
-  counted: number
+  counts: Float64Array
 }
 
 export function barContribution(
@@ -1349,7 +1352,8 @@ export function barContribution(
 ): Contribution {
   const profile = new Float64Array(rows)
   const squares = new Float64Array(rows)
-  if (bars.length === 0 || rows <= 0) return { profile, squares, counted: 0 }
+  const counts = new Float64Array(rows)
+  if (bars.length === 0 || rows <= 0) return { profile, squares, counts }
 
   const frames = source.length / stride
   const last = frames - 1
@@ -1379,35 +1383,45 @@ export function barContribution(
       const curved = shaped[((value < 1 ? value : 1) * top255 + 0.5) | 0]
       profile[row] += curved
       squares[row] += curved * curved
+      counts[row] += 1
     }
   }
 
-  return { profile, squares, counted: bars.length }
+  return { profile, squares, counts }
 }
 
 export function addContribution(into: Contribution, part: Contribution) {
   for (let row = 0; row < into.profile.length; row += 1) {
     into.profile[row] += part.profile[row]
     into.squares[row] += part.squares[row]
+    into.counts[row] += part.counts[row]
   }
-  into.counted += part.counted
 }
 
 export function takeContribution(from: Contribution, part: Contribution) {
   for (let row = 0; row < from.profile.length; row += 1) {
     from.profile[row] -= part.profile[row]
     from.squares[row] -= part.squares[row]
+    from.counts[row] -= part.counts[row]
   }
-  from.counted -= part.counted
+}
+
+export function emptyContribution(rows: number): Contribution {
+  return { profile: new Float64Array(rows), squares: new Float64Array(rows), counts: new Float64Array(rows) }
 }
 
 // The three projection graphs from a block's summed contribution.
 export function finishProjections(
   profile: Float64Array,
   squares: Float64Array,
-  counted: number,
+  counts: Float64Array,
   rows: number,
 ) {
+  // each row as the mean of the bars that gave it anything, so a row some
+  // columns are void at is read from the rest rather than dragged down
+  const means = new Float64Array(rows)
+  for (let row = 0; row < rows; row += 1) means[row] = counts[row] > 0 ? profile[row] / counts[row] : 0
+
   // Read between its own quietest and loudest row rather than from nothing.
   // Music never falls silent between beats, so the quietest row still carries
   // most of what the loudest one does, and measuring from zero draws that
@@ -1415,14 +1429,14 @@ export function finishProjections(
   // projection is for is the difference between the rows.
   let least = Infinity
   let most = -Infinity
-  for (const value of profile) {
+  for (const value of means) {
     if (value < least) least = value
     if (value > most) most = value
   }
 
   const shape = new Float32Array(rows)
   if (most > least) {
-    for (let row = 0; row < rows; row += 1) shape[row] = (profile[row] - least) / (most - least)
+    for (let row = 0; row < rows; row += 1) shape[row] = (means[row] - least) / (most - least)
   }
 
   // How alike the bars are at each row, rather than how much they add up to.
@@ -1431,12 +1445,12 @@ export function finishProjections(
   // against the row's own average, because a loud row varies by more than a
   // quiet one without being any less steady.
   let summed = 0
-  for (const value of profile) summed += value
-  const floor = (summed / Math.max(1, rows * counted)) * STEADY_FLOOR
+  for (const value of means) summed += value
+  const floor = (summed / Math.max(1, rows)) * STEADY_FLOOR
   const spread = new Float64Array(rows)
   for (let row = 0; row < rows; row += 1) {
-    const mean = profile[row] / Math.max(1, counted)
-    const variance = Math.max(0, squares[row] / Math.max(1, counted) - mean * mean)
+    const mean = means[row]
+    const variance = Math.max(0, squares[row] / Math.max(1, counts[row]) - mean * mean)
     spread[row] = Math.sqrt(variance) / Math.max(mean, floor)
   }
 
@@ -1513,7 +1527,7 @@ export function renderBarLayers(
 
     const profile = new Float64Array(rows)
     const squares = new Float64Array(rows)
-    let counted = 0
+    const counts = new Float64Array(rows)
     const painted = paintWave || block !== 0
     const image = painted ? context.createImageData(columns, rows) : context.createImageData(1, 1)
     const pixels = painted ? new Uint32Array(image.data.buffer) : null
@@ -1527,7 +1541,6 @@ export function renderBarLayers(
       const band = block === 3 ? BAND_ORDER[panel] : 0
       const sums = prefixSums(source, stride, band)
       const offset = panel * bars.length
-      counted += bars.length
 
       // columns outside, rows inside: a column's rows are consecutive runs of
       // frames, so the two totals a cell reads sit next to the two the cell
@@ -1560,12 +1573,13 @@ export function renderBarLayers(
           const curved = shaped[level]
           profile[row] += curved
           squares[row] += curved * curved
+          counts[row] += 1
           if (pixels) pixels[row * columns + column] = lut[level]
         }
       }
     }
 
-    const { shape, steady, both } = finishProjections(profile, squares, counted, rows)
+    const { shape, steady, both } = finishProjections(profile, squares, counts, rows)
 
     layers.push({ block, image, rows, top, height: blockHeight, profile: shape, steady, both })
     top += blockHeight + BLOCK_GAP

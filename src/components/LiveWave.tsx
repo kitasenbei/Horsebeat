@@ -67,13 +67,24 @@ function traceAlpha(depth: number): number {
 const NEWEST = '#5aa8ff'
 const NEWEST_ALPHA = 0.9
 // how long a bar takes to roll into the past, in milliseconds
-const ROLL_MS = 260
+const ROLL_MS = 420
 
-// an ease out, quintic: a roll leaves the mark at once and spends most of
-// its time settling, so the new bar is where it is going almost as soon as
-// it arrives and the last of the way is smooth
+// a bounce out: the roll lands on its new shape, springs back a little,
+// lands again, and settles through two smaller bounces
 function eased(t: number): number {
-  return 1 - Math.pow(1 - t, 5)
+  const n1 = 7.5625
+  const d1 = 2.75
+  if (t < 1 / d1) return n1 * t * t
+  if (t < 2 / d1) {
+    const u = t - 1.5 / d1
+    return n1 * u * u + 0.75
+  }
+  if (t < 2.5 / d1) {
+    const u = t - 2.25 / d1
+    return n1 * u * u + 0.9375
+  }
+  const u = t - 2.625 / d1
+  return n1 * u * u + 0.984375
 }
 
 // The amplitude curve as a table of the same size the compiled view uses, so

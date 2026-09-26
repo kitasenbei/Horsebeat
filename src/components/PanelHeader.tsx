@@ -7,7 +7,7 @@ type PanelHeaderProps = {
   children?: ReactNode
 }
 
-// The strip a panel is named by: the title in small caps on the shell colour,
+// The strip a panel is named by: the title small and grey on the shell colour,
 // its actions on the right, the same height everywhere so the eye learns it
 // once and finds the next panel by it
 export const PANEL_HEADER_HEIGHT = 26

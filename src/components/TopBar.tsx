@@ -102,7 +102,7 @@ const PILL = {
   },
 }
 
-// A picker names itself: a caption in small caps sits over the value in the
+// A picker names itself: a small grey caption sits over the value in the
 // same well, so the field says what it is without growing wider. The toggles
 // beside it carry their own word
 const PICKER = {

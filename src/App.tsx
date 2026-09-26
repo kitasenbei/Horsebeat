@@ -176,6 +176,7 @@ export default function App() {
   // what the waveform structure strip lays over itself: bars, or beats
   const [structureScope, setStructureScope] = useState<StructureScope>('bar')
   const [structureDepth, setStructureDepth] = useState(8)
+  const [structureNormalised, setStructureNormalised] = useState(false)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // what the fit is doing, for the dialog that stands while it runs
@@ -733,6 +734,17 @@ export default function App() {
                     Beat
                   </ToggleButton>
                 </ToggleButtonGroup>
+                <Tooltip title="Scale each bar to its own loudest point, so bars are compared by shape alone">
+                  <ToggleButton
+                    value="normalise"
+                    selected={structureNormalised}
+                    onChange={() => setStructureNormalised(!structureNormalised)}
+                    aria-label="Normalise the traces"
+                    sx={{ height: 24, py: 0, px: 1, fontSize: 11, ml: 0.5 }}
+                  >
+                    Norm
+                  </ToggleButton>
+                </Tooltip>
               </PanelHeader>
               <Box sx={{ bgcolor: CANVAS }}>
                 <LiveWave
@@ -748,6 +760,7 @@ export default function App() {
                   scope={structureScope}
                   subdivisions={subdivisions}
                   depth={structureDepth}
+                  normalise={structureNormalised}
                 />
               </Box>
             </Box>

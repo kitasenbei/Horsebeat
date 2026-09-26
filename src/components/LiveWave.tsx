@@ -151,15 +151,16 @@ export default function LiveWave({
       // setting in beats, or the meter when the slice is left to the view,
       // ruled by the grid setting as the column is. A beat here is one cell
       // of that bar: the stretch between two of its grid lines, whatever the
-      // grid, with the same sub-lines inside it. Both start early by the
-      // stretch the columns do, half a cell, so a beat's onset sits mid-cell
-      // as it does in the columns; in beat mode that is half the stretch
+      // grid, with the same sub-lines inside it. The bar starts early by the
+      // stretch the columns do, half a cell, which moves its lines and its
+      // onsets together: the onsets stay on the lines. A cell runs from one
+      // line to the next, so the beat starts on its onset whatever the shift
       const meter = Math.min(MOST_BEATS, Math.max(1, span.section.meter))
       const column = slice === 'auto' ? meter : Math.max(1, slice)
       const cell = (span.beat * column) / Math.max(1, divisions)
       const cells = scope === 'bar' ? Math.max(1, divisions) : Math.max(1, subdivisions)
       const bar = scope === 'bar' ? span.beat * column : cell
-      const early = centred ? cell / 2 : 0
+      const early = centred && scope === 'bar' ? cell / 2 : 0
       const index = Math.floor((at - span.start + early) / bar)
       const start = span.start - early + index * bar
       const floor = height - EDGE

@@ -19,13 +19,13 @@ type ToolRailProps = {
 }
 
 const TOOLS: { tool: Tool; title: string; icon: React.ReactNode }[] = [
-  { tool: 'sections', title: 'Tempo sections', icon: <ViewListIcon fontSize="small" /> },
-  { tool: 'curve', title: 'Amplitude curve', icon: <ShowChartIcon fontSize="small" /> },
-  { tool: 'frames', title: 'Beat frames', icon: <GridOnIcon fontSize="small" /> },
-  ...(TRACING ? [{ tool: 'trace' as const, title: 'Trace', icon: <SpeedIcon fontSize="small" /> }] : []),
+  { tool: 'sections', title: 'Tempo sections', icon: <ViewListIcon fontSize="medium" /> },
+  { tool: 'curve', title: 'Amplitude curve', icon: <ShowChartIcon fontSize="medium" /> },
+  { tool: 'frames', title: 'Beat frames', icon: <GridOnIcon fontSize="medium" /> },
+  ...(TRACING ? [{ tool: 'trace' as const, title: 'Trace', icon: <SpeedIcon fontSize="medium" /> }] : []),
 ]
 
-export const RAIL_WIDTH = 40
+export const RAIL_WIDTH = 52
 
 export default function ToolRail({ tool, onToolChange }: ToolRailProps) {
   return (
@@ -36,8 +36,8 @@ export default function ToolRail({ tool, onToolChange }: ToolRailProps) {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 0.5,
-        py: 0.5,
+        gap: 0.75,
+        py: 0.75,
         bgcolor: 'background.paper',
         borderRadius: 1.5,
       }}
@@ -49,7 +49,7 @@ export default function ToolRail({ tool, onToolChange }: ToolRailProps) {
             selected={tool === entry.tool}
             onChange={() => onToolChange(tool === entry.tool ? null : entry.tool)}
             aria-label={entry.title}
-            sx={{ width: 32, height: 32, p: 0 }}
+            sx={{ width: 44, height: 44, p: 0 }}
           >
             {entry.icon}
           </ToggleButton>

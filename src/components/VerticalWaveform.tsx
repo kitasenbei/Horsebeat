@@ -15,6 +15,7 @@ import { DEFAULT_CURVE } from '../curve'
 import type { Section } from '../timing'
 import { GRID_PURPLE } from '../theme'
 import { useLiveSectionsValue } from '../liveSections'
+import { clampFall, FALL_SETTLE_MS, secondsOf, useLiveFallEdit } from '../liveFall'
 import { BLOCK_HEIGHT, LIVE_COLOR } from './SectionBlocks'
 
 type VerticalWaveformProps = {
@@ -25,11 +26,11 @@ type VerticalWaveformProps = {
   positionRef: RefObject<number>
   playing: boolean
   duration: number
-  seconds?: number
+  // how close the view stands, as the app last heard it; the wheel turns it
+  // through the live store and the app hears once the wheel is still
+  fallSpeed: number
+  onFallSpeedChange: (fallSpeed: number) => void
   onSeek: (position: number) => void
-  // the wheel over the view changes how many seconds it shows, the same knob
-  // the pill in its header turns: a tick is passed up as a share of one turn
-  onZoom?: (turns: number) => void
 }
 
 export default function VerticalWaveform({
@@ -40,13 +41,20 @@ export default function VerticalWaveform({
   positionRef,
   playing,
   duration,
-  seconds = 2,
+  fallSpeed,
+  onFallSpeedChange,
   onSeek,
-  onZoom,
 }: VerticalWaveformProps) {
   const sections = useLiveSectionsValue(givenSections)
+  const [live, editFall, settleFall] = useLiveFallEdit(fallSpeed, onFallSpeedChange)
   const theme = useTheme()
+  const seconds = secondsOf(live)
   const span = duration > 0 ? Math.min(1, seconds / duration) : 0
+  const settleTimer = useRef(0)
+  const fallRef = useRef({ live, editFall, settleFall })
+  useEffect(() => {
+    fallRef.current = { live, editFall, settleFall }
+  })
 
   // Dragging the picture drags the song: the audio falls towards the line, so
   // pulling it down by a share of the height moves the playhead forward by
@@ -75,11 +83,6 @@ export default function VerticalWaveform({
     dragRef.current = null
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
-
-  const zoomRef = useRef(onZoom)
-  useEffect(() => {
-    zoomRef.current = onZoom
-  })
 
   const canvasRef = useCanvas((context, full, height) => {
     if (!samples || !envelope || span <= 0) return
@@ -134,13 +137,19 @@ export default function VerticalWaveform({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    // a turn of the wheel is half a second of view, up for closer
     const onWheel = (event: WheelEvent) => {
-      if (!zoomRef.current) return
       event.preventDefault()
-      zoomRef.current(event.deltaY / 100)
+      const { live: held, editFall: edit, settleFall: settle } = fallRef.current
+      edit(clampFall(held - (event.deltaY / 100) * 0.5))
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = window.setTimeout(settle, FALL_SETTLE_MS)
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
-    return () => canvas.removeEventListener('wheel', onWheel)
+    return () => {
+      canvas.removeEventListener('wheel', onWheel)
+      window.clearTimeout(settleTimer.current)
+    }
   }, [canvasRef])
 
   return (

@@ -24,7 +24,6 @@ import SectionBlocks from './components/SectionBlocks'
 import RangeStrip from './components/RangeStrip'
 import VerticalWaveform from './components/VerticalWaveform'
 import LiveWave from './components/LiveWave'
-import RulerSlider from './components/RulerSlider'
 import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
@@ -32,6 +31,8 @@ import type { WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
 import ToolRail, { type Tool } from './components/ToolRail'
 import ViewPanel from './components/ViewPanel'
+import FallSpeed from './components/FallSpeed'
+import { FALL_RANGE } from './liveFall'
 import TracePanel from './components/TracePanel'
 import SectionTuner from './components/SectionTuner'
 import TimingPanel from './components/TimingPanel'
@@ -75,7 +76,6 @@ const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
 const WHOLE_RANGE: Range = { start: 0, end: 1 }
 // the column beside the rail, one width for every panel it shows
 const TOOL_WIDTH = 300
-const FALL_RANGE = 10.5
 type Doc = {
   markers: number[]
   sections: Section[]
@@ -727,19 +727,7 @@ export default function App() {
               }}
             >
               <PanelHeader title="Approach">
-                <Box sx={{ width: 132 }}>
-                  <RulerSlider
-                    value={fallSpeed}
-                    min={0.5}
-                    max={10}
-                    step={0.1}
-                    pixelsPerStep={6}
-                    majorEvery={10}
-                    format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
-                    fill
-                    onChange={setFallSpeed}
-                  />
-                </Box>
+                <FallSpeed fallSpeed={fallSpeed} onFallSpeedChange={setFallSpeed} />
               </PanelHeader>
               <Box sx={{ flex: 1, minHeight: 0, position: 'relative', bgcolor: CANVAS }}>
               <VerticalWaveform
@@ -752,10 +740,9 @@ export default function App() {
                 positionRef={positionRef}
                 playing={playing}
                 duration={duration}
-                seconds={FALL_RANGE - fallSpeed}
+                fallSpeed={fallSpeed}
+                onFallSpeedChange={setFallSpeed}
                 onSeek={seek}
-                // a turn of the wheel is half a second of view, up for closer
-                onZoom={(turns) => setFallSpeed((held) => Math.min(10, Math.max(0.5, held - turns * 0.5)))}
               />
               </Box>
             </Box>

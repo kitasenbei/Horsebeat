@@ -28,7 +28,7 @@ import LiveWave from './components/LiveWave'
 import ResolveBpm from './components/ResolveBpm'
 import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
-import type { WaveStyle } from './draw'
+import { COLORMAPS, type WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
 import ToolRail, { type Tool } from './components/ToolRail'
 import ViewPanel from './components/ViewPanel'
@@ -220,7 +220,7 @@ export default function App() {
       return blob ? URL.createObjectURL(blob) : null
     })
   }
-  const [colormap, setColormap] = useState(0)
+  const [colormap, setColormap] = useState(COLORMAPS.findIndex((map) => map.name === 'viridis'))
   const [fitting, setFitting] = useState(false)
   // what the fit is doing, for the dialog that stands while it runs
   const [fitNote, setFitNote] = useState('')

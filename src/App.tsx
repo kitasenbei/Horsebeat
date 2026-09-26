@@ -715,12 +715,13 @@ export default function App() {
                 <LiveWave
                   envelope={levels}
                   curve={curve}
-                  colormap={colormap}
                   sections={sections}
                   duration={duration}
                   position={position}
                   positionRef={positionRef}
                   playing={moving}
+                  centred={centred}
+                  divisions={divisions}
                 />
               </Box>
             </Box>

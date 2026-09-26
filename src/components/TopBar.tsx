@@ -10,15 +10,12 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import UndoIcon from '@mui/icons-material/Undo'
 import RedoIcon from '@mui/icons-material/Redo'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
-import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import { MINT_DIM, WELL } from '../theme'
 
 type TopBarProps = {
   onOpen: () => void
   compiled: boolean
   onCompiledChange: (compiled: boolean) => void
-  follow: boolean
-  onFollowChange: (follow: boolean) => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -26,7 +23,7 @@ type TopBarProps = {
 }
 
 // The bar holds what is reached for while a song plays and nothing else: the
-// file, history, which picture, and whether it follows. How a picture is
+// file, history and which picture. How a picture is
 // drawn and how a grid is fitted live in the panels beside the rail
 const BAR_HEIGHT = 32
 
@@ -73,8 +70,6 @@ export default function TopBar({
   onOpen,
   compiled,
   onCompiledChange,
-  follow,
-  onFollowChange,
   canUndo,
   canRedo,
   onUndo,
@@ -127,19 +122,6 @@ export default function TopBar({
           </ToggleButton>
         </ToggleButtonGroup>
 
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={follow ? 'follow' : null}
-          onChange={() => onFollowChange(!follow)}
-          sx={PILL}
-        >
-          <ToggleButton value="follow" aria-label="Follow the playhead" sx={SELECTED}>
-            <Tooltip title="Hold the playhead's column in place and move the window under it">
-              <span>{segment('Follow', <CenterFocusStrongIcon fontSize="small" />)}</span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
       </Toolbar>
     </AppBar>
   )

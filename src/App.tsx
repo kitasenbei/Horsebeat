@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
+import ToggleButton from '@mui/material/ToggleButton'
+import Typography from '@mui/material/Typography'
+import Dialog from '@mui/material/Dialog'
+import DialogContent from '@mui/material/DialogContent'
+import CircularProgress from '@mui/material/CircularProgress'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import Tooltip from '@mui/material/Tooltip'
@@ -406,8 +412,6 @@ export default function App() {
         onRedo={history.redo}
         compiled={barGrid}
         onCompiledChange={setBarGrid}
-        follow={follow}
-        onFollowChange={setFollow}
       />
       <Box
         component="main"
@@ -632,6 +636,18 @@ export default function App() {
                   }}
                 >
                   <PanelHeader title="Compiled view">
+                    <Tooltip title="Hold the playhead's column in place and move the window under it">
+                      <ToggleButton
+                        value="follow"
+                        selected={follow}
+                        onChange={() => setFollow(!follow)}
+                        aria-label="Follow the playhead"
+                        sx={{ height: 26, py: 0, px: 1, gap: 0.5, fontSize: 12 }}
+                      >
+                        <CenterFocusStrongIcon fontSize="small" />
+                        Follow
+                      </ToggleButton>
+                    </Tooltip>
                     <Tooltip title={fullscreen ? 'Leave full screen' : 'Show on the whole screen'}>
                       <IconButton
                         size="small"
@@ -872,6 +888,19 @@ export default function App() {
           </Box>
         </Box>
       </Box>
+      <Dialog open={loadingName !== null} maxWidth="xs">
+        <DialogContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2.5, px: 3 }}>
+          <CircularProgress size={22} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Loading
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: 320 }}>
+              {loadingName}
+            </Typography>
+          </Box>
+        </DialogContent>
+      </Dialog>
       <StatusBar
         fileName={file?.name ?? null}
         loadingName={loadingName}

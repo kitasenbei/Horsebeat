@@ -6,7 +6,7 @@ import { applyCurve, type Curve } from '../curve'
 import { useCanvas } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
 import { useLiveSectionsValue } from '../liveSections'
-import { MINT } from '../theme'
+import { MINT, MINT_DIM } from '../theme'
 
 type LiveWaveProps = {
   envelope: Float32Array | null
@@ -20,7 +20,13 @@ type LiveWaveProps = {
   // starts where the compiled view's columns do
   centred: boolean
   divisions: number
+  // the stretch laid over itself: a bar ruled by its beats, or one beat ruled
+  // by the sub-grid, with the cell the playhead is in lit
+  scope: StructureScope
+  subdivisions: number
 }
+
+export type StructureScope = 'bar' | 'beat'
 
 // An oscilloscope triggered on the bar. The last few bars of the envelope
 // are laid over one bar's width, the newest bright and the older fading, with
@@ -61,6 +67,8 @@ export default function LiveWave({
   playing,
   centred,
   divisions,
+  scope,
+  subdivisions,
 }: LiveWaveProps) {
   const sections = useLiveSectionsValue(givenSections)
   const theme = useTheme()
@@ -79,22 +87,32 @@ export default function LiveWave({
       const span = spans.find((item) => at >= item.start && at <= item.end) ?? spans[0]
       if (!span || span.beat <= 0) return
 
-      const beats = Math.min(MOST_BEATS, Math.max(1, span.section.meter))
-      const bar = span.beat * beats
-      // the bar the playhead is in, started early by half a division when the
-      // columns are, so a beat sits between the lines here as it does there
-      const early = centred ? bar / (2 * Math.max(1, divisions)) : 0
+      // the stretch and its cells: a bar in beats, or a beat in the sub-grid.
+      // Either is started early by half a cell when the columns are, so a
+      // beat sits between the lines here as it does there
+      const cells =
+        scope === 'bar'
+          ? Math.min(MOST_BEATS, Math.max(1, span.section.meter))
+          : Math.max(1, subdivisions)
+      const bar = scope === 'bar' ? span.beat * cells : span.beat
+      const early = centred ? bar / (2 * (scope === 'bar' ? Math.max(1, divisions) : cells)) : 0
       const index = Math.floor((at - span.start + early) / bar)
       const start = span.start - early + index * bar
       const floor = height - EDGE
       const reach = height - 2 * EDGE
 
-      // the beats ruled behind, the downbeat a little stronger
+      // the cell the playhead is in, lit
+      const phase = Math.min(1, Math.max(0, (at - start) / bar))
+      const cell = Math.min(cells - 1, Math.floor(phase * cells))
+      context.fillStyle = MINT_DIM
+      context.fillRect((cell / cells) * width, 0, width / cells, height)
+
+      // the cells ruled behind, the first line a little stronger
       context.lineWidth = 1
-      for (let beat = 0; beat <= beats; beat += 1) {
-        const x = Math.round((beat / beats) * width) + 0.5
+      for (let line = 0; line <= cells; line += 1) {
+        const x = Math.round((line / cells) * width) + 0.5
         context.strokeStyle = theme.palette.text.secondary
-        context.globalAlpha = beat % beats === 0 ? 0.5 : 0.25
+        context.globalAlpha = line % cells === 0 ? 0.5 : 0.25
         context.beginPath()
         context.moveTo(x, 0)
         context.lineTo(x, height)
@@ -130,8 +148,7 @@ export default function LiveWave({
       }
       context.globalAlpha = 1
 
-      // where the playhead stands in the bar
-      const phase = Math.min(1, Math.max(0, (at - start) / bar))
+      // where the playhead stands in the stretch
       const x = Math.round(phase * width) + 0.5
       context.strokeStyle = theme.palette.error.main
       context.lineWidth = 1.5
@@ -141,7 +158,7 @@ export default function LiveWave({
       context.stroke()
     },
     playing,
-    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}`,
+    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}|${scope}|${subdivisions}`,
   )
 
   return (
@@ -149,7 +166,7 @@ export default function LiveWave({
       component="canvas"
       ref={canvasRef}
       data-trace="LiveWave"
-      title="The last four bars laid over one another: stacked when the grid sits on the music, fanned when the tempo is out, slid off the lines when the offset is"
+      title={`The last four ${scope === 'bar' ? 'bars' : 'beats'} laid over one another: stacked when the grid sits on the music, fanned when the tempo is out, slid off the lines when the offset is`}
       sx={{ display: 'block', width: '100%', height: TALL, flex: '0 0 auto' }}
     />
   )

@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import Dialog from '@mui/material/Dialog'
 import DialogContent from '@mui/material/DialogContent'
@@ -31,6 +32,7 @@ import type { WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
 import ToolRail, { type Tool } from './components/ToolRail'
 import ViewPanel from './components/ViewPanel'
+import type { StructureScope } from './components/LiveWave'
 import FallSpeed from './components/FallSpeed'
 import { FALL_RANGE } from './liveFall'
 import TracePanel from './components/TracePanel'
@@ -171,6 +173,8 @@ export default function App() {
   const [divisions, setDivisions] = useState(4)
   const [subdivisions, setSubdivisions] = useState(4)
   const [centred, setCentred] = useState(true)
+  // what the waveform structure strip lays over itself: bars, or beats
+  const [structureScope, setStructureScope] = useState<StructureScope>('bar')
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // what the fit is doing, for the dialog that stands while it runs
@@ -710,7 +714,23 @@ export default function App() {
           </Box>
           <Box sx={{ flex: 1.6, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Box sx={{ bgcolor: 'background.paper', borderRadius: 1.5, overflow: 'hidden' }}>
-              <PanelHeader title="Waveform structure" />
+              <PanelHeader title="Waveform structure">
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={structureScope}
+                  onChange={(_, next: StructureScope | null) => next && setStructureScope(next)}
+                  aria-label="Stretch laid over itself"
+                  sx={{ height: 24, '& .MuiToggleButton-root': { py: 0, px: 1, fontSize: 11 } }}
+                >
+                  <ToggleButton value="bar" aria-label="Bars">
+                    Bar
+                  </ToggleButton>
+                  <ToggleButton value="beat" aria-label="Beats">
+                    Beat
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </PanelHeader>
               <Box sx={{ bgcolor: CANVAS }}>
                 <LiveWave
                   envelope={levels}
@@ -722,6 +742,8 @@ export default function App() {
                   playing={moving}
                   centred={centred}
                   divisions={divisions}
+                  scope={structureScope}
+                  subdivisions={subdivisions}
                 />
               </Box>
             </Box>

@@ -5,7 +5,6 @@ import InputBase from '@mui/material/InputBase'
 import Typography from '@mui/material/Typography'
 import VolumeOffIcon from '@mui/icons-material/VolumeOff'
 import VolumeUpIcon from '@mui/icons-material/VolumeUp'
-import { useRafCallback } from '../useRafCallback'
 import { MINT_DIM, WELL } from '../theme'
 
 type VolumeProps = {
@@ -13,6 +12,9 @@ type VolumeProps = {
   muted: boolean
   disabled: boolean
   onVolumeChange: (volume: number) => void
+  // the level as it is dragged, for the audio alone: the app hears once, at
+  // the end, through onVolumeChange
+  onVolumePreview?: (volume: number) => void
   onMutedChange: (muted: boolean) => void
 }
 
@@ -29,21 +31,33 @@ export default function Volume({
   muted,
   disabled,
   onVolumeChange,
+  onVolumePreview,
   onMutedChange,
 }: VolumeProps) {
   const [draft, setDraft] = useState<string | null>(null)
-  const level = muted ? 0 : volume
+  // the level mid-gesture, held here so a drag renders this pill and nothing
+  // else; null between gestures, when the app's own level is shown
+  const [live, setLive] = useState<number | null>(null)
+  const level = live ?? (muted ? 0 : volume)
   const percent = Math.round(level * 100)
   const dragRef = useRef(false)
   const trackRef = useRef<HTMLDivElement>(null)
-  const applyVolume = useRafCallback(onVolumeChange)
+  const settleTimer = useRef(0)
+  const clamp = (value: number) => Math.min(1, Math.max(0, value))
 
-  const apply = (value: number, live = false) => {
-    onMutedChange(false)
-    const next = Math.min(1, Math.max(0, value))
-    if (live) applyVolume(next)
-    else onVolumeChange(next)
+  // a step of a gesture: the audio hears at once, the pill shows it, the app
+  // waits for the gesture's end
+  const preview = (value: number) => {
+    const next = clamp(value)
+    setLive(next)
+    onVolumePreview?.(next)
   }
+  const settle = (value: number) => {
+    setLive(null)
+    onMutedChange(false)
+    onVolumeChange(clamp(value))
+  }
+  const apply = (value: number) => settle(value)
 
   const levelAt = (clientX: number) => {
     const track = trackRef.current
@@ -64,7 +78,10 @@ export default function Volume({
     const onWheel = (event: WheelEvent) => {
       if (disabled) return
       event.preventDefault()
-      apply(level - Math.sign(event.deltaY) * WHEEL_STEP)
+      const next = clamp(level - Math.sign(event.deltaY) * WHEEL_STEP)
+      preview(next)
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = window.setTimeout(() => settle(next), 160)
     }
     track.addEventListener('wheel', onWheel, { passive: false })
     return () => track.removeEventListener('wheel', onWheel)
@@ -103,18 +120,20 @@ export default function Volume({
           if (disabled || event.button !== 0 || draft !== null) return
           dragRef.current = true
           event.currentTarget.setPointerCapture(event.pointerId)
-          apply(levelAt(event.clientX), true)
+          preview(levelAt(event.clientX))
         }}
         onPointerMove={(event) => {
-          if (dragRef.current) apply(levelAt(event.clientX), true)
+          if (dragRef.current) preview(levelAt(event.clientX))
         }}
         onPointerUp={(event) => {
           dragRef.current = false
           event.currentTarget.releasePointerCapture(event.pointerId)
+          settle(levelAt(event.clientX))
         }}
         onPointerCancel={(event) => {
           dragRef.current = false
           event.currentTarget.releasePointerCapture(event.pointerId)
+          settle(level)
         }}
         sx={{
           position: 'relative',

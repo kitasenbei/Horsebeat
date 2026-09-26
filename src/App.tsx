@@ -193,6 +193,7 @@ export default function App() {
     reset,
     setVolume,
     setMuted,
+    previewVolume,
     setRate,
   } = useAudio(file)
 
@@ -831,6 +832,7 @@ export default function App() {
               muted={muted}
               disabled={!file}
               onVolumeChange={setVolume}
+              onVolumePreview={previewVolume}
               onMutedChange={setMuted}
             />
           }

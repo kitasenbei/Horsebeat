@@ -72,6 +72,16 @@ export function useAudio(file: File | null) {
     audio.playbackRate = rate
   }, [file, volume, muted, rate])
 
+  // the level while it is being dragged: straight onto the element, with no
+  // state and so no render of the app for every frame of the drag. The drag
+  // commits once through setVolume when it ends
+  const previewVolume = useCallback((next: number) => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.volume = Math.min(1, Math.max(0, next))
+    audio.muted = false
+  }, [])
+
   useEffect(() => {
     if (!playing) return
 
@@ -165,5 +175,6 @@ export function useAudio(file: File | null) {
     setVolume,
     setMuted,
     setRate,
+    previewVolume,
   }
 }

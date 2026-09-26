@@ -244,8 +244,7 @@ export default function TimingPanel({
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              border: 1,
-              borderColor: 'divider',
+              borderRadius: 1.5,
             }
           : {
               position: 'fixed',
@@ -449,11 +448,9 @@ export default function TimingPanel({
                           width: 72,
                           px: 1,
                           borderRadius: 0.75,
-                          border: 1,
                           bgcolor: WELL,
-                          borderColor: ACTION_COLOR,
                           color: ACTION_INK,
-                          '[data-live="true"] &': { borderColor: CARD_LIVE, color: LIVE_INK },
+                          '[data-live="true"] &': { color: LIVE_INK },
                           fontSize: (current) => current.typography.caption.fontSize,
                           '& input': { p: 0, textAlign: 'center' },
                         }}

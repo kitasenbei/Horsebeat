@@ -148,18 +148,18 @@ export default function LiveWave({
       if (!span || span.beat <= 0) return
 
       // the stretch and its cells: a bar ruled by the grid setting, as a
-      // column is, or a beat ruled by the sub-grid. Either is started early by
-      // the same stretch of time the columns are, half a division of a
-      // column, so a beat sits against the lines here exactly as it does
-      // there; a shift longer than the stretch wraps
+      // column is, or a beat ruled by the sub-grid. With the beats between
+      // the guides, each is started early by half of its own cell, the way a
+      // column starts half a division early: the lines move with the window,
+      // so the beat, or the sub-beat, stays on its line and the window's
+      // edges fall between them
       // a bar here is a column there: the slice setting in beats, or the
       // meter when the slice is left to the view
       const meter = Math.min(MOST_BEATS, Math.max(1, span.section.meter))
       const column = slice === 'auto' ? meter : Math.max(1, slice)
       const cells = scope === 'bar' ? Math.max(1, divisions) : Math.max(1, subdivisions)
       const bar = scope === 'bar' ? span.beat * column : span.beat
-      const shift = centred ? (span.beat * column) / (2 * Math.max(1, divisions)) : 0
-      const early = shift % bar
+      const early = centred ? bar / (2 * cells) : 0
       const index = Math.floor((at - span.start + early) / bar)
       const start = span.start - early + index * bar
       const floor = height - EDGE

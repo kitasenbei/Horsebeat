@@ -31,9 +31,8 @@ type LiveWaveProps = {
   // whether the traces are read between the quietest and loudest point any
   // of them reaches, so what differs between the bars fills the height
   normalise: boolean
-  // whether the picture eases from one bar to the next rather than cutting:
-  // the bar just finished turns from blue to mint, the oldest fades away,
-  // the new bar fades in, and the normalised range glides
+  // whether the traces morph from one bar's shapes to the next rather than
+  // cutting, and the normalised range glides with them
   motion: boolean
 }
 
@@ -70,16 +69,6 @@ const NEWEST_ALPHA = 0.9
 // how long a bar takes to roll into the past, in milliseconds
 const ROLL_MS = 260
 
-function channels(hex: string): [number, number, number] {
-  const value = Number.parseInt(hex.slice(1), 16)
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
-}
-const MINT_RGB = channels(MINT)
-const NEWEST_RGB = channels(NEWEST)
-function between(from: [number, number, number], to: [number, number, number], t: number): string {
-  const mix = (index: number) => Math.round(from[index] + (to[index] - from[index]) * t)
-  return `rgb(${mix(0)} ${mix(1)} ${mix(2)})`
-}
 // an ease out, quintic: a roll leaves the mark at once and spends most of
 // its time settling, so the new bar is where it is going almost as soon as
 // it arrives and the last of the way is smooth
@@ -245,21 +234,17 @@ export default function LiveWave({
       const t = motion ? eased(Math.min(1, (now - roll.at) / ROLL_MS)) : 1
 
       const alpha = traceAlpha(depth)
-      // one bar further back than the depth while rolling: the one on its
-      // way out, fading
       for (let back = depth; back >= 1; back -= 1) {
         const from = start - bar * back
         if (from + bar <= span.start) continue
-        if (back === depth) {
-          if (t < 1) gather(from, MINT, alpha * (1 - t), back)
-        } else if (back === 1) {
-          // the bar just finished, turning from blue to mint
-          gather(from, between(NEWEST_RGB, MINT_RGB, t), NEWEST_ALPHA + (alpha - NEWEST_ALPHA) * t, back)
-        } else gather(from, MINT, alpha, back)
+        // only the shapes move during a roll: every slot keeps its own colour
+        // and weight throughout, so the blue is always the bar the playhead
+        // is in and the mint always the ones before
+        if (back === depth) continue
+        gather(from, MINT, alpha, back)
       }
-      // the bar the playhead is in last, so it is drawn on top, in blue,
-      // arriving
-      gather(start, NEWEST, NEWEST_ALPHA * t, 0)
+      // the bar the playhead is in last, so it is drawn on top, in blue
+      gather(start, NEWEST, NEWEST_ALPHA, 0)
 
       // each slot remembers its settled shape, and while a roll lasts is
       // drawn part way between the shape it held before and the one it

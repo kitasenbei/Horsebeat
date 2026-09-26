@@ -131,8 +131,8 @@ export default function LiveWave({
         const x = Math.round(share * width) + 0.5
         const onCell = ((line % fine) + fine) % fine === 0
         const onBar = ((line % steps) + steps) % steps === 0
-        context.strokeStyle = theme.palette.text.secondary
-        context.globalAlpha = onBar ? 0.5 : onCell ? 0.25 : 0.12
+        context.strokeStyle = theme.palette.text.primary
+        context.globalAlpha = onBar ? 0.7 : onCell ? 0.42 : 0.2
         context.beginPath()
         context.moveTo(x, 0)
         context.lineTo(x, height)

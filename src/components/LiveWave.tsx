@@ -67,15 +67,12 @@ function traceAlpha(depth: number): number {
 const NEWEST = '#5aa8ff'
 const NEWEST_ALPHA = 0.9
 // how long a bar takes to roll into the past, in milliseconds
-const ROLL_MS = 420
+const ROLL_MS = 280
 
-// an elastic out: the roll overshoots its new shape and swings back through
-// it, each swing smaller than the last, before it comes to rest
+// an ease out, cubic: the roll leaves the mark at once and slows into its
+// new shape, never past it
 function eased(t: number): number {
-  if (t <= 0) return 0
-  if (t >= 1) return 1
-  const period = 0.4
-  return Math.pow(2, -10 * t) * Math.sin(((t * 10 - 0.75) * 2 * Math.PI) / (period * 10 / 4)) + 1
+  return 1 - Math.pow(1 - t, 3)
 }
 
 // The amplitude curve as a table of the same size the compiled view uses, so

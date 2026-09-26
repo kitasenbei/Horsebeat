@@ -53,6 +53,11 @@ const TRACE_WIDTH = 1.4
 function traceAlpha(depth: number): number {
   return Math.min(0.5, Math.max(0.03, 2.2 / depth))
 }
+// the bar the playhead is in, drawn in blue over the mint of the ones before
+// it and at full strength, so the newest trace can be told from the stack it
+// either joins or leaves
+const NEWEST = '#5aa8ff'
+const NEWEST_ALPHA = 0.9
 
 // The amplitude curve as a table of the same size the compiled view uses, so
 // a moment here is read through exactly the steps its pixels are painted
@@ -136,7 +141,7 @@ export default function LiveWave({
       context.save()
       context.globalCompositeOperation = 'lighter'
       const alpha = traceAlpha(depth)
-      for (let back = depth - 1; back >= 0; back -= 1) {
+      for (let back = depth - 1; back >= 1; back -= 1) {
         const from = start - bar * back
         // before the section began there is no bar to compare with
         if (from + bar <= span.start) continue
@@ -160,6 +165,32 @@ export default function LiveWave({
         context.stroke()
       }
       context.restore()
+
+      // the newest bar on top, in blue, blended like the rest
+      {
+        const from = start
+        context.save()
+        context.globalCompositeOperation = 'lighter'
+        context.strokeStyle = NEWEST
+        context.globalAlpha = NEWEST_ALPHA
+        context.lineWidth = TRACE_WIDTH
+        context.beginPath()
+        let drawn = false
+        for (let x = 0; x <= width; x += 1) {
+          const moment = from + (x / width) * bar
+          if (moment < span.start || moment < 0) continue
+          const frame = Math.min(frames - 1, Math.max(0, (moment * frames) | 0))
+          const value = envelope[frame]
+          const level = Number.isFinite(value) ? lut[((value < 1 ? Math.max(0, value) : 1) * (LEVELS - 1) + 0.5) | 0] : 0
+          const y = floor - level * reach
+          if (!drawn) {
+            context.moveTo(x, y)
+            drawn = true
+          } else context.lineTo(x, y)
+        }
+        context.stroke()
+        context.restore()
+      }
 
       // where the playhead stands in the stretch
       const x = Math.round(phase * width) + 0.5

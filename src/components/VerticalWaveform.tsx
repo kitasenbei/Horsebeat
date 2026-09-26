@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import {
@@ -27,6 +27,9 @@ type VerticalWaveformProps = {
   duration: number
   seconds?: number
   onSeek: (position: number) => void
+  // the wheel over the view changes how many seconds it shows, the same knob
+  // the pill in its header turns: a tick is passed up as a share of one turn
+  onZoom?: (turns: number) => void
 }
 
 export default function VerticalWaveform({
@@ -39,6 +42,7 @@ export default function VerticalWaveform({
   duration,
   seconds = 2,
   onSeek,
+  onZoom,
 }: VerticalWaveformProps) {
   const sections = useLiveSectionsValue(givenSections)
   const theme = useTheme()
@@ -71,6 +75,11 @@ export default function VerticalWaveform({
     dragRef.current = null
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
+
+  const zoomRef = useRef(onZoom)
+  useEffect(() => {
+    zoomRef.current = onZoom
+  })
 
   const canvasRef = useCanvas((context, full, height) => {
     if (!samples || !envelope || span <= 0) return
@@ -121,6 +130,18 @@ export default function VerticalWaveform({
     drawVerticalPlayhead(context, width, height, theme.palette.error.main)
     context.restore()
   }, playing, `${span}|${position}|${envelope?.length}|${sectionSignature(sections)}`)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onWheel = (event: WheelEvent) => {
+      if (!zoomRef.current) return
+      event.preventDefault()
+      zoomRef.current(event.deltaY / 100)
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+  }, [canvasRef])
 
   return (
     <Box

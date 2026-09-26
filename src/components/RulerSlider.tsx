@@ -29,7 +29,7 @@ type RulerSliderProps = {
 // and a drag across the middle scrolls it, so many steps are one gesture and
 // one step is one press. Dragging right raises the value, the way a slider
 // would
-const HEIGHT = 28
+const HEIGHT = 26
 
 export default function RulerSlider({
   value,

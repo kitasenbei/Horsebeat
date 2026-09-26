@@ -698,17 +698,22 @@ export default function App() {
               </>
             ) : null}
           </Box>
-          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <LiveWave
-              envelope={levels}
-              curve={curve}
-              colormap={colormap}
-              sections={sections}
-              duration={duration}
-              position={position}
-              positionRef={positionRef}
-              playing={playing}
-            />
+          <Box sx={{ flex: 1.6, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ bgcolor: 'background.paper', borderRadius: 1.5, overflow: 'hidden' }}>
+              <PanelHeader title="Waveform structure" />
+              <Box sx={{ bgcolor: CANVAS }}>
+                <LiveWave
+                  envelope={levels}
+                  curve={curve}
+                  colormap={colormap}
+                  sections={sections}
+                  duration={duration}
+                  position={position}
+                  positionRef={positionRef}
+                  playing={playing}
+                />
+              </Box>
+            </Box>
             <Box
               sx={{
                 flex: 1,
@@ -720,7 +725,21 @@ export default function App() {
                 overflow: 'hidden',
               }}
             >
-              <PanelHeader title="Approach" />
+              <PanelHeader title="Approach">
+                <Box sx={{ width: 132 }}>
+                  <RulerSlider
+                    value={fallSpeed}
+                    min={0.5}
+                    max={10}
+                    step={0.1}
+                    pixelsPerStep={6}
+                    majorEvery={10}
+                    format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
+                    fill
+                    onChange={setFallSpeed}
+                  />
+                </Box>
+              </PanelHeader>
               <Box sx={{ flex: 1, minHeight: 0, position: 'relative', bgcolor: CANVAS }}>
               <VerticalWaveform
                 samples={samples}
@@ -734,28 +753,9 @@ export default function App() {
                 duration={duration}
                 seconds={FALL_RANGE - fallSpeed}
                 onSeek={seek}
+                // a turn of the wheel is half a second of view, up for closer
+                onZoom={(turns) => setFallSpeed((held) => Math.min(10, Math.max(0.5, held - turns * 0.5)))}
               />
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: '50%',
-                  bottom: 8,
-                  width: '60%',
-                  transform: 'translateX(-50%)',
-                }}
-              >
-                <RulerSlider
-                  value={fallSpeed}
-                  min={0.5}
-                  max={10}
-                  step={0.1}
-                  pixelsPerStep={6}
-                  majorEvery={10}
-                  format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
-                  fill
-                  onChange={setFallSpeed}
-                />
-              </Box>
               </Box>
             </Box>
           </Box>

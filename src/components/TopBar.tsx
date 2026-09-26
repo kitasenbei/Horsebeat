@@ -15,9 +15,6 @@ import RedoIcon from '@mui/icons-material/Redo'
 import ViewHeadlineIcon from '@mui/icons-material/ViewHeadline'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import TuneIcon from '@mui/icons-material/Tune'
-import ShowChartIcon from '@mui/icons-material/ShowChart'
-import GridOnIcon from '@mui/icons-material/GridOn'
-import SpeedIcon from '@mui/icons-material/Speed'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter'
 import {
@@ -30,7 +27,6 @@ import {
   WAVE_STYLES,
   type WaveStyle,
 } from '../draw'
-import { TRACING } from '../trace'
 import { MINT_DIM, WELL } from '../theme'
 
 type TopBarProps = {
@@ -56,14 +52,8 @@ type TopBarProps = {
   onColormapChange: (colormap: number) => void
   cursorMode: GlobalCompositeOperation
   onCursorModeChange: (mode: GlobalCompositeOperation) => void
-  curveOpen: boolean
-  onCurveOpenChange: (open: boolean) => void
-  framesOpen: boolean
-  onFramesOpenChange: (open: boolean) => void
   waveStyle: WaveStyle
   onWaveStyleChange: (style: WaveStyle) => void
-  traceOpen: boolean
-  onTraceOpenChange: (open: boolean) => void
   follow: boolean
   onFollowChange: (follow: boolean) => void
   canUndo: boolean
@@ -245,14 +235,8 @@ export default function TopBar({
   onColormapChange,
   cursorMode,
   onCursorModeChange,
-  curveOpen,
-  onCurveOpenChange,
-  framesOpen,
-  onFramesOpenChange,
   waveStyle,
   onWaveStyleChange,
-  traceOpen,
-  onTraceOpenChange,
   follow,
   onFollowChange,
   canUndo,
@@ -410,33 +394,7 @@ export default function TopBar({
 
         <Box sx={{ width: 8 }} />
 
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={curveOpen ? 'curve' : null}
-          onChange={() => onCurveOpenChange(!curveOpen)}
-          sx={PILL}
-        >
-          <ToggleButton value="curve" aria-label="Amplitude curve" sx={selected('secondary')}>
-            <Tooltip title="Amplitude curve">
-              <span>{segment('Curve', <ShowChartIcon fontSize="small" />)}</span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
 
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={framesOpen ? 'frames' : null}
-          onChange={() => onFramesOpenChange(!framesOpen)}
-          sx={PILL}
-        >
-          <ToggleButton value="frames" aria-label="Beat frames" sx={selected('secondary')}>
-            <Tooltip title="Beat frames">
-              <span>{segment('Frames', <GridOnIcon fontSize="small" />)}</span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
 
         {picker<WaveStyle>(
           'Wave and loud lane style',
@@ -471,21 +429,6 @@ export default function TopBar({
         </ToggleButtonGroup>
 
 
-        {TRACING ? (
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={traceOpen ? 'trace' : null}
-            onChange={() => onTraceOpenChange(!traceOpen)}
-            sx={PILL}
-          >
-            <ToggleButton value="trace" aria-label="Trace panel" sx={selected('secondary')}>
-              <Tooltip title="What the app is running, a second at a time">
-                <span>{segment('Trace', <SpeedIcon fontSize="small" />)}</span>
-              </Tooltip>
-            </ToggleButton>
-          </ToggleButtonGroup>
-        ) : null}
 
       </Toolbar>
     </AppBar>

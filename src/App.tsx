@@ -23,7 +23,7 @@ import SectionBar from './components/SectionBar'
 import CurvePanel from './components/CurvePanel'
 import type { WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
-import FloatingWindow from './components/FloatingWindow'
+import ToolRail, { type Tool } from './components/ToolRail'
 import TracePanel from './components/TracePanel'
 import SectionTuner from './components/SectionTuner'
 import TimingPanel from './components/TimingPanel'
@@ -65,7 +65,8 @@ const INITIAL_RANGE: Range = { start: 0, end: 0.25 }
 // a beatmap arrives already timed, so it opens on the whole song: there is
 // nothing to drag into place, and the point is to see the timing it brought
 const WHOLE_RANGE: Range = { start: 0, end: 1 }
-const FRAMES_WIDTH = 420
+// the column beside the rail, one width for every panel it shows
+const TOOL_WIDTH = 300
 const FALL_RANGE = 10.5
 type Doc = {
   markers: number[]
@@ -142,10 +143,9 @@ export default function App() {
   const [slice, setSlice] = useState<number | 'auto'>(4)
   const [lane, setLane] = useState<number | 'all'>(0)
   const [cursorMode, setCursorMode] = useState<GlobalCompositeOperation>('difference')
-  const [curveOpen, setCurveOpen] = useState(false)
-  const [framesOpen, setFramesOpen] = useState(false)
+  // which panel stands beside the rail, none for the picture alone
+  const [tool, setTool] = useState<Tool | null>('sections')
   const [waveStyle, setWaveStyle] = useState<WaveStyle>('colour')
-  const [traceOpen, setTraceOpen] = useState(false)
   const [follow, setFollow] = useState(false)
   // the compiled view on the whole screen, through the browser's own full
   // screen: leaving it by the key the browser gives is seen here as well
@@ -424,46 +424,11 @@ export default function App() {
         onColormapChange={setColormap}
         cursorMode={cursorMode}
         onCursorModeChange={setCursorMode}
-        curveOpen={curveOpen}
-        onCurveOpenChange={setCurveOpen}
-        framesOpen={framesOpen}
-        onFramesOpenChange={setFramesOpen}
         waveStyle={waveStyle}
         onWaveStyleChange={setWaveStyle}
-        traceOpen={traceOpen}
-        onTraceOpenChange={setTraceOpen}
         follow={follow}
         onFollowChange={setFollow}
       />
-      {curveOpen ? (
-        <CurvePanel
-          curve={curve}
-          levels={levels}
-          onCurveChange={setCurve}
-          onClose={() => setCurveOpen(false)}
-        />
-      ) : null}
-      {framesOpen ? (
-        <FloatingWindow
-          title="Beat frames"
-          width={FRAMES_WIDTH}
-          left={320}
-          onClose={() => setFramesOpen(false)}
-        >
-          <BeatFrames
-            envelope={levels}
-            loudness={loudness}
-            onsets={onsets}
-            bands={bandLevels}
-            sections={sections}
-            duration={duration}
-            position={position}
-            positionRef={positionRef}
-            playing={playing}
-            onSectionsChange={setSections}
-          />
-        </FloatingWindow>
-      ) : null}
       <Box
         component="main"
         sx={{
@@ -477,17 +442,18 @@ export default function App() {
         }}
       >
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', gap: 1 }}>
+          <ToolRail tool={tool} onToolChange={setTool} />
           <Box
             sx={{
-              width: 260,
+              width: TOOL_WIDTH,
               flex: '0 0 auto',
-              display: 'flex',
+              display: tool ? 'flex' : 'none',
               flexDirection: 'column',
               gap: 1,
               minHeight: 0,
             }}
           >
-            <Box sx={{ flex: 1, minHeight: 0 }}>
+            <Box sx={{ flex: 1, minHeight: 0, display: tool === 'sections' ? 'block' : 'none' }}>
               <TimingPanel
                 embedded
                 sections={sections}
@@ -510,6 +476,59 @@ export default function App() {
                 onSnap={envelope ? snap : undefined}
               />
             </Box>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: tool === 'curve' ? 'block' : 'none',
+                bgcolor: 'background.paper',
+                borderRadius: 1.5,
+                overflow: 'auto',
+              }}
+            >
+              <CurvePanel embedded curve={curve} levels={levels} onCurveChange={setCurve} />
+            </Box>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: tool === 'frames' ? 'flex' : 'none',
+                flexDirection: 'column',
+                bgcolor: 'background.paper',
+                borderRadius: 1.5,
+                overflow: 'hidden',
+              }}
+            >
+              <PanelHeader title="Beat frames" />
+              <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                <BeatFrames
+                  envelope={levels}
+                  loudness={loudness}
+                  onsets={onsets}
+                  bands={bandLevels}
+                  sections={sections}
+                  duration={duration}
+                  position={position}
+                  positionRef={positionRef}
+                  playing={playing}
+                  onSectionsChange={setSections}
+                />
+              </Box>
+            </Box>
+            {TRACING ? (
+              <Box
+                sx={{
+                  flex: 1,
+                  minHeight: 0,
+                  display: tool === 'trace' ? 'block' : 'none',
+                  bgcolor: 'background.paper',
+                  borderRadius: 1.5,
+                  overflow: 'auto',
+                }}
+              >
+                <TracePanel />
+              </Box>
+            ) : null}
           </Box>
           <Box
             sx={{
@@ -860,7 +879,6 @@ export default function App() {
         }}
       />
     </Box>
-    {TRACING && traceOpen ? <TracePanel /> : null}
     </Box>
   )
 }

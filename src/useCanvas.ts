@@ -56,19 +56,33 @@ export function useCanvasControl(draw: Draw, animate = false, signature?: string
     frameRef.current = requestAnimationFrame(render)
   }, [render])
 
+  // The canvas is watched for size from whenever it appears, not only from
+  // the first render: a canvas that mounts later, once there is something to
+  // draw, or that is hidden and shown again, would otherwise never hear that
+  // it has a size and never paint
+  const observerRef = useRef<{ canvas: HTMLCanvasElement; observer: ResizeObserver } | null>(null)
   useEffect(() => {
     const canvas = canvasRef.current
+    const held = observerRef.current
+    if (held?.canvas === canvas) return
+    held?.observer.disconnect()
+    observerRef.current = null
     if (!canvas) return
     const observer = new ResizeObserver(() => {
       paintedRef.current = undefined
       schedule()
     })
     observer.observe(canvas)
-    return () => {
+    observerRef.current = { canvas, observer }
+  })
+  useEffect(
+    () => () => {
       cancelAnimationFrame(frameRef.current)
-      observer.disconnect()
-    }
-  }, [schedule])
+      observerRef.current?.observer.disconnect()
+      observerRef.current = null
+    },
+    [],
+  )
 
   useEffect(() => {
     drawRef.current = draw

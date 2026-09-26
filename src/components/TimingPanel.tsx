@@ -16,6 +16,8 @@ import CheckIcon from '@mui/icons-material/Check'
 import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import TuneIcon from '@mui/icons-material/Tune'
+import ToggleButton from '@mui/material/ToggleButton'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -42,6 +44,13 @@ type TimingPanelProps = {
   onExport?: () => void
   // snap one section's tempo and offset onto the music it covers
   onSnap?: (id: string) => void
+  // the song-level fit: whether it runs, whether it can, and whether it reads
+  // the audio through the amplitude curve
+  fitting?: boolean
+  canFit?: boolean
+  onFittingChange?: (fitting: boolean) => void
+  curved?: boolean
+  onCurvedChange?: (curved: boolean) => void
   onClose?: () => void
   embedded?: boolean
 }
@@ -95,6 +104,11 @@ export default function TimingPanel({
   onEditingChange,
   onExport,
   onSnap,
+  fitting = false,
+  canFit = false,
+  onFittingChange,
+  curved = false,
+  onCurvedChange,
   onClose,
   embedded = false,
 }: TimingPanelProps) {
@@ -356,6 +370,31 @@ export default function TimingPanel({
           </IconButton>
         ) : null}
       </Box>
+      {onFittingChange ? (
+        <Box sx={{ display: 'flex', gap: 0.5, px: 1.25, pb: 1 }}>
+          <ToggleButton
+            value="fit"
+            selected={fitting}
+            disabled={!canFit}
+            onChange={() => onFittingChange(!fitting)}
+            aria-label="Fit the grid to the audio"
+            sx={{ flex: 1, bgcolor: WELL, py: '5px', gap: 0.5 }}
+          >
+            <AutoFixHighIcon fontSize="small" />
+            Fit grid
+          </ToggleButton>
+          <ToggleButton
+            value="curved"
+            selected={curved}
+            onChange={() => onCurvedChange?.(!curved)}
+            aria-label="Read the audio through the amplitude curve when fitting"
+            sx={{ flex: 1, bgcolor: WELL, py: '5px', gap: 0.5 }}
+          >
+            <TuneIcon fontSize="small" />
+            Fit by curve
+          </ToggleButton>
+        </Box>
+      ) : null}
       <Box
         ref={listRef}
         onScroll={(event) => setScroll(event.currentTarget.scrollTop)}

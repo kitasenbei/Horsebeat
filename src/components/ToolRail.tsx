@@ -3,6 +3,7 @@ import ToggleButton from '@mui/material/ToggleButton'
 import Tooltip from '@mui/material/Tooltip'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
+import TuneIcon from '@mui/icons-material/Tune'
 import GridOnIcon from '@mui/icons-material/GridOn'
 import SpeedIcon from '@mui/icons-material/Speed'
 import { TRACING } from '../trace'
@@ -11,7 +12,7 @@ import { TRACING } from '../trace'
 // pressed one fills the column beside the rail; pressing it again puts the
 // column away and gives the picture the width. One panel at a time, so the
 // column keeps one width and the picture never jumps
-export type Tool = 'sections' | 'curve' | 'frames' | 'trace'
+export type Tool = 'sections' | 'view' | 'curve' | 'frames' | 'trace'
 
 type ToolRailProps = {
   tool: Tool | null
@@ -20,6 +21,7 @@ type ToolRailProps = {
 
 const TOOLS: { tool: Tool; title: string; icon: React.ReactNode }[] = [
   { tool: 'sections', title: 'Tempo sections', icon: <ViewListIcon fontSize="medium" /> },
+  { tool: 'view', title: 'Compiled view settings', icon: <TuneIcon fontSize="medium" /> },
   { tool: 'curve', title: 'Amplitude curve', icon: <ShowChartIcon fontSize="medium" /> },
   { tool: 'frames', title: 'Beat frames', icon: <GridOnIcon fontSize="medium" /> },
   ...(TRACING ? [{ tool: 'trace' as const, title: 'Trace', icon: <SpeedIcon fontSize="medium" /> }] : []),

@@ -24,6 +24,7 @@ import CurvePanel from './components/CurvePanel'
 import type { WaveStyle } from './draw'
 import BeatFrames from './components/BeatFrames'
 import ToolRail, { type Tool } from './components/ToolRail'
+import ViewPanel from './components/ViewPanel'
 import TracePanel from './components/TracePanel'
 import SectionTuner from './components/SectionTuner'
 import TimingPanel from './components/TimingPanel'
@@ -405,27 +406,6 @@ export default function App() {
         onRedo={history.redo}
         compiled={barGrid}
         onCompiledChange={setBarGrid}
-        fitting={fitting}
-        onFittingChange={setFitting}
-        canFit={Boolean(envelope) && sections.length > 0}
-        curved={curved}
-        onCurvedChange={setCurved}
-        lane={lane}
-        onLaneChange={setLane}
-        slice={slice}
-        onSliceChange={setSlice}
-        divisions={divisions}
-        onDivisionsChange={setDivisions}
-        subdivisions={subdivisions}
-        onSubdivisionsChange={setSubdivisions}
-        centred={centred}
-        onCentredChange={setCentred}
-        colormap={colormap}
-        onColormapChange={setColormap}
-        cursorMode={cursorMode}
-        onCursorModeChange={setCursorMode}
-        waveStyle={waveStyle}
-        onWaveStyleChange={setWaveStyle}
         follow={follow}
         onFollowChange={setFollow}
       />
@@ -474,6 +454,40 @@ export default function App() {
                 onEditingChange={setEditingSection}
                 onExport={file ? exportOsz : undefined}
                 onSnap={envelope ? snap : undefined}
+                fitting={fitting}
+                canFit={Boolean(envelope) && sections.length > 0}
+                onFittingChange={setFitting}
+                curved={curved}
+                onCurvedChange={setCurved}
+              />
+            </Box>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: tool === 'view' ? 'block' : 'none',
+                bgcolor: 'background.paper',
+                borderRadius: 1.5,
+                overflow: 'hidden',
+              }}
+            >
+              <ViewPanel
+                lane={lane}
+                onLaneChange={setLane}
+                slice={slice}
+                onSliceChange={setSlice}
+                divisions={divisions}
+                onDivisionsChange={setDivisions}
+                subdivisions={subdivisions}
+                onSubdivisionsChange={setSubdivisions}
+                centred={centred}
+                onCentredChange={setCentred}
+                colormap={colormap}
+                onColormapChange={setColormap}
+                waveStyle={waveStyle}
+                onWaveStyleChange={setWaveStyle}
+                cursorMode={cursorMode}
+                onCursorModeChange={setCursorMode}
               />
             </Box>
             <Box

@@ -34,6 +34,7 @@ import ToolRail, { type Tool } from './components/ToolRail'
 import ViewPanel from './components/ViewPanel'
 import type { StructureScope } from './components/LiveWave'
 import FallSpeed from './components/FallSpeed'
+import LookPanel, { DIM_DEFAULT } from './components/LookPanel'
 import { FALL_RANGE } from './liveFall'
 import TracePanel from './components/TracePanel'
 import SectionTuner from './components/SectionTuner'
@@ -178,6 +179,15 @@ export default function App() {
   const [structureDepth, setStructureDepth] = useState(4)
   const [structureNormalised, setStructureNormalised] = useState(true)
   const [structureMotion, setStructureMotion] = useState(true)
+  // a picture of the user's own, or the beatmap's, laid faintly over the app
+  const [background, setBackground] = useState<string | null>(null)
+  const [dim, setDim] = useState(DIM_DEFAULT)
+  const setBackgroundFrom = (blob: Blob | null) => {
+    setBackground((held) => {
+      if (held) URL.revokeObjectURL(held)
+      return blob ? URL.createObjectURL(blob) : null
+    })
+  }
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // what the fit is doing, for the dialog that stands while it runs
@@ -387,6 +397,8 @@ export default function App() {
       setAnchorId(null)
       setFile(next)
       setSource(beatmap ? beatmap.source : null)
+      // a beatmap that came with a picture opens with it behind the app
+      if (beatmap?.background) setBackgroundFrom(beatmap.background)
       setTitle(beatmap ? beatmap.title : source.name.replace(/\.[^.]+$/, ''))
     } finally {
       await context.close()
@@ -424,7 +436,25 @@ export default function App() {
   }
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
+    <Box sx={{ display: 'flex', height: '100vh', position: 'relative' }}>
+      {background ? (
+        // over everything and under the pointer: a screen blend lifts the
+        // shell towards the picture's light without hiding any of the work
+        <Box
+          aria-hidden
+          sx={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: (current) => current.zIndex.modal - 1,
+            pointerEvents: 'none',
+            backgroundImage: `url(${background})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: dim / 100,
+            mixBlendMode: 'screen',
+          }}
+        />
+      ) : null}
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', flex: 1, minWidth: 0 }}>
       <TopBar
         onOpen={() => inputRef.current?.click()}
@@ -558,6 +588,23 @@ export default function App() {
                   onSectionsChange={setSections}
                 />
               </Box>
+            </Box>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: tool === 'look' ? 'block' : 'none',
+                bgcolor: 'background.paper',
+                borderRadius: 1.5,
+                overflow: 'hidden',
+              }}
+            >
+              <LookPanel
+                background={background}
+                dim={dim}
+                onBackgroundChange={setBackgroundFrom}
+                onDimChange={setDim}
+              />
             </Box>
             {TRACING ? (
               <Box

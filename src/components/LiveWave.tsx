@@ -67,7 +67,7 @@ function traceAlpha(depth: number): number {
 const NEWEST = '#5aa8ff'
 const NEWEST_ALPHA = 0.9
 // how long a bar takes to roll into the past, in milliseconds
-const ROLL_MS = 280
+const ROLL_MS = 160
 
 // an ease out, cubic: the roll leaves the mark at once and slows into its
 // new shape, never past it

@@ -80,10 +80,11 @@ function between(from: [number, number, number], to: [number, number, number], t
   const mix = (index: number) => Math.round(from[index] + (to[index] - from[index]) * t)
   return `rgb(${mix(0)} ${mix(1)} ${mix(2)})`
 }
-// an ease in and out, cubic: a roll gathers itself, moves, and settles,
-// rather than snapping off the mark
+// an ease out, quintic: a roll leaves the mark at once and spends most of
+// its time settling, so the new bar is where it is going almost as soon as
+// it arrives and the last of the way is smooth
 function eased(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+  return 1 - Math.pow(1 - t, 5)
 }
 
 // The amplitude curve as a table of the same size the compiled view uses, so

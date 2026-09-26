@@ -136,8 +136,9 @@ export default function RulerSlider({
           left: '50%',
           transform: 'translateX(-50%)',
           px: 0.5,
-          bgcolor: 'background.paper',
+          bgcolor: 'inherit',
           color: disabled ? 'text.disabled' : 'text.primary',
+          fontVariantNumeric: 'tabular-nums',
           // the label sits over the ruler; a drag that starts on it should
           // drag the ruler, not select the text
           userSelect: 'none',

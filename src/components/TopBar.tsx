@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
+import type { ReactNode } from 'react'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import Toolbar from '@mui/material/Toolbar'
@@ -9,7 +9,6 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Tooltip from '@mui/material/Tooltip'
-import Typography from '@mui/material/Typography'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import UndoIcon from '@mui/icons-material/Undo'
 import RedoIcon from '@mui/icons-material/Redo'
@@ -23,8 +22,6 @@ import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
-import BeatLights from './BeatLights'
-import Gallop from './Gallop'
 import {
   BLOCK_LABELS,
   COLORMAPS,
@@ -35,14 +32,10 @@ import {
   WAVE_STYLES,
   type WaveStyle,
 } from '../draw'
-import { sectionSpans, type Section } from '../timing'
 import { TRACING } from '../trace'
+import { WELL } from '../theme'
 
 type TopBarProps = {
-  sections: Section[]
-  duration: number
-  positionRef: RefObject<number>
-  playing: boolean
   onOpen: () => void
   compiled: boolean
   onCompiledChange: (compiled: boolean) => void
@@ -83,28 +76,28 @@ type TopBarProps = {
   onRedo: () => void
 }
 
-const MAX_LABEL = 10
-const BRAND_FONT = "'Outfit', system-ui, sans-serif"
-const BRAND_DARK = '#17161a'
-const BRAND_GREEN = '#2f9e44'
-const PULSE = 0.14
-const DECAY = 7
+// labels are never cut: a control the eye cannot read is a control it cannot
+// trust, and the toolbar wraps to a second row before it hides a word
+const MAX_LABEL = 40
 
+// a group of controls: a well with a hairline, its buttons flat and square
 const PILL = {
-  borderRadius: 999,
+  borderRadius: 0.75,
   overflow: 'hidden',
   border: 1,
   borderColor: 'divider',
-  bgcolor: 'background.paper',
+  bgcolor: WELL,
   '& .MuiButtonBase-root': {
     textTransform: 'none',
     border: 0,
     borderRadius: 0,
-    px: 1.25,
+    px: 1,
     py: 0.5,
     minWidth: 0,
+    minHeight: 26,
     color: 'text.primary',
     lineHeight: 1,
+    fontSize: 12,
   },
   '& .MuiButtonBase-root:not(:first-of-type)': {
     borderLeft: 1,
@@ -114,17 +107,19 @@ const PILL = {
 
 const PICKER = {
   ...PILL,
-  fontSize: 13,
-  '& .MuiSelect-select': { py: 0.5, pl: 1.25, lineHeight: 1.4 },
+  fontSize: 12,
+  '& .MuiSelect-select': { py: 0.5, pl: 1, pr: '26px !important', lineHeight: 1.4, minHeight: 0 },
   '& .MuiOutlinedInput-notchedOutline': { border: 0 },
 }
 
-function selected(palette: 'primary' | 'secondary' | 'info') {
+// a pressed toggle is lit in the shell's one accent, whatever it stands for:
+// the colour says on, the label says what
+function selected(_palette: 'primary' | 'secondary' | 'info') {
   return {
     '&.Mui-selected': {
-      bgcolor: `${palette}.main`,
-      color: `${palette}.contrastText`,
-      '&:hover': { bgcolor: `${palette}.dark` },
+      bgcolor: 'rgba(47, 179, 163, 0.22)',
+      color: '#e8fffb',
+      '&:hover': { bgcolor: 'rgba(47, 179, 163, 0.3)' },
     },
   }
 }
@@ -165,10 +160,6 @@ function picker<T extends number | string>(
 }
 
 export default function TopBar({
-  sections,
-  duration,
-  positionRef,
-  playing,
   onOpen,
   compiled,
   onCompiledChange,
@@ -208,42 +199,20 @@ export default function TopBar({
   onUndo,
   onRedo,
 }: TopBarProps) {
-  const brandRef = useRef<HTMLSpanElement>(null)
-
-  useEffect(() => {
-    const node = brandRef.current
-    if (!node) return
-
-    const spans = sectionSpans(sections, duration)
-    if (!playing || spans.length === 0) {
-      node.style.transform = 'scale(1)'
-      return
-    }
-
-    let frame = requestAnimationFrame(function tick() {
-      const at = positionRef.current
-      const item = spans.find((span) => at >= span.start && at <= span.end) ?? spans[0]
-      const phase = item.beat > 0 ? (((at - item.start) / item.beat) % 1 + 1) % 1 : 0
-      node.style.transform = `scale(${1 + PULSE * Math.exp(-phase * DECAY)})`
-      frame = requestAnimationFrame(tick)
-    })
-
-    return () => {
-      cancelAnimationFrame(frame)
-      node.style.transform = 'scale(1)'
-    }
-  }, [playing, sections, duration, positionRef])
-
   return (
     <AppBar position="static" color="default" elevation={0}>
-      <Toolbar variant="dense" disableGutters sx={{ px: 1, gap: 1 }}>
+      <Toolbar
+        variant="dense"
+        disableGutters
+        sx={{ px: 1, py: 0.5, gap: 0.75, rowGap: 0.5, flexWrap: 'wrap', minHeight: 0 }}
+      >
         <Button
           size="small"
           variant="contained"
           disableElevation
           startIcon={<FolderOpenIcon />}
           onClick={onOpen}
-          sx={{ borderRadius: 999, textTransform: 'none', px: 1.5 }}
+          sx={{ px: 1.25 }}
         >
           Open
         </Button>
@@ -465,43 +434,6 @@ export default function TopBar({
           </ToggleButtonGroup>
         ) : null}
 
-        <Box sx={{ flex: 1 }} />
-
-        <Gallop
-          sections={sections}
-          duration={duration}
-          positionRef={positionRef}
-          playing={playing}
-        />
-
-        <BeatLights
-          sections={sections}
-          duration={duration}
-          positionRef={positionRef}
-          playing={playing}
-          color={BRAND_GREEN}
-        />
-
-        <Typography
-          component="span"
-          ref={brandRef}
-          sx={{
-            transformOrigin: 'center right',
-            willChange: 'transform',
-            fontFamily: BRAND_FONT,
-            fontWeight: 800,
-            fontSize: 24,
-            lineHeight: 1,
-            letterSpacing: 0.2,
-            pr: 1,
-            color: BRAND_DARK,
-          }}
-        >
-          Horse
-          <Box component="span" sx={{ color: BRAND_GREEN, fontWeight: 800 }}>
-            Beat
-          </Box>
-        </Typography>
       </Toolbar>
     </AppBar>
   )

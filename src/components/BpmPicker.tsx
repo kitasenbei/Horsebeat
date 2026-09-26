@@ -8,6 +8,7 @@ import InputBase from '@mui/material/InputBase'
 import Popover from '@mui/material/Popover'
 import Typography from '@mui/material/Typography'
 import RulerSlider from './RulerSlider'
+import { WELL } from '../theme'
 import { MAX_BPM, MIN_BPM } from '../timing'
 
 type BpmPickerProps = {
@@ -16,12 +17,12 @@ type BpmPickerProps = {
   onEditingChange?: (editing: boolean) => void
 }
 
-const BPM_COLOR = '#ece7ff'
-const BPM_HOVER = '#dbd1ff'
-const BPM_INK = '#3a1d92'
-const BPM_LIVE = '#fff3e2'
-const BPM_LIVE_HOVER = '#ffe6c7'
-const BPM_LIVE_INK = '#8a4b02'
+const BPM_COLOR = 'rgba(255, 255, 255, 0.06)'
+const BPM_HOVER = 'rgba(255, 255, 255, 0.12)'
+const BPM_INK = '#e8e8ec'
+const BPM_LIVE = 'rgba(224, 124, 10, 0.18)'
+const BPM_LIVE_HOVER = 'rgba(224, 124, 10, 0.3)'
+const BPM_LIVE_INK = '#ffd9ad'
 
 const MULTIPLIERS = [
   { factor: 0.2, label: '1/5' },
@@ -71,9 +72,9 @@ export default function BpmPicker({
           onEditingChange?.(true)
         }}
         sx={{
-          px: 1.75,
-          py: 0.75,
-          borderRadius: 999,
+          px: 1.25,
+          py: 0.5,
+          borderRadius: 0.75,
           border: 0,
           bgcolor: BPM_COLOR,
           color: BPM_INK,
@@ -100,7 +101,7 @@ export default function BpmPicker({
         slotProps={{
           paper: {
             elevation: 6,
-            sx: { width: 260, borderRadius: 3, overflow: 'hidden', mb: 1 },
+            sx: { width: 260, borderRadius: 0.75, overflow: 'hidden', mb: 1 },
           },
         }}
       >
@@ -125,10 +126,10 @@ export default function BpmPicker({
             sx={{
               width: 140,
               px: 1.5,
-              borderRadius: 999,
+              borderRadius: 0.75,
               border: 1,
               borderColor: 'divider',
-              bgcolor: 'background.paper',
+              bgcolor: WELL,
               fontWeight: 600,
               '& input': { textAlign: 'center', p: 0.5 },
             }}

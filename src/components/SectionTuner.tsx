@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
+import { WELL } from '../theme'
 import RulerSlider from './RulerSlider'
 import { useLiveSection } from '../useLiveSection'
 import { useLiveSectionsValue } from '../liveSections'
@@ -17,10 +18,11 @@ type SectionTunerProps = {
 
 const PILL = {
   width: 200,
-  borderRadius: 999,
+  borderRadius: 0.75,
   overflow: 'hidden',
   border: 1,
   borderColor: 'divider',
+  bgcolor: WELL,
 }
 
 // The three rulers that tune the section under the playhead. They follow the

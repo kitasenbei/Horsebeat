@@ -66,7 +66,6 @@ export default function FloatingWindow({
 
   return (
     <Paper
-      elevation={6}
       sx={{
         position: 'fixed',
         left: spot.left,
@@ -87,7 +86,9 @@ export default function FloatingWindow({
           gap: 0.5,
           px: 1,
           py: 0.5,
-          bgcolor: 'action.hover',
+          bgcolor: 'background.default',
+          borderBottom: 1,
+          borderColor: 'divider',
           cursor: 'move',
           touchAction: 'none',
         }}

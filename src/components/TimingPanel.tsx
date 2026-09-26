@@ -26,6 +26,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 import { tick } from '../trace'
+import { WELL } from '../theme'
 import { liveSections, subscribeLiveSections } from '../liveSections'
 
 type TimingPanelProps = {
@@ -56,24 +57,26 @@ const PANEL_WIDTH = 300
 const CARD_HEIGHT = 74
 const CARD_STEP = CARD_HEIGHT + 8
 const OVERSCAN = 3
-const CARD_IDLE = '#f2f0f7'
+// A section is a row of the panel: flat, a hairline beneath, and the one the
+// playhead is in marked by a bar of the live colour down its left edge
+const CARD_IDLE = 'rgba(255, 255, 255, 0.1)'
 
-const ACTION_COLOR = '#ece7ff'
-const ACTION_HOVER = '#dbd1ff'
-const ACTION_INK = '#3a1d92'
+const ACTION_COLOR = 'rgba(255, 255, 255, 0.06)'
+const ACTION_HOVER = 'rgba(255, 255, 255, 0.12)'
+const ACTION_INK = '#d8d8dc'
 
-const CARD_LIVE = '#e07c0a'
-const CARD_LIVE_BORDER = '#ffdfb4'
-const LIVE_PILL = '#fff3e2'
-const LIVE_PILL_HOVER = '#ffe6c7'
-const LIVE_INK = '#8a4b02'
+const CARD_LIVE = 'rgba(224, 124, 10, 0.12)'
+const CARD_LIVE_BORDER = '#e07c0a'
+const LIVE_PILL = 'rgba(224, 124, 10, 0.18)'
+const LIVE_PILL_HOVER = 'rgba(224, 124, 10, 0.3)'
+const LIVE_INK = '#ffd9ad'
 
 const LIVE_POLL_MS = 250
 
 const actionPill = {
-  width: 34,
-  height: 34,
-  borderRadius: 999,
+  width: 30,
+  height: 30,
+  borderRadius: 0.75,
   bgcolor: ACTION_COLOR,
   color: ACTION_INK,
   '&:hover': { bgcolor: ACTION_HOVER, color: ACTION_INK },
@@ -234,7 +237,6 @@ export default function TimingPanel({
 
   return (
     <Paper
-      elevation={embedded ? 0 : 6}
       sx={
         embedded
           ? {
@@ -267,7 +269,9 @@ export default function TimingPanel({
           gap: 0.5,
           px: 1,
           py: 0.5,
-          bgcolor: 'action.hover',
+          bgcolor: 'background.default',
+          borderBottom: 1,
+          borderColor: 'divider',
           cursor: embedded ? 'default' : 'move',
           touchAction: 'none',
         }}
@@ -369,17 +373,20 @@ export default function TimingPanel({
                 justifyContent: 'center',
                 gap: 1,
                 p: 1,
-                borderRadius: 2,
-                border: 1,
+                pl: 1.5,
+                borderRadius: 0,
+                borderBottom: 1,
                 borderColor: CARD_IDLE,
-                bgcolor: 'info.main',
+                borderLeft: 3,
+                borderLeftColor: 'transparent',
+                bgcolor: 'transparent',
                 color: 'text.primary',
                 cursor: 'pointer',
-                '&:hover': { borderColor: 'info.light' },
+                '&:hover': { bgcolor: 'action.hover' },
                 '&[data-live="true"]': {
-                  borderColor: CARD_LIVE_BORDER,
+                  borderLeftColor: CARD_LIVE_BORDER,
                   bgcolor: CARD_LIVE,
-                  color: 'info.contrastText',
+                  color: 'text.primary',
                 },
               }}
             >
@@ -429,9 +436,9 @@ export default function TimingPanel({
                         sx={{
                           width: 72,
                           px: 1,
-                          borderRadius: 999,
+                          borderRadius: 0.75,
                           border: 1,
-                          bgcolor: 'background.paper',
+                          bgcolor: WELL,
                           borderColor: ACTION_COLOR,
                           color: ACTION_INK,
                           '[data-live="true"] &': { borderColor: CARD_LIVE, color: LIVE_INK },

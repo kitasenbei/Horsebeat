@@ -312,7 +312,6 @@ export default function CurvePanel({
 
   return (
     <Paper
-      elevation={embedded ? 0 : 6}
       sx={
         embedded
           ? { width: '100%', overflow: 'hidden', border: 1, borderColor: 'divider' }
@@ -337,7 +336,9 @@ export default function CurvePanel({
           gap: 0.5,
           px: 1,
           py: 0.5,
-          bgcolor: 'action.hover',
+          bgcolor: 'background.default',
+          borderBottom: 1,
+          borderColor: 'divider',
           cursor: embedded ? 'default' : 'move',
           touchAction: 'none',
         }}

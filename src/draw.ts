@@ -332,10 +332,10 @@ function verticalLines(
   context.globalAlpha = 1
 }
 
-// The beat lines by their place in the bar: the downbeat black, then blue
-// and red turn about, so a bar of four reads black, blue, red, blue and the
-// eye counts without counting
-const BEAT_COLORS = ['#000000', '#1e88e5', '#e53935']
+// The beat lines by their place in the bar: the downbeat in the shell's ink,
+// then blue and red turn about, so a bar of four reads ink, blue, red, blue
+// and the eye counts without counting
+const BEAT_COLORS = ['#f2f2f5', '#42a5f5', '#ef5350']
 
 function beatColor(index: number, meter: number): string {
   const place = ((index % meter) + meter) % meter

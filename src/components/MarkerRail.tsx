@@ -184,7 +184,7 @@ export default function MarkerRail({
             display: 'flex',
             alignItems: 'center',
             gap: 0.25,
-            borderRadius: 999,
+            borderRadius: 0.75,
             zIndex: (current) => current.zIndex.modal,
           }}
         >

@@ -44,6 +44,7 @@ import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz, writeOsz, type BeatmapSource } from './osu'
 import { snapSection } from './fit/snap'
+import { WELL } from './theme'
 import { fitTrack, type Fit, type Progress } from './fit'
 import {
   createSection,
@@ -396,10 +397,6 @@ export default function App() {
     <Box sx={{ display: 'flex', height: '100vh' }}>
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', flex: 1, minWidth: 0 }}>
       <TopBar
-        sections={sections}
-        duration={duration}
-        positionRef={positionRef}
-        playing={playing}
         onOpen={() => inputRef.current?.click()}
         canUndo={history.canUndo}
         canRedo={history.canRedo}
@@ -670,15 +667,15 @@ export default function App() {
                 onSeek={seek}
               />
               <Paper
-                elevation={4}
                 sx={{
                   position: 'absolute',
                   left: '50%',
                   bottom: 8,
                   width: '60%',
                   transform: 'translateX(-50%)',
-                  borderRadius: 999,
+                  borderRadius: 0.75,
                   overflow: 'hidden',
+                  bgcolor: WELL,
                 }}
               >
                 <RulerSlider
@@ -823,6 +820,7 @@ export default function App() {
       <StatusBar
         fileName={file?.name ?? null}
         loadingName={loadingName}
+        sections={sections}
         positionRef={positionRef}
         position={position}
         duration={duration}

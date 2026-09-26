@@ -175,8 +175,8 @@ export default function App() {
   const [centred, setCentred] = useState(true)
   // what the waveform structure strip lays over itself: bars, or beats
   const [structureScope, setStructureScope] = useState<StructureScope>('bar')
-  const [structureDepth, setStructureDepth] = useState(8)
-  const [structureNormalised, setStructureNormalised] = useState(false)
+  const [structureDepth, setStructureDepth] = useState(4)
+  const [structureNormalised, setStructureNormalised] = useState(true)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // what the fit is doing, for the dialog that stands while it runs

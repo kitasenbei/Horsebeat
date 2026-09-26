@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
@@ -30,6 +30,8 @@ type Drag =
 const EDGE = 8
 const FULL: Range = { start: 0, end: 1 }
 const HANDLE = 22
+const ZOOM_RATE = 0.002
+const GESTURE_END_MS = 140
 
 export default function Overview({
   peaks,
@@ -47,6 +49,34 @@ export default function Overview({
   const applyRange = useRafCallback(editRange)
   const theme = useTheme()
   const [hovered, setHovered] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const settleTimer = useRef(0)
+  const zoomRef = useRef({ range, editRange, settleRange })
+  useEffect(() => {
+    zoomRef.current = { range, editRange, settleRange }
+  })
+
+  // the wheel zooms the window about the moment under the pointer: over the
+  // whole song, that moment is where the pointer is along the strip
+  useEffect(() => {
+    const node = wrapRef.current
+    if (!node) return
+    const onWheel = (event: WheelEvent) => {
+      const { range: current, editRange: edit } = zoomRef.current
+      const bounds = node.getBoundingClientRect()
+      if (bounds.width === 0) return
+      event.preventDefault()
+      const anchor = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+      const span = current.end - current.start
+      const ratio = Math.min(1, Math.max(0, (anchor - current.start) / Math.max(1e-9, span)))
+      const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
+      edit(clampRange({ start: anchor - ratio * next, end: anchor + (1 - ratio) * next }))
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = window.setTimeout(() => zoomRef.current.settleRange(), GESTURE_END_MS)
+    }
+    node.addEventListener('wheel', onWheel, { passive: false })
+    return () => node.removeEventListener('wheel', onWheel)
+  }, [])
 
   // the song and the window on one canvas, painted when either changes; the
   // playhead on another over it, painted every frame while playing

@@ -84,7 +84,7 @@ export default function TopBar({
           disableElevation
           startIcon={<FolderOpenIcon />}
           onClick={onOpen}
-          sx={{ px: 1.25, height: BAR_HEIGHT }}
+          sx={{ px: 1.25, height: BAR_HEIGHT, minHeight: 0, py: 0 }}
         >
           Open
         </Button>

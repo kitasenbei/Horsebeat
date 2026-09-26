@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import {
@@ -14,7 +14,8 @@ import type { Curve } from '../curve'
 import type { Range } from '../range'
 import type { Section } from '../timing'
 import { tick } from '../trace'
-import { useLiveRangeValue } from '../liveRange'
+import { useLiveRangeEdit } from '../liveRange'
+import { clampRange } from '../range'
 import { useLiveSectionsValue } from '../liveSections'
 
 type RangeStripProps = {
@@ -27,9 +28,14 @@ type RangeStripProps = {
   positionRef: RefObject<number>
   playing: boolean
   onSeek: (position: number) => void
+  onRangeChange: (range: Range) => void
 }
 
 export const STRIP_HEIGHT = 96
+// a wheel tick scales the window by this much per unit of delta, and a
+// gesture is over when this long passes without one
+const ZOOM_RATE = 0.002
+const GESTURE_END_MS = 140
 
 // The window the overview below marks out, drawn at its own scale with the
 // beat grid on it, so the tempo can be read where the compiled view cannot
@@ -44,9 +50,17 @@ export default function RangeStrip({
   positionRef,
   playing,
   onSeek,
+  onRangeChange,
 }: RangeStripProps) {
   const sections = useLiveSectionsValue(givenSections)
-  const range = useLiveRangeValue(givenRange)
+  // the window moves through the live store while it is zoomed, and reaches
+  // the app once the gesture is over
+  const [range, editRange, settleRange] = useLiveRangeEdit(givenRange, onRangeChange)
+  const settleTimer = useRef(0)
+  const zoomRef = useRef({ range, editRange, settleRange })
+  useEffect(() => {
+    zoomRef.current = { range, editRange, settleRange }
+  })
   const theme = useTheme()
   const draggingRef = useRef(false)
   const applySeek = useRafCallback(onSeek)
@@ -76,6 +90,30 @@ export default function RangeStrip({
     draggingRef.current = false
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
+
+  // the wheel zooms the window about the moment under the pointer, the way
+  // it does over the compiled view, so the strip is not a picture of a zoom
+  // made elsewhere but a place to make one
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onWheel = (event: WheelEvent) => {
+      const { range: current, editRange: edit } = zoomRef.current
+      const bounds = canvas.getBoundingClientRect()
+      if (bounds.width === 0) return
+      event.preventDefault()
+      const ratio = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width))
+      const span = current.end - current.start
+      const anchor = current.start + ratio * span
+      const next = Math.min(1, span * Math.exp(event.deltaY * ZOOM_RATE))
+      edit(clampRange({ start: anchor - ratio * next, end: anchor + (1 - ratio) * next }))
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = window.setTimeout(() => zoomRef.current.settleRange(), GESTURE_END_MS)
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // the audio and the grid on one canvas, painted when the window changes;
   // the playhead on another over it, painted every frame while playing

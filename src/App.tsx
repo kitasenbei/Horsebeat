@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
 import ToggleButton from '@mui/material/ToggleButton'
 import Typography from '@mui/material/Typography'
@@ -169,9 +170,11 @@ export default function App() {
   }
   const [divisions, setDivisions] = useState(4)
   const [subdivisions, setSubdivisions] = useState(4)
-  const [centred, setCentred] = useState(false)
+  const [centred, setCentred] = useState(true)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
+  // what the fit is doing, for the dialog that stands while it runs
+  const [fitNote, setFitNote] = useState('')
   // whether the next fit reads the envelope through the amplitude curve
   const [curved, setCurved] = useState(false)
   const fitRef = useRef({ meter: DEFAULT_METER })
@@ -327,7 +330,11 @@ export default function App() {
         if (step.value) last = step.value
       } while (performance.now() < until)
 
-      if (last) publish([...last.parts.map((part) => part.fit), last.working])
+      if (last) {
+        publish([...last.parts.map((part) => part.fit), last.working])
+        const count = last.parts.length + 1
+        setFitNote(`${count} ${count === 1 ? 'section' : 'sections'}, working at ${last.working.bpm.toFixed(1)} BPM`)
+      }
 
       frame = requestAnimationFrame(tick)
     })
@@ -867,6 +874,7 @@ export default function App() {
             positionRef={positionRef}
             playing={playing}
             onSeek={seek}
+            onRangeChange={changeRange}
           />
           <PlayheadRail
             position={position}
@@ -888,17 +896,26 @@ export default function App() {
           </Box>
         </Box>
       </Box>
-      <Dialog open={loadingName !== null} maxWidth="xs">
+      <Dialog
+        open={loadingName !== null || fitting}
+        maxWidth="xs"
+        // a light veil while the fit runs, so the grid can be watched walking
+        // onto the music behind it
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(0, 0, 0, 0.25)' } } }}
+      >
         <DialogContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2.5, px: 3 }}>
           <CircularProgress size={22} />
-          <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Loading
+              {loadingName !== null ? 'Loading' : 'Auto timing'}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', maxWidth: 320 }}>
-              {loadingName}
+              {loadingName ?? fitNote}
             </Typography>
           </Box>
+          {fitting && loadingName === null ? (
+            <Button onClick={() => setFitting(false)}>Stop</Button>
+          ) : null}
         </DialogContent>
       </Dialog>
       <StatusBar

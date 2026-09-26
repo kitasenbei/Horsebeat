@@ -39,7 +39,7 @@ type ViewPanelProps = {
 }
 
 // how many bars the structure strip may lay over one another
-export const STRUCTURE_DEPTHS = [4, 8, 16, 32, 64]
+const STRUCTURE_DEPTHS = [4, 8, 16, 32, 64]
 
 // How the compiled view is drawn, as a list of settings: each a row of the
 // panel with its name on the left and its control on the right, the way a

@@ -1117,6 +1117,13 @@ export const COLORMAPS: { name: string; stops: string[] }[] = [
   { name: 'earth', stops: ['#8c510a', '#d8b365', '#f5f5f5', '#5ab4ac', '#01665e'] },
   { name: 'heat', stops: ['#123a8f', '#2a9df4', '#f7c948', '#d7263d'] },
   { name: 'mono', stops: ['#111111', '#777777', '#dddddd', '#ffffff'] },
+  // matplotlib's perceptually uniform maps, sampled at even steps: one climb
+  // in lightness from end to end, so equal steps of level read as equal
+  { name: 'viridis', stops: ['#440154', '#482475', '#414487', '#355f8d', '#2a788e', '#21918c', '#22a884', '#44bf70', '#7ad151', '#bddf26', '#fde725'] },
+  { name: 'plasma', stops: ['#0d0887', '#41049d', '#6a00a8', '#8f0da4', '#b12a90', '#cc4778', '#e16462', '#f2844b', '#fca636', '#fcce25', '#f0f921'] },
+  { name: 'inferno', stops: ['#000004', '#160b39', '#420a68', '#6a176e', '#932667', '#bc3754', '#dd513a', '#f37819', '#fca50a', '#f6d746', '#fcffa4'] },
+  { name: 'magma', stops: ['#000004', '#140e36', '#3b0f70', '#641a80', '#8c2981', '#b73779', '#de4968', '#f7705c', '#fe9f6d', '#fecf92', '#fcfdbf'] },
+  { name: 'cividis', stops: ['#00224e', '#123570', '#3b496c', '#575d6d', '#707173', '#8a8678', '#a69d75', '#c4b56c', '#e4cf5b', '#fdea45'] },
 ]
 
 const COLORMAP_RGB = COLORMAPS.map((map) => map.stops.map(parseHex))

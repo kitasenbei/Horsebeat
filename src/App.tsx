@@ -177,6 +177,7 @@ export default function App() {
   const [structureScope, setStructureScope] = useState<StructureScope>('bar')
   const [structureDepth, setStructureDepth] = useState(4)
   const [structureNormalised, setStructureNormalised] = useState(true)
+  const [structureMotion, setStructureMotion] = useState(true)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // what the fit is doing, for the dialog that stands while it runs
@@ -515,6 +516,8 @@ export default function App() {
                 onCursorModeChange={setCursorMode}
                 structureDepth={structureDepth}
                 onStructureDepthChange={setStructureDepth}
+                structureMotion={structureMotion}
+                onStructureMotionChange={setStructureMotion}
               />
             </Box>
             <Box
@@ -761,6 +764,7 @@ export default function App() {
                   subdivisions={subdivisions}
                   depth={structureDepth}
                   normalise={structureNormalised}
+                  motion={structureMotion}
                 />
               </Box>
             </Box>

@@ -3,7 +3,7 @@ import Box from '@mui/material/Box'
 import { useTheme } from '@mui/material/styles'
 import { curveSignature, sectionSignature } from '../draw'
 import { applyCurve, type Curve } from '../curve'
-import { useCanvas } from '../useCanvas'
+import { useCanvasControl } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
 import { useLiveSectionsValue } from '../liveSections'
 import { MINT } from '../theme'
@@ -29,6 +29,10 @@ type LiveWaveProps = {
   // whether the traces are read between the quietest and loudest point any
   // of them reaches, so what differs between the bars fills the height
   normalise: boolean
+  // whether the picture eases from one bar to the next rather than cutting:
+  // the bar just finished turns from blue to mint, the oldest fades away,
+  // the new bar fades in, and the normalised range glides
+  motion: boolean
 }
 
 export type StructureScope = 'bar' | 'beat'
@@ -61,6 +65,23 @@ function traceAlpha(depth: number): number {
 // either joins or leaves
 const NEWEST = '#5aa8ff'
 const NEWEST_ALPHA = 0.9
+// how long a bar takes to roll into the past, in milliseconds
+const ROLL_MS = 420
+
+function channels(hex: string): [number, number, number] {
+  const value = Number.parseInt(hex.slice(1), 16)
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
+}
+const MINT_RGB = channels(MINT)
+const NEWEST_RGB = channels(NEWEST)
+function between(from: [number, number, number], to: [number, number, number], t: number): string {
+  const mix = (index: number) => Math.round(from[index] + (to[index] - from[index]) * t)
+  return `rgb(${mix(0)} ${mix(1)} ${mix(2)})`
+}
+// an ease out, so a roll starts quick and settles
+function eased(t: number): number {
+  return 1 - (1 - t) * (1 - t)
+}
 
 // The amplitude curve as a table of the same size the compiled view uses, so
 // a moment here is read through exactly the steps its pixels are painted
@@ -87,7 +108,21 @@ export default function LiveWave({
   subdivisions,
   depth,
   normalise,
+  motion,
 }: LiveWaveProps) {
+  // the bar last drawn and when it changed, with the range it was drawn on,
+  // so the next draw can ease from it; and a frame asked for while a roll
+  // is under way and the song is not playing
+  const rollRef = useRef<{ key: string; at: number; low: number; scale: number; fromLow: number; fromScale: number }>({
+    key: '',
+    at: 0,
+    low: 0,
+    scale: 1,
+    fromLow: 0,
+    fromScale: 1,
+  })
+  const frameRef = useRef(0)
+  const repaintRef = useRef<() => void>(() => undefined)
   const sections = useLiveSectionsValue(givenSections)
   const theme = useTheme()
   const lutRef = useRef({ signature: '', lut: shapeLut(curve) })
@@ -95,8 +130,9 @@ export default function LiveWave({
     const signature = curveSignature(curve)
     if (lutRef.current.signature !== signature) lutRef.current = { signature, lut: shapeLut(curve) }
   }, [curve])
+  useEffect(() => () => cancelAnimationFrame(frameRef.current), [])
 
-  const canvasRef = useCanvas(
+  const { canvasRef, repaint } = useCanvasControl(
     (context, width, height) => {
       if (!envelope || envelope.length === 0) return
       const lut = lutRef.current.lut
@@ -105,12 +141,13 @@ export default function LiveWave({
       const span = spans.find((item) => at >= item.start && at <= item.end) ?? spans[0]
       if (!span || span.beat <= 0) return
 
-      // the stretch and its cells: a bar in beats, or a beat in the sub-grid.
-      // Either is started early by the same stretch of time the columns are,
-      // half a division of a column, so a beat sits against the lines here
-      // exactly as it does there; a shift longer than the stretch wraps
+      // the stretch and its cells: a bar ruled by the grid setting, as a
+      // column is, or a beat ruled by the sub-grid. Either is started early by
+      // the same stretch of time the columns are, half a division of a
+      // column, so a beat sits against the lines here exactly as it does
+      // there; a shift longer than the stretch wraps
       const meter = Math.min(MOST_BEATS, Math.max(1, span.section.meter))
-      const cells = scope === 'bar' ? meter : Math.max(1, subdivisions)
+      const cells = scope === 'bar' ? Math.max(1, divisions) : Math.max(1, subdivisions)
       const bar = scope === 'bar' ? span.beat * meter : span.beat
       const shift = centred ? (span.beat * meter) / (2 * Math.max(1, divisions)) : 0
       const early = shift % bar
@@ -171,17 +208,48 @@ export default function LiveWave({
         if (first >= 0) traces.push({ levels, first, colour, alpha })
       }
 
+      // where in a roll the picture is: nought as a new bar begins, one once
+      // it has settled. Without motion it is always settled
+      const now = performance.now()
+      const roll = rollRef.current
+      const key = `${scope}|${start.toFixed(9)}`
+      if (roll.key !== key) {
+        roll.fromLow = roll.low
+        roll.fromScale = roll.scale
+        roll.at = roll.key === '' || !motion ? 0 : now
+        roll.key = key
+      }
+      const t = motion ? eased(Math.min(1, (now - roll.at) / ROLL_MS)) : 1
+
       const alpha = traceAlpha(depth)
-      for (let back = depth - 1; back >= 1; back -= 1) {
+      // one bar further back than the depth while rolling: the one on its
+      // way out, fading
+      for (let back = depth; back >= 1; back -= 1) {
         const from = start - bar * back
         if (from + bar <= span.start) continue
-        gather(from, MINT, alpha)
+        if (back === depth) {
+          if (t < 1) gather(from, MINT, alpha * (1 - t))
+        } else if (back === 1) {
+          // the bar just finished, turning from blue to mint
+          gather(from, between(NEWEST_RGB, MINT_RGB, t), NEWEST_ALPHA + (alpha - NEWEST_ALPHA) * t)
+        } else gather(from, MINT, alpha)
       }
-      // the bar the playhead is in last, so it is drawn on top, in blue
-      gather(start, NEWEST, NEWEST_ALPHA)
+      // the bar the playhead is in last, so it is drawn on top, in blue,
+      // arriving
+      gather(start, NEWEST, NEWEST_ALPHA * t)
 
-      const low = normalise && most > least ? least : 0
-      const scale = normalise && most > least ? 1 / (most - least) : 1
+      const settledLow = normalise && most > least ? least : 0
+      const settledScale = normalise && most > least ? 1 / (most - least) : 1
+      roll.low = settledLow
+      roll.scale = settledScale
+      const low = roll.fromLow + (settledLow - roll.fromLow) * t
+      const scale = roll.fromScale + (settledScale - roll.fromScale) * t
+
+      // a roll under way with the song still asks for the next frame itself
+      if (t < 1 && !playing) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = requestAnimationFrame(() => repaintRef.current())
+      }
 
       context.save()
       context.globalCompositeOperation = 'lighter'
@@ -209,8 +277,11 @@ export default function LiveWave({
       context.stroke()
     },
     playing,
-    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}|${scope}|${subdivisions}|${depth}|${normalise}`,
+    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}|${scope}|${subdivisions}|${depth}|${normalise}|${motion}`,
   )
+  useEffect(() => {
+    repaintRef.current = repaint
+  }, [repaint])
 
   return (
     <Box

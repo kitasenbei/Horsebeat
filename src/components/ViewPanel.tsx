@@ -36,6 +36,8 @@ type ViewPanelProps = {
   onCursorModeChange: (mode: GlobalCompositeOperation) => void
   structureDepth: number
   onStructureDepthChange: (depth: number) => void
+  structureMotion: boolean
+  onStructureMotionChange: (motion: boolean) => void
 }
 
 // how many bars the structure strip may lay over one another
@@ -156,6 +158,8 @@ export default function ViewPanel({
   onCursorModeChange,
   structureDepth,
   onStructureDepthChange,
+  structureMotion,
+  onStructureMotionChange,
 }: ViewPanelProps) {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -234,6 +238,7 @@ export default function ViewPanel({
             onStructureDepthChange,
           ),
         )}
+        {row('Structure motion', onOff('Structure motion', structureMotion, onStructureMotionChange))}
       </Box>
     </Box>
   )

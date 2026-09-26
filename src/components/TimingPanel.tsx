@@ -377,11 +377,11 @@ export default function TimingPanel({
             selected={fitting}
             disabled={!canFit}
             onChange={() => onFittingChange(!fitting)}
-            aria-label="Fit the grid to the audio"
+            aria-label="Auto timing"
             sx={{ flex: 1, bgcolor: WELL, py: '5px', gap: 0.5 }}
           >
             <AutoFixHighIcon fontSize="small" />
-            Fit grid
+            Auto timing
           </ToggleButton>
           <ToggleButton
             value="curved"

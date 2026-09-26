@@ -57,8 +57,10 @@ export default function BpmPicker({
     onChange(Math.min(MAX_BPM, Math.max(MIN_BPM, parsed)))
   }
 
-  const whole = Math.floor(value)
-  const fraction = Math.round((value - whole) * 100)
+  // split at the hundredth it is shown to, so 129.999 reads 130 and .00
+  const hundredths = Math.round(value * 100)
+  const whole = Math.floor(hundredths / 100)
+  const fraction = hundredths - whole * 100
 
   const compose = (nextWhole: number, nextFraction: number) => {
     onChange(Math.min(MAX_BPM, Math.max(MIN_BPM, nextWhole + nextFraction / 100)))

@@ -31,7 +31,11 @@ export default function SectionTuner({
   // app last heard of it
   const sections = useLiveSectionsValue(givenSections)
   const live = useLiveSection(sections, duration, position, positionRef, playing)
-  const fraction = Math.round(((live?.bpm ?? 120) % 1) * 100)
+  // the tempo split at the hundredth it is shown to, so a value a hair under
+  // a whole number reads as that number and .00, not one less and .100
+  const hundredths = Math.round((live?.bpm ?? 120) * 100)
+  const whole = Math.floor(hundredths / 100)
+  const fraction = hundredths - whole * 100
 
   const tune = (patch: Partial<Section>) => {
     if (!live) return
@@ -46,7 +50,7 @@ export default function SectionTuner({
     <Box sx={{ display: 'flex', gap: 1 }}>
       <Box sx={PILL}>
         <RulerSlider
-          value={Math.floor(live?.bpm ?? 120)}
+          value={whole}
           disabled={!live}
           min={Math.floor(MIN_BPM)}
           max={Math.floor(MAX_BPM)}
@@ -69,7 +73,7 @@ export default function SectionTuner({
           majorEvery={5}
           format={(value) => `.${String(Math.round(value)).padStart(2, '0')}`}
           fill
-          onChange={(part) => tune({ bpm: Math.floor(live?.bpm ?? 120) + part / 100 })}
+          onChange={(part) => tune({ bpm: whole + part / 100 })}
         />
       </Box>
       <Box sx={PILL}>

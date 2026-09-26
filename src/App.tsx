@@ -734,7 +734,7 @@ export default function App() {
                     Beat
                   </ToggleButton>
                 </ToggleButtonGroup>
-                <Tooltip title="Scale each bar to its own loudest point, so bars are compared by shape alone">
+                <Tooltip title="Read the bars between the quietest and loudest point any of them reaches">
                   <ToggleButton
                     value="normalise"
                     selected={structureNormalised}

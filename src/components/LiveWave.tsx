@@ -26,8 +26,8 @@ type LiveWaveProps = {
   subdivisions: number
   // how many bars or beats are laid over one another
   depth: number
-  // whether each trace is scaled to its own loudest point, so a quiet bar
-  // and a loud one are compared by shape alone
+  // whether the traces are read between the quietest and loudest point any
+  // of them reaches, so what differs between the bars fills the height
   normalise: boolean
 }
 
@@ -145,14 +145,18 @@ export default function LiveWave({
       context.globalAlpha = 1
 
       // a trace per bar: each pixel column the level at that place in that
-      // bar, read through the curve, and scaled to the bar's own loudest
-      // point when the traces are to be compared by shape alone. A column
-      // before the section began holds no level and is left out
+      // bar, read through the curve. A column before the section began holds
+      // no level and is left out. Normalised, the traces are read between the
+      // quietest and the loudest point any of them reaches, so a loud master
+      // that hugs the top is spread over the height and the bars differ
+      // where they differ
       const frames = envelope.length
-      const trace = (from: number, colour: string, alpha: number) => {
+      const traces: { levels: Float32Array; first: number; colour: string; alpha: number }[] = []
+      let least = Infinity
+      let most = 0
+      const gather = (from: number, colour: string, alpha: number) => {
         const levels = new Float32Array(width + 1)
         let first = -1
-        let most = 0
         for (let x = 0; x <= width; x += 1) {
           const moment = from + (x / width) * bar
           if (moment < span.start || moment < 0) continue
@@ -161,32 +165,38 @@ export default function LiveWave({
           const value = envelope[frame]
           const level = Number.isFinite(value) ? lut[((value < 1 ? Math.max(0, value) : 1) * (LEVELS - 1) + 0.5) | 0] : 0
           levels[x] = level
+          if (level < least) least = level
           if (level > most) most = level
         }
-        if (first < 0) return
-        const scale = normalise && most > 0 ? 1 / most : 1
-        context.strokeStyle = colour
-        context.globalAlpha = alpha
-        context.lineWidth = TRACE_WIDTH
-        context.beginPath()
-        for (let x = first; x <= width; x += 1) {
-          const y = floor - Math.min(1, levels[x] * scale) * reach
-          if (x === first) context.moveTo(x, y)
-          else context.lineTo(x, y)
-        }
-        context.stroke()
+        if (first >= 0) traces.push({ levels, first, colour, alpha })
       }
 
-      context.save()
-      context.globalCompositeOperation = 'lighter'
       const alpha = traceAlpha(depth)
       for (let back = depth - 1; back >= 1; back -= 1) {
         const from = start - bar * back
         if (from + bar <= span.start) continue
-        trace(from, MINT, alpha)
+        gather(from, MINT, alpha)
       }
-      // the bar the playhead is in on top, in blue
-      trace(start, NEWEST, NEWEST_ALPHA)
+      // the bar the playhead is in last, so it is drawn on top, in blue
+      gather(start, NEWEST, NEWEST_ALPHA)
+
+      const low = normalise && most > least ? least : 0
+      const scale = normalise && most > least ? 1 / (most - least) : 1
+
+      context.save()
+      context.globalCompositeOperation = 'lighter'
+      context.lineWidth = TRACE_WIDTH
+      for (const held of traces) {
+        context.strokeStyle = held.colour
+        context.globalAlpha = held.alpha
+        context.beginPath()
+        for (let x = held.first; x <= width; x += 1) {
+          const y = floor - Math.min(1, Math.max(0, (held.levels[x] - low) * scale)) * reach
+          if (x === held.first) context.moveTo(x, y)
+          else context.lineTo(x, y)
+        }
+        context.stroke()
+      }
       context.restore()
 
       // where the playhead stands in the stretch

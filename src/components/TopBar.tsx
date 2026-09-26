@@ -77,18 +77,24 @@ type TopBarProps = {
 const MAX_LABEL = 40
 
 // a group of controls: a well with a hairline, its buttons flat and square
+// one height for everything on the bar, the height a captioned picker needs,
+// so the row is a row and not a skyline
+const BAR_HEIGHT = 32
+
 const PILL = {
   borderRadius: 1.5,
   overflow: 'hidden',
   bgcolor: WELL,
+  height: BAR_HEIGHT,
+  display: 'flex',
   '& .MuiButtonBase-root': {
     textTransform: 'none',
     border: 0,
     borderRadius: 0,
     px: 1,
-    py: 0.5,
+    py: 0,
     minWidth: 0,
-    minHeight: 26,
+    height: BAR_HEIGHT,
     color: 'text.primary',
     lineHeight: 1,
     fontSize: 12,
@@ -104,8 +110,10 @@ const PICKER = {
   '& .MuiSelect-select': {
     // the theme sets the select's padding by class, so the taller field
     // says its own
-    paddingTop: '13px !important',
-    paddingBottom: '3px !important',
+    paddingTop: '14px !important',
+    paddingBottom: '2px !important',
+    height: `${BAR_HEIGHT}px !important`,
+    boxSizing: 'border-box',
     pl: 1,
     pr: '24px !important',
     lineHeight: 1.2,
@@ -265,7 +273,7 @@ export default function TopBar({
           disableElevation
           startIcon={<FolderOpenIcon />}
           onClick={onOpen}
-          sx={{ px: 1.25 }}
+          sx={{ px: 1.25, height: BAR_HEIGHT }}
         >
           Open
         </Button>

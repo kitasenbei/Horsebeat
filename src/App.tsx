@@ -762,6 +762,7 @@ export default function App() {
                   divisions={divisions}
                   scope={structureScope}
                   subdivisions={subdivisions}
+                  slice={slice}
                   depth={structureDepth}
                   normalise={structureNormalised}
                   motion={structureMotion}

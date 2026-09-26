@@ -24,6 +24,8 @@ type LiveWaveProps = {
   // by the sub-grid
   scope: StructureScope
   subdivisions: number
+  // beats per column in the compiled view: the stretch a bar here means
+  slice: number | 'auto'
   // how many bars or beats are laid over one another
   depth: number
   // whether the traces are read between the quietest and loudest point any
@@ -66,7 +68,7 @@ function traceAlpha(depth: number): number {
 const NEWEST = '#5aa8ff'
 const NEWEST_ALPHA = 0.9
 // how long a bar takes to roll into the past, in milliseconds
-const ROLL_MS = 420
+const ROLL_MS = 520
 
 function channels(hex: string): [number, number, number] {
   const value = Number.parseInt(hex.slice(1), 16)
@@ -78,9 +80,10 @@ function between(from: [number, number, number], to: [number, number, number], t
   const mix = (index: number) => Math.round(from[index] + (to[index] - from[index]) * t)
   return `rgb(${mix(0)} ${mix(1)} ${mix(2)})`
 }
-// an ease out, so a roll starts quick and settles
+// an ease in and out, cubic: a roll gathers itself, moves, and settles,
+// rather than snapping off the mark
 function eased(t: number): number {
-  return 1 - (1 - t) * (1 - t)
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 }
 
 // The amplitude curve as a table of the same size the compiled view uses, so
@@ -106,6 +109,7 @@ export default function LiveWave({
   divisions,
   scope,
   subdivisions,
+  slice,
   depth,
   normalise,
   motion,
@@ -113,13 +117,26 @@ export default function LiveWave({
   // the bar last drawn and when it changed, with the range it was drawn on,
   // so the next draw can ease from it; and a frame asked for while a roll
   // is under way and the song is not playing
-  const rollRef = useRef<{ key: string; at: number; low: number; scale: number; fromLow: number; fromScale: number }>({
+  const rollRef = useRef<{
+    key: string
+    at: number
+    low: number
+    scale: number
+    fromLow: number
+    fromScale: number
+    // each slot's shape as last drawn settled, and as it was before the roll,
+    // so a slot's trace can morph from the one shape into the other
+    shapes: Map<number, Float32Array>
+    fromShapes: Map<number, Float32Array>
+  }>({
     key: '',
     at: 0,
     low: 0,
     scale: 1,
     fromLow: 0,
     fromScale: 1,
+    shapes: new Map(),
+    fromShapes: new Map(),
   })
   const frameRef = useRef(0)
   const repaintRef = useRef<() => void>(() => undefined)
@@ -146,10 +163,13 @@ export default function LiveWave({
       // the same stretch of time the columns are, half a division of a
       // column, so a beat sits against the lines here exactly as it does
       // there; a shift longer than the stretch wraps
+      // a bar here is a column there: the slice setting in beats, or the
+      // meter when the slice is left to the view
       const meter = Math.min(MOST_BEATS, Math.max(1, span.section.meter))
+      const column = slice === 'auto' ? meter : Math.max(1, slice)
       const cells = scope === 'bar' ? Math.max(1, divisions) : Math.max(1, subdivisions)
-      const bar = scope === 'bar' ? span.beat * meter : span.beat
-      const shift = centred ? (span.beat * meter) / (2 * Math.max(1, divisions)) : 0
+      const bar = scope === 'bar' ? span.beat * column : span.beat
+      const shift = centred ? (span.beat * column) / (2 * Math.max(1, divisions)) : 0
       const early = shift % bar
       const index = Math.floor((at - span.start + early) / bar)
       const start = span.start - early + index * bar
@@ -188,10 +208,10 @@ export default function LiveWave({
       // that hugs the top is spread over the height and the bars differ
       // where they differ
       const frames = envelope.length
-      const traces: { levels: Float32Array; first: number; colour: string; alpha: number }[] = []
+      const traces: { levels: Float32Array; first: number; colour: string; alpha: number; slot: number }[] = []
       let least = Infinity
       let most = 0
-      const gather = (from: number, colour: string, alpha: number) => {
+      const gather = (from: number, colour: string, alpha: number, slot: number) => {
         const levels = new Float32Array(width + 1)
         let first = -1
         for (let x = 0; x <= width; x += 1) {
@@ -205,7 +225,7 @@ export default function LiveWave({
           if (level < least) least = level
           if (level > most) most = level
         }
-        if (first >= 0) traces.push({ levels, first, colour, alpha })
+        if (first >= 0) traces.push({ levels, first, colour, alpha, slot })
       }
 
       // where in a roll the picture is: nought as a new bar begins, one once
@@ -216,6 +236,8 @@ export default function LiveWave({
       if (roll.key !== key) {
         roll.fromLow = roll.low
         roll.fromScale = roll.scale
+        roll.fromShapes = roll.shapes
+        roll.shapes = new Map()
         roll.at = roll.key === '' || !motion ? 0 : now
         roll.key = key
       }
@@ -228,15 +250,28 @@ export default function LiveWave({
         const from = start - bar * back
         if (from + bar <= span.start) continue
         if (back === depth) {
-          if (t < 1) gather(from, MINT, alpha * (1 - t))
+          if (t < 1) gather(from, MINT, alpha * (1 - t), back)
         } else if (back === 1) {
           // the bar just finished, turning from blue to mint
-          gather(from, between(NEWEST_RGB, MINT_RGB, t), NEWEST_ALPHA + (alpha - NEWEST_ALPHA) * t)
-        } else gather(from, MINT, alpha)
+          gather(from, between(NEWEST_RGB, MINT_RGB, t), NEWEST_ALPHA + (alpha - NEWEST_ALPHA) * t, back)
+        } else gather(from, MINT, alpha, back)
       }
       // the bar the playhead is in last, so it is drawn on top, in blue,
       // arriving
-      gather(start, NEWEST, NEWEST_ALPHA * t)
+      gather(start, NEWEST, NEWEST_ALPHA * t, 0)
+
+      // each slot remembers its settled shape, and while a roll lasts is
+      // drawn part way between the shape it held before and the one it
+      // holds now: the traces shift into their new places rather than jump
+      for (const held of traces) roll.shapes.set(held.slot, held.levels)
+      const shapeOf = (held: { levels: Float32Array; slot: number }) => {
+        if (t >= 1) return held.levels
+        const was = roll.fromShapes.get(held.slot)
+        if (!was || was.length !== held.levels.length) return held.levels
+        const mixed = new Float32Array(held.levels.length)
+        for (let x = 0; x < mixed.length; x += 1) mixed[x] = was[x] + (held.levels[x] - was[x]) * t
+        return mixed
+      }
 
       const settledLow = normalise && most > least ? least : 0
       const settledScale = normalise && most > least ? 1 / (most - least) : 1
@@ -255,11 +290,12 @@ export default function LiveWave({
       context.globalCompositeOperation = 'lighter'
       context.lineWidth = TRACE_WIDTH
       for (const held of traces) {
+        const levels = shapeOf(held)
         context.strokeStyle = held.colour
         context.globalAlpha = held.alpha
         context.beginPath()
         for (let x = held.first; x <= width; x += 1) {
-          const y = floor - Math.min(1, Math.max(0, (held.levels[x] - low) * scale)) * reach
+          const y = floor - Math.min(1, Math.max(0, (levels[x] - low) * scale)) * reach
           if (x === held.first) context.moveTo(x, y)
           else context.lineTo(x, y)
         }
@@ -277,7 +313,7 @@ export default function LiveWave({
       context.stroke()
     },
     playing,
-    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}|${scope}|${subdivisions}|${depth}|${normalise}|${motion}`,
+    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}|${scope}|${subdivisions}|${slice}|${depth}|${normalise}|${motion}`,
   )
   useEffect(() => {
     repaintRef.current = repaint

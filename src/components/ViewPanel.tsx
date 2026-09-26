@@ -34,7 +34,12 @@ type ViewPanelProps = {
   onWaveStyleChange: (style: WaveStyle) => void
   cursorMode: GlobalCompositeOperation
   onCursorModeChange: (mode: GlobalCompositeOperation) => void
+  structureDepth: number
+  onStructureDepthChange: (depth: number) => void
 }
+
+// how many bars the structure strip may lay over one another
+export const STRUCTURE_DEPTHS = [4, 8, 16, 32, 64]
 
 // How the compiled view is drawn, as a list of settings: each a row of the
 // panel with its name on the left and its control on the right, the way a
@@ -149,6 +154,8 @@ export default function ViewPanel({
   onWaveStyleChange,
   cursorMode,
   onCursorModeChange,
+  structureDepth,
+  onStructureDepthChange,
 }: ViewPanelProps) {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -216,6 +223,15 @@ export default function ViewPanel({
             cursorMode,
             CURSOR_MODES.map((entry) => ({ value: entry.value, label: entry.label })),
             onCursorModeChange,
+          ),
+        )}
+        {row(
+          'Structure depth',
+          choice<number>(
+            'Bars laid over one another in the structure strip',
+            structureDepth,
+            STRUCTURE_DEPTHS.map((entry) => ({ value: entry, label: `${entry} bars` })),
+            onStructureDepthChange,
           ),
         )}
       </Box>

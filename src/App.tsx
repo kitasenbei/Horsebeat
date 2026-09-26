@@ -175,6 +175,7 @@ export default function App() {
   const [centred, setCentred] = useState(true)
   // what the waveform structure strip lays over itself: bars, or beats
   const [structureScope, setStructureScope] = useState<StructureScope>('bar')
+  const [structureDepth, setStructureDepth] = useState(8)
   const [colormap, setColormap] = useState(0)
   const [fitting, setFitting] = useState(false)
   // what the fit is doing, for the dialog that stands while it runs
@@ -511,6 +512,8 @@ export default function App() {
                 onWaveStyleChange={setWaveStyle}
                 cursorMode={cursorMode}
                 onCursorModeChange={setCursorMode}
+                structureDepth={structureDepth}
+                onStructureDepthChange={setStructureDepth}
               />
             </Box>
             <Box
@@ -744,6 +747,7 @@ export default function App() {
                   divisions={divisions}
                   scope={structureScope}
                   subdivisions={subdivisions}
+                  depth={structureDepth}
                 />
               </Box>
             </Box>

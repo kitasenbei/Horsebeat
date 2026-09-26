@@ -24,11 +24,13 @@ type LiveWaveProps = {
   // by the sub-grid
   scope: StructureScope
   subdivisions: number
+  // how many bars or beats are laid over one another
+  depth: number
 }
 
 export type StructureScope = 'bar' | 'beat'
 
-// An oscilloscope triggered on the bar. The last eight bars of the envelope
+// An oscilloscope triggered on the bar. The last so many bars of the envelope
 // are laid over one bar's width, faint and additive so they build where they
 // agree, with
 // the beats ruled behind them. A grid that sits on the music stacks the
@@ -36,18 +38,21 @@ export type StructureScope = 'bar' | 'beat'
 // keeps them stacked but slides every peak off its line by the same amount,
 // and the direction says which way to move. A tempo that is wrong fans them:
 // each older bar's peaks slide a little further from the newest bar's, in
-// the direction the tempo is out, and eight bars give eight times the per
-// bar error to see.
+// the direction the tempo is out, and every bar back adds its share of the
+// per bar error to see.
 const TALL = 84
-const BARS_BACK = 8
 const EDGE = 4
 const MOST_BEATS = 8
 
 // Every trace the same weight and faint, laid down with an additive blend:
-// where traces cross or lie together the mint builds towards white, so eight
-// stacked bars burn as one bright line and a fan reads as eight pale ones
-const TRACE_ALPHA = 0.28
+// where traces cross or lie together the mint builds towards white, so the
+// stacked bars burn as one bright line and a fan reads as many pale ones.
+// The fainter the more there are, so the stack burns about as bright at any
+// depth rather than saturating at thirty two
 const TRACE_WIDTH = 1.4
+function traceAlpha(depth: number): number {
+  return Math.min(0.5, Math.max(0.03, 2.2 / depth))
+}
 
 // The amplitude curve as a table of the same size the compiled view uses, so
 // a moment here is read through exactly the steps its pixels are painted
@@ -72,6 +77,7 @@ export default function LiveWave({
   divisions,
   scope,
   subdivisions,
+  depth,
 }: LiveWaveProps) {
   const sections = useLiveSectionsValue(givenSections)
   const theme = useTheme()
@@ -129,12 +135,13 @@ export default function LiveWave({
       const frames = envelope.length
       context.save()
       context.globalCompositeOperation = 'lighter'
-      for (let back = BARS_BACK - 1; back >= 0; back -= 1) {
+      const alpha = traceAlpha(depth)
+      for (let back = depth - 1; back >= 0; back -= 1) {
         const from = start - bar * back
         // before the section began there is no bar to compare with
         if (from + bar <= span.start) continue
         context.strokeStyle = MINT
-        context.globalAlpha = TRACE_ALPHA
+        context.globalAlpha = alpha
         context.lineWidth = TRACE_WIDTH
         context.beginPath()
         let drawn = false
@@ -164,7 +171,7 @@ export default function LiveWave({
       context.stroke()
     },
     playing,
-    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}|${scope}|${subdivisions}`,
+    `${position}|${envelope?.length}|${curveSignature(curve)}|${sectionSignature(sections)}|${centred}|${divisions}|${scope}|${subdivisions}|${depth}`,
   )
 
   return (
@@ -172,7 +179,7 @@ export default function LiveWave({
       component="canvas"
       ref={canvasRef}
       data-trace="LiveWave"
-      title={`The last eight ${scope === 'bar' ? 'bars' : 'beats'} laid over one another: stacked when the grid sits on the music, fanned when the tempo is out, slid off the lines when the offset is`}
+      title={`The last ${depth} ${scope === 'bar' ? 'bars' : 'beats'} laid over one another: stacked when the grid sits on the music, fanned when the tempo is out, slid off the lines when the offset is`}
       sx={{ display: 'block', width: '100%', height: TALL, flex: '0 0 auto' }}
     />
   )

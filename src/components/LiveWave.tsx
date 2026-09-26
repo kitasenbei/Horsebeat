@@ -196,9 +196,6 @@ export default function LiveWave({
         height: TALL,
         flex: '0 0 auto',
         cursor: 'pointer',
-        borderLeft: 1,
-        borderBottom: 1,
-        borderColor: 'divider',
       }}
     />
   )

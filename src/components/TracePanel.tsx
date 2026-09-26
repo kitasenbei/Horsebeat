@@ -34,8 +34,6 @@ export default function TracePanel() {
         flex: '0 0 auto',
         height: '100vh',
         overflowY: 'auto',
-        borderLeft: 1,
-        borderColor: 'divider',
         bgcolor: 'background.paper',
         px: 1.5,
         py: 1,

@@ -127,8 +127,6 @@ export default function BpmPicker({
               width: 140,
               px: 1.5,
               borderRadius: 0.75,
-              border: 1,
-              borderColor: 'divider',
               bgcolor: WELL,
               fontWeight: 600,
               '& input': { textAlign: 'center', p: 0.5 },

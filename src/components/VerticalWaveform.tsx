@@ -137,8 +137,6 @@ export default function VerticalWaveform({
         height: '100%',
         touchAction: 'none',
         cursor: samples ? 'ns-resize' : 'default',
-        borderLeft: 1,
-        borderColor: 'divider',
       }}
     />
   )

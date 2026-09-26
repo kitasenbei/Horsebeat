@@ -118,16 +118,21 @@ export default function LiveWave({
       const phase = Math.min(1, Math.max(0, (at - start) / bar))
 
       // the cells ruled behind, moved by the same shift as the window so the
-      // beats stay on the lines as they do in the columns; the line at a
-      // beat is a little stronger than one within it
+      // beats stay on the lines as they do in the columns, and the sub-grid
+      // between them fainter, as under the columns: in bar mode a beat is
+      // split by the sub-grid, in beat mode the cells already are the sub-grid
       context.lineWidth = 1
       const offset = early / bar
-      for (let line = -1; line <= cells; line += 1) {
-        const share = line / cells + offset
+      const fine = scope === 'bar' ? Math.max(1, subdivisions) : 1
+      const steps = cells * fine
+      for (let line = -steps; line <= steps; line += 1) {
+        const share = line / steps + offset
         if (share < 0 || share > 1) continue
         const x = Math.round(share * width) + 0.5
+        const onCell = ((line % fine) + fine) % fine === 0
+        const onBar = ((line % steps) + steps) % steps === 0
         context.strokeStyle = theme.palette.text.secondary
-        context.globalAlpha = ((line % cells) + cells) % cells === 0 ? 0.5 : 0.25
+        context.globalAlpha = onBar ? 0.5 : onCell ? 0.25 : 0.12
         context.beginPath()
         context.moveTo(x, 0)
         context.lineTo(x, height)

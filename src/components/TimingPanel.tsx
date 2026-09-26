@@ -58,7 +58,7 @@ const CARD_HEIGHT = 74
 const CARD_STEP = CARD_HEIGHT + 8
 const OVERSCAN = 3
 // A section is a row of the panel: flat, a hairline beneath, and the one the
-// playhead is in marked by a bar of the live colour down its left edge
+// playhead is in washed in the live colour
 const CARD_IDLE = 'rgba(255, 255, 255, 0.1)'
 
 const ACTION_COLOR = 'rgba(255, 255, 255, 0.06)'
@@ -66,7 +66,6 @@ const ACTION_HOVER = 'rgba(255, 255, 255, 0.12)'
 const ACTION_INK = '#d8d8dc'
 
 const CARD_LIVE = 'rgba(224, 124, 10, 0.12)'
-const CARD_LIVE_BORDER = '#e07c0a'
 const LIVE_PILL = 'rgba(224, 124, 10, 0.18)'
 const LIVE_PILL_HOVER = 'rgba(224, 124, 10, 0.3)'
 const LIVE_INK = '#ffd9ad'
@@ -373,18 +372,14 @@ export default function TimingPanel({
                 justifyContent: 'center',
                 gap: 1,
                 p: 1,
-                pl: 1.5,
                 borderRadius: 0,
                 borderBottom: 1,
                 borderColor: CARD_IDLE,
-                borderLeft: 3,
-                borderLeftColor: 'transparent',
                 bgcolor: 'transparent',
                 color: 'text.primary',
                 cursor: 'pointer',
                 '&:hover': { bgcolor: 'action.hover' },
                 '&[data-live="true"]': {
-                  borderLeftColor: CARD_LIVE_BORDER,
                   bgcolor: CARD_LIVE,
                   color: 'text.primary',
                 },

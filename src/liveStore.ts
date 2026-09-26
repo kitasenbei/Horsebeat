@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { tick } from './trace'
 
 // A value while it is being dragged. A gesture writes it here frame by frame,
@@ -20,21 +20,34 @@ export type LiveStore<T> = {
 
 export function makeLiveStore<T>(same: (left: T, right: T) => boolean): LiveStore<T> {
   const listeners = new Set<() => void>()
+  // the gesture's value, kept after it ends until the app has caught up, so
+  // no frame is drawn from the value as it was before the gesture
   let held: T | null = null
-  // after a commit the value is kept until the app's own has caught up with
-  // it, so no frame is drawn from the value as it was before the gesture
-  let committed: T | null = null
+  // whether a gesture is under way: only then is the held value the truth
+  // whatever the app says
+  let active = false
   // what the app held when the gesture began, to tell a render that has not
   // caught up yet from one that has
-  let committedBefore: T | null = null
+  let before: T | null = null
+  // what the gesture handed the app when it ended
+  let committed: T | null = null
+
+  const release = () => {
+    held = null
+    before = null
+    committed = null
+  }
 
   const read = (settled: T): T => {
-    if (held !== null && committed !== null && !same(settled, committedBefore as T)) {
-      // the app has rendered with something other than what it had before the
-      // commit: it has caught up, or moved on (clamped, or set from elsewhere).
-      // Either way the app's word is now the one to draw
-      held = null
-      committed = null
+    // Once the gesture is over, the app's word is the one to draw as soon as
+    // it shows any sign of having heard: a value other than the one it held
+    // before, or the very value it was handed. Held any longer, a gesture
+    // whose commit changed nothing, or that ended without one, would leave
+    // its value on screen while the app moved on underneath it
+    if (held !== null && !active && before !== null) {
+      const moved = !same(settled, before)
+      const arrived = committed !== null && same(settled, committed)
+      if (moved || arrived) release()
     }
     return held ?? settled
   }
@@ -58,22 +71,39 @@ export function makeLiveStore<T>(same: (left: T, right: T) => boolean): LiveStor
 
   const useEdit = (settled: T, onChange: (next: T) => void) => {
     const value = useValue(settled)
+    const changeRef = useRef(onChange)
+    changeRef.current = onChange
 
     const edit = (next: T) => {
       tick('drag live edit')
-      if (held === null) committedBefore = settled
+      if (!active) {
+        before = settled
+        active = true
+      }
       held = next
       committed = null
       announce()
     }
 
     const settle = () => {
+      if (!active) return
+      active = false
       const pending = held
-      if (pending === null || committed !== null) return
+      if (pending === null) return
       tick('drag commit to app')
       committed = pending
-      onChange(pending)
+      changeRef.current(pending)
     }
+
+    // a gesture cut short by its component going away still reaches the app,
+    // rather than leaving its last frame on screen for good
+    useEffect(
+      () => () => {
+        if (active) settle()
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [],
+    )
 
     return [value, edit, settle] as const
   }

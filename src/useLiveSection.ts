@@ -16,9 +16,16 @@ export function useLiveSection(
   positionRef: RefObject<number>,
   playing: boolean,
 ): Section | null {
-  const at = (moment: number) =>
-    sectionSpans(sections, duration).find((item) => moment >= item.start && moment <= item.end)
-      ?.section ?? null
+  // the section whose stretch the moment is in; before the first section
+  // begins, the first, since its grid is the one that reaches back there and
+  // the one a tuner should be turning. Only an empty list gives none, so the
+  // tuner never falls back to a placeholder that reads as a stale tempo
+  const at = (moment: number) => {
+    const spans = sectionSpans(sections, duration)
+    if (spans.length === 0) return null
+    const within = spans.find((item) => moment >= item.start && moment <= item.end)
+    return (within ?? spans[0]).section
+  }
 
   const [live, setLive] = useState<Section | null>(null)
 

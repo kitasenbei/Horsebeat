@@ -102,11 +102,58 @@ const PILL = {
   },
 }
 
+// A picker names itself: a caption in small caps sits over the value in the
+// same well, so the field says what it is without growing wider. The toggles
+// beside it carry their own word
 const PICKER = {
   ...PILL,
   fontSize: 12,
-  '& .MuiSelect-select': { py: 0.5, pl: 1, pr: '26px !important', lineHeight: 1.4, minHeight: 0 },
+  '& .MuiSelect-select': {
+    // the theme sets the select's padding by class, so the taller field
+    // says its own
+    paddingTop: '13px !important',
+    paddingBottom: '3px !important',
+    pl: 1,
+    pr: '24px !important',
+    lineHeight: 1.2,
+    minHeight: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 0.75,
+  },
   '& .MuiOutlinedInput-notchedOutline': { border: 0 },
+  '& .MuiSelect-icon': { right: 2, top: 'calc(50% - 10px)' },
+}
+// the caption is drawn over the field's well, so it stands above it
+const CAPTION = {
+  position: 'absolute',
+  zIndex: 1,
+  top: 4,
+  left: 8,
+  fontSize: 8,
+  lineHeight: 1,
+  letterSpacing: 0.6,
+  textTransform: 'uppercase',
+  color: 'text.secondary',
+  pointerEvents: 'none',
+  userSelect: 'none',
+}
+
+// a colormap shown as itself: a strip of its stops, which needs no word
+function swatch(stops: string[]) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-block',
+        width: 34,
+        height: 10,
+        borderRadius: 0.5,
+        background: `linear-gradient(to right, ${stops.join(', ')})`,
+        flex: '0 0 auto',
+      }}
+    />
+  )
 }
 
 // a pressed toggle is lit in the shell's one accent, whatever it stands for:
@@ -135,24 +182,43 @@ function segment(label: string, icon: ReactNode, iconOnly = false) {
 // list of options rather than another twelve lines of Select dressing.
 function picker<T extends number | string>(
   label: string,
+  caption: string,
   value: T,
-  options: { value: T; label: string }[],
+  options: { value: T; label: string; swatch?: string[] }[],
   onChange: (next: T) => void,
 ) {
+  const shown = (option: { label: string; swatch?: string[] }) =>
+    option.swatch ? (
+      <>
+        {swatch(option.swatch)}
+        {option.label}
+      </>
+    ) : (
+      option.label
+    )
   return (
-    <Select
-      size="small"
-      value={value}
-      onChange={(event) => onChange(event.target.value as T)}
-      inputProps={{ 'aria-label': label }}
-      sx={PICKER}
-    >
-      {options.map((option) => (
-        <MenuItem key={String(option.value)} value={option.value}>
-          {option.label}
-        </MenuItem>
-      ))}
-    </Select>
+    <Box sx={{ position: 'relative', flex: '0 0 auto' }}>
+      <Box component="span" sx={CAPTION}>
+        {caption}
+      </Box>
+      <Select
+        size="small"
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        inputProps={{ 'aria-label': label }}
+        renderValue={(picked) => {
+          const option = options.find((entry) => entry.value === picked)
+          return option ? shown(option) : String(picked)
+        }}
+        sx={PICKER}
+      >
+        {options.map((option) => (
+          <MenuItem key={String(option.value)} value={option.value} sx={{ gap: 0.75 }}>
+            {shown(option)}
+          </MenuItem>
+        ))}
+      </Select>
+    </Box>
   )
 }
 
@@ -282,6 +348,7 @@ export default function TopBar({
 
         {picker<number | 'all'>(
           'Lane shown in the compiled view',
+          'Lane',
           lane,
           [
             { value: 'all', label: 'All lanes' },
@@ -292,6 +359,7 @@ export default function TopBar({
 
         {picker<number | 'auto'>(
           'Beats per column',
+          'Slice',
           slice,
           [
             { value: 'auto', label: 'Auto' },
@@ -302,6 +370,7 @@ export default function TopBar({
 
         {picker<number>(
           'Guide divisions',
+          'Grid',
           divisions,
           DIVISION_STEPS.map((entry) => ({ value: entry, label: `/${entry}` })),
           onDivisionsChange,
@@ -309,8 +378,9 @@ export default function TopBar({
 
         {picker<number>(
           'Guide subdivisions',
+          'Sub',
           subdivisions,
-          SUBDIVISION_STEPS.map((entry) => ({ value: entry, label: entry === 1 ? 'no sub' : `sub ${entry}` })),
+          SUBDIVISION_STEPS.map((entry) => ({ value: entry, label: entry === 1 ? 'none' : `×${entry}` })),
           onSubdivisionsChange,
         )}
 
@@ -331,8 +401,9 @@ export default function TopBar({
         {lane === 0 || lane === 4 || lane === 5 || lane === 'all'
           ? picker<number>(
               'Colours',
+              'Map',
               colormap,
-              COLORMAPS.map((map, index) => ({ value: index, label: map.name })),
+              COLORMAPS.map((map, index) => ({ value: index, label: map.name, swatch: map.stops })),
               onColormapChange,
             )
           : null}
@@ -369,6 +440,7 @@ export default function TopBar({
 
         {picker<WaveStyle>(
           'Wave and loud lane style',
+          'Style',
           waveStyle,
           WAVE_STYLES.map((entry) => ({ value: entry.value, label: entry.label })),
           onWaveStyleChange,
@@ -376,6 +448,7 @@ export default function TopBar({
 
         {picker<GlobalCompositeOperation>(
           'Position marker blend',
+          'Marker',
           cursorMode,
           CURSOR_MODES.map((entry) => ({ value: entry.value, label: entry.label })),
           onCursorModeChange,

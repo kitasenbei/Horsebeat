@@ -28,23 +28,24 @@ type LiveWaveProps = {
 
 export type StructureScope = 'bar' | 'beat'
 
-// An oscilloscope triggered on the bar. The last few bars of the envelope
-// are laid over one bar's width, the newest bright and the older fading, with
+// An oscilloscope triggered on the bar. The last eight bars of the envelope
+// are laid over one bar's width, fading a little with age, with
 // the beats ruled behind them. A grid that sits on the music stacks the
 // traces and puts their peaks on the beat lines. An offset that is wrong
 // keeps them stacked but slides every peak off its line by the same amount,
 // and the direction says which way to move. A tempo that is wrong fans them:
 // each older bar's peaks slide a little further from the newest bar's, in
-// the direction the tempo is out, and four bars give four times the per bar
-// error to see.
+// the direction the tempo is out, and eight bars give eight times the per
+// bar error to see.
 const TALL = 84
-const BARS_BACK = 4
+const BARS_BACK = 8
 const EDGE = 4
 const MOST_BEATS = 8
 
-// the traces from newest to oldest, in the shell's mint fading to the grey
-// of the panel's ink
-const TRACE_ALPHA = [1, 0.62, 0.38, 0.22]
+// every trace the same weight, fading a little with age so the eye can tell
+// which way a fan opens without any one bar being singled out
+const ALPHA_NEWEST = 0.85
+const ALPHA_OLDEST = 0.3
 
 // The amplitude curve as a table of the same size the compiled view uses, so
 // a moment here is read through exactly the steps its pixels are painted
@@ -129,8 +130,8 @@ export default function LiveWave({
         // before the section began there is no bar to compare with
         if (from + bar <= span.start) continue
         context.strokeStyle = MINT
-        context.globalAlpha = TRACE_ALPHA[back] ?? 0.2
-        context.lineWidth = back === 0 ? 1.6 : 1.2
+        context.globalAlpha = ALPHA_NEWEST - ((ALPHA_NEWEST - ALPHA_OLDEST) * back) / Math.max(1, BARS_BACK - 1)
+        context.lineWidth = 1.2
         context.beginPath()
         let drawn = false
         for (let x = 0; x <= width; x += 1) {
@@ -167,7 +168,7 @@ export default function LiveWave({
       component="canvas"
       ref={canvasRef}
       data-trace="LiveWave"
-      title={`The last four ${scope === 'bar' ? 'bars' : 'beats'} laid over one another: stacked when the grid sits on the music, fanned when the tempo is out, slid off the lines when the offset is`}
+      title={`The last eight ${scope === 'bar' ? 'bars' : 'beats'} laid over one another: stacked when the grid sits on the music, fanned when the tempo is out, slid off the lines when the offset is`}
       sx={{ display: 'block', width: '100%', height: TALL, flex: '0 0 auto' }}
     />
   )

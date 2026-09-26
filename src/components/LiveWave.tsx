@@ -147,21 +147,19 @@ export default function LiveWave({
       const span = spans.find((item) => at >= item.start && at <= item.end) ?? spans[0]
       if (!span || span.beat <= 0) return
 
-      // the stretch and its cells: a bar ruled by the grid setting, as a
-      // column is, or one cell of that bar, a beat, ruled by the sub-grid. A
-      // beat here is exactly one cell of the bar there: the same stretch of
-      // time between two of its lines, with the same sub-lines inside it. So
-      // both are started early by the same stretch of time the columns are,
-      // half a division of a column, and a beat's onset sits mid-cell as it
-      // does in the columns; a shift longer than the stretch wraps
-      // a bar here is a column there: the slice setting in beats, or the
-      // meter when the slice is left to the view
+      // the stretch and its cells. A bar here is a column there: the slice
+      // setting in beats, or the meter when the slice is left to the view,
+      // ruled by the grid setting as the column is. A beat here is one cell
+      // of that bar: the stretch between two of its grid lines, whatever the
+      // grid, with the same sub-lines inside it. Both start early by the
+      // stretch the columns do, half a cell, so a beat's onset sits mid-cell
+      // as it does in the columns; in beat mode that is half the stretch
       const meter = Math.min(MOST_BEATS, Math.max(1, span.section.meter))
       const column = slice === 'auto' ? meter : Math.max(1, slice)
+      const cell = (span.beat * column) / Math.max(1, divisions)
       const cells = scope === 'bar' ? Math.max(1, divisions) : Math.max(1, subdivisions)
-      const bar = scope === 'bar' ? span.beat * column : span.beat
-      const shift = centred ? (span.beat * column) / (2 * Math.max(1, divisions)) : 0
-      const early = shift % bar
+      const bar = scope === 'bar' ? span.beat * column : cell
+      const early = centred ? cell / 2 : 0
       const index = Math.floor((at - span.start + early) / bar)
       const start = span.start - early + index * bar
       const floor = height - EDGE

@@ -6,7 +6,7 @@ import { applyCurve, type Curve } from '../curve'
 import { useCanvas } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
 import { useLiveSectionsValue } from '../liveSections'
-import { MINT, MINT_DIM } from '../theme'
+import { MINT } from '../theme'
 
 type LiveWaveProps = {
   envelope: Float32Array | null
@@ -21,7 +21,7 @@ type LiveWaveProps = {
   centred: boolean
   divisions: number
   // the stretch laid over itself: a bar ruled by its beats, or one beat ruled
-  // by the sub-grid, with the cell the playhead is in lit
+  // by the sub-grid
   scope: StructureScope
   subdivisions: number
 }
@@ -101,11 +101,7 @@ export default function LiveWave({
       const floor = height - EDGE
       const reach = height - 2 * EDGE
 
-      // the cell the playhead is in, lit
       const phase = Math.min(1, Math.max(0, (at - start) / bar))
-      const cell = Math.min(cells - 1, Math.floor(phase * cells))
-      context.fillStyle = MINT_DIM
-      context.fillRect((cell / cells) * width, 0, width / cells, height)
 
       // the cells ruled behind, the first line a little stronger
       context.lineWidth = 1

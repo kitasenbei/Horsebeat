@@ -31,9 +31,7 @@ export default function PanelHeader({ title, children }: PanelHeaderProps) {
         variant="caption"
         sx={{
           flex: 1,
-          textTransform: 'uppercase',
-          letterSpacing: 0.6,
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: 600,
           color: 'text.secondary',
           userSelect: 'none',

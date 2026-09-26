@@ -99,9 +99,7 @@ export default function StatusBar({
         flex: '0 0 auto',
         minHeight: 28,
         px: 1.5,
-        borderTop: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
+        bgcolor: 'background.default',
       }}
     >
       {loadingName ? <CircularProgress size={12} /> : null}

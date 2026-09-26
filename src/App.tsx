@@ -28,6 +28,7 @@ import TracePanel from './components/TracePanel'
 import SectionTuner from './components/SectionTuner'
 import TimingPanel from './components/TimingPanel'
 import PanelHeader from './components/PanelHeader'
+import { CANVAS } from './theme'
 import BarGrid from './components/BarGrid'
 import {
   computeBands,
@@ -470,9 +471,9 @@ export default function App() {
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          gap: 1.5,
-          px: 2,
-          py: 1.5,
+          gap: 1,
+          px: 1,
+          py: 1,
         }}
       >
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', gap: 1 }}>
@@ -592,9 +593,9 @@ export default function App() {
                     minHeight: 0,
                     display: 'flex',
                     flexDirection: 'column',
-                    bgcolor: 'background.default',
-                    border: 1,
-                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                    borderRadius: 1.5,
+                    overflow: 'hidden',
                   }}
                 >
                   <PanelHeader title="Compiled view">
@@ -608,7 +609,7 @@ export default function App() {
                       </IconButton>
                     </Tooltip>
                   </PanelHeader>
-                  <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <Box sx={{ flex: 1, minHeight: 0, bgcolor: CANVAS }}>
                   <BarGrid
                     envelope={levels}
                     loudness={loudness}
@@ -658,12 +659,13 @@ export default function App() {
                 minHeight: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                border: 1,
-                borderColor: 'divider',
+                bgcolor: 'background.paper',
+                borderRadius: 1.5,
+                overflow: 'hidden',
               }}
             >
               <PanelHeader title="Approach" />
-              <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              <Box sx={{ flex: 1, minHeight: 0, position: 'relative', bgcolor: CANVAS }}>
               <VerticalWaveform
                 samples={samples}
                 // the falling view reads the envelope as it is, a width for an
@@ -694,6 +696,7 @@ export default function App() {
                   pixelsPerStep={6}
                   majorEvery={10}
                   format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
+                  fill
                   onChange={setFallSpeed}
                 />
               </Box>
@@ -776,7 +779,17 @@ export default function App() {
             />
           }
         />
-        <Box sx={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
+        <Box
+          sx={{
+            flex: '0 0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            borderRadius: 1.5,
+            overflow: 'hidden',
+            bgcolor: CANVAS,
+          }}
+        >
           <SectionBlocks
             sections={sections}
             duration={duration}

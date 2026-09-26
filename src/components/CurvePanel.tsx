@@ -25,6 +25,7 @@ import { useRafCallback } from '../useRafCallback'
 import { measure, tick } from '../trace'
 import { FLOOR_DB } from '../audio'
 import { curveSignature } from '../draw'
+import { WELL } from '../theme'
 import {
   applyCurve,
   CURVE_PRESETS,
@@ -314,7 +315,7 @@ export default function CurvePanel({
     <Paper
       sx={
         embedded
-          ? { width: '100%', overflow: 'hidden', border: 1, borderColor: 'divider' }
+          ? { width: '100%', overflow: 'hidden' }
           : {
               position: 'fixed',
               left: spot.left,
@@ -336,22 +337,32 @@ export default function CurvePanel({
           gap: 0.5,
           px: 1,
           py: 0.5,
-          bgcolor: 'background.default',
-          borderBottom: 1,
-          borderColor: 'divider',
+          minHeight: 32,
           cursor: embedded ? 'default' : 'move',
           touchAction: 'none',
         }}
       >
         {embedded ? null : <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
         <Typography
-          variant="caption"
+          variant="body2"
           sx={{
             flex: 1,
-            fontSize: 11,
             fontWeight: 600,
-            color: 'text.secondary',
             userSelect: 'none',
+            position: 'relative',
+            alignSelf: 'stretch',
+            display: 'flex',
+            alignItems: 'center',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              left: 0,
+              bottom: 2,
+              width: 28,
+              height: 2,
+              borderRadius: 1,
+              bgcolor: 'primary.main',
+            },
           }}
         >
           Amplitude curve
@@ -394,9 +405,8 @@ export default function CurvePanel({
             display: 'block',
             width: '100%',
             height: CHART_HEIGHT,
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 1,
+            borderRadius: 1.5,
+            bgcolor: WELL,
             touchAction: 'none',
             cursor: 'crosshair',
           }}

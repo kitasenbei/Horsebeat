@@ -20,9 +20,9 @@ type BpmPickerProps = {
 const BPM_COLOR = 'rgba(255, 255, 255, 0.06)'
 const BPM_HOVER = 'rgba(255, 255, 255, 0.12)'
 const BPM_INK = '#e8e8ec'
-const BPM_LIVE = 'rgba(224, 124, 10, 0.18)'
-const BPM_LIVE_HOVER = 'rgba(224, 124, 10, 0.3)'
-const BPM_LIVE_INK = '#ffd9ad'
+const BPM_LIVE = 'rgba(79, 209, 165, 0.22)'
+const BPM_LIVE_HOVER = 'rgba(79, 209, 165, 0.34)'
+const BPM_LIVE_INK = '#d9fff1'
 
 const MULTIPLIERS = [
   { factor: 0.2, label: '1/5' },

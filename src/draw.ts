@@ -85,17 +85,17 @@ export function drawWindow(
   height: number,
   color: string,
 ) {
-  const lineWidth = 2
+  // a tint over the window rather than a box around it: a fill reads as a
+  // region, where a stroke read as another line among the data
   const left = range.start * width
   const right = range.end * width
-  context.lineWidth = lineWidth
-  context.strokeStyle = color
-  context.strokeRect(
-    left + lineWidth / 2,
-    lineWidth / 2,
-    Math.max(lineWidth, right - left - lineWidth),
-    height - lineWidth,
-  )
+  context.fillStyle = color
+  context.globalAlpha = 0.16
+  context.fillRect(left, 0, Math.max(2, right - left), height)
+  context.globalAlpha = 0.9
+  context.fillRect(left, 0, 2, height)
+  context.fillRect(Math.max(left, right - 2), 0, 2, height)
+  context.globalAlpha = 1
 }
 
 export const HANDLE_WIDTH = 12

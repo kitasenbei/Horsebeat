@@ -3,7 +3,6 @@ import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-import { yellow } from '@mui/material/colors'
 import { useTheme } from '@mui/material/styles'
 import { curveSignature, drawPeaksAmplitude, drawPlayhead, drawWindow } from '../draw'
 import { useCanvas } from '../useCanvas'
@@ -54,7 +53,7 @@ export default function Overview({
   const stillRef = useCanvas((context, width, height) => {
     if (!peaks) return
     drawPeaksAmplitude(context, peaks, FULL, width, height, theme.palette.primary.main, curve)
-    drawWindow(context, range, width, height, yellow[700])
+    drawWindow(context, range, width, height, theme.palette.primary.main)
   }, false, `${range.start}|${range.end}|${peaks?.length}|${curveSignature(curve)}`)
 
   const canvasRef = useCanvas((context, width, height) => {
@@ -138,11 +137,11 @@ export default function Overview({
         transform: 'translate(-50%, -50%)',
         width: HANDLE,
         height: HANDLE,
-        bgcolor: yellow[700],
-        color: theme.palette.common.white,
+        bgcolor: theme.palette.primary.main,
+        color: theme.palette.primary.contrastText,
         cursor: 'ew-resize',
         touchAction: 'none',
-        '&:hover': { bgcolor: yellow[800] },
+        '&:hover': { bgcolor: theme.palette.primary.dark },
       }}
     >
       {mode === 'start' ? (

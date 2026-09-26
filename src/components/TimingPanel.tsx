@@ -26,7 +26,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import BpmPicker from './BpmPicker'
 import { createSection, sortSections, type Section } from '../timing'
 import { tick } from '../trace'
-import { WELL } from '../theme'
+import { ROW, WELL } from '../theme'
 import { liveSections, subscribeLiveSections } from '../liveSections'
 
 type TimingPanelProps = {
@@ -59,16 +59,16 @@ const CARD_STEP = CARD_HEIGHT + 8
 const OVERSCAN = 3
 // A section is a row of the panel: flat, a hairline beneath, and the one the
 // playhead is in washed in the live colour
-const CARD_IDLE = 'rgba(255, 255, 255, 0.1)'
+const CARD_IDLE = ROW
 
 const ACTION_COLOR = 'rgba(255, 255, 255, 0.06)'
 const ACTION_HOVER = 'rgba(255, 255, 255, 0.12)'
-const ACTION_INK = '#d8d8dc'
+const ACTION_INK = '#dfe6e3'
 
-const CARD_LIVE = 'rgba(224, 124, 10, 0.12)'
-const LIVE_PILL = 'rgba(224, 124, 10, 0.18)'
-const LIVE_PILL_HOVER = 'rgba(224, 124, 10, 0.3)'
-const LIVE_INK = '#ffd9ad'
+const CARD_LIVE = 'rgba(79, 209, 165, 0.16)'
+const LIVE_PILL = 'rgba(79, 209, 165, 0.2)'
+const LIVE_PILL_HOVER = 'rgba(79, 209, 165, 0.32)'
+const LIVE_INK = '#d9fff1'
 
 const LIVE_POLL_MS = 250
 
@@ -268,22 +268,32 @@ export default function TimingPanel({
           gap: 0.5,
           px: 1,
           py: 0.5,
-          bgcolor: 'background.default',
-          borderBottom: 1,
-          borderColor: 'divider',
+          minHeight: 32,
           cursor: embedded ? 'default' : 'move',
           touchAction: 'none',
         }}
       >
         {embedded ? null : <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
         <Typography
-          variant="caption"
+          variant="body2"
           sx={{
             flex: 1,
-            fontSize: 11,
             fontWeight: 600,
-            color: 'text.secondary',
             userSelect: 'none',
+            position: 'relative',
+            alignSelf: 'stretch',
+            display: 'flex',
+            alignItems: 'center',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              left: 0,
+              bottom: 2,
+              width: 28,
+              height: 2,
+              borderRadius: 1,
+              bgcolor: 'primary.main',
+            },
           }}
         >
           Tempo sections
@@ -381,13 +391,11 @@ export default function TimingPanel({
                 justifyContent: 'center',
                 gap: 1,
                 p: 1,
-                borderRadius: 0,
-                borderBottom: 1,
-                borderColor: CARD_IDLE,
-                bgcolor: 'transparent',
+                borderRadius: 1.5,
+                bgcolor: CARD_IDLE,
                 color: 'text.primary',
                 cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
+                '&:hover': { filter: 'brightness(1.08)' },
                 '&[data-live="true"]': {
                   bgcolor: CARD_LIVE,
                   color: 'text.primary',

@@ -9,7 +9,6 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Tooltip from '@mui/material/Tooltip'
-import Divider from '@mui/material/Divider'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import UndoIcon from '@mui/icons-material/Undo'
 import RedoIcon from '@mui/icons-material/Redo'
@@ -32,7 +31,7 @@ import {
   type WaveStyle,
 } from '../draw'
 import { TRACING } from '../trace'
-import { WELL } from '../theme'
+import { MINT_DIM, WELL } from '../theme'
 
 type TopBarProps = {
   onOpen: () => void
@@ -79,10 +78,8 @@ const MAX_LABEL = 40
 
 // a group of controls: a well with a hairline, its buttons flat and square
 const PILL = {
-  borderRadius: 0.75,
+  borderRadius: 1.5,
   overflow: 'hidden',
-  border: 1,
-  borderColor: 'divider',
   bgcolor: WELL,
   '& .MuiButtonBase-root': {
     textTransform: 'none',
@@ -95,10 +92,6 @@ const PILL = {
     color: 'text.primary',
     lineHeight: 1,
     fontSize: 12,
-  },
-  '& .MuiButtonBase-root:not(:first-of-type)': {
-    borderLeft: 1,
-    borderColor: 'divider',
   },
 }
 
@@ -160,9 +153,9 @@ function swatch(stops: string[]) {
 function selected(_palette: 'primary' | 'secondary' | 'info') {
   return {
     '&.Mui-selected': {
-      bgcolor: 'rgba(47, 179, 163, 0.22)',
-      color: '#e8fffb',
-      '&:hover': { bgcolor: 'rgba(47, 179, 163, 0.3)' },
+      bgcolor: MINT_DIM,
+      color: '#e9fff7',
+      '&:hover': { bgcolor: 'rgba(79, 209, 165, 0.3)' },
     },
   }
 }
@@ -264,7 +257,7 @@ export default function TopBar({
       <Toolbar
         variant="dense"
         disableGutters
-        sx={{ px: 1, py: 0.5, gap: 0.75, rowGap: 0.5, flexWrap: 'wrap', minHeight: 0 }}
+        sx={{ px: 1, py: 0.75, gap: 0.5, rowGap: 0.5, flexWrap: 'wrap', minHeight: 0 }}
       >
         <Button
           size="small"
@@ -294,7 +287,7 @@ export default function TopBar({
           </Tooltip>
         </ButtonGroup>
 
-        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
+        <Box sx={{ width: 8 }} />
 
         <ToggleButtonGroup
           size="small"
@@ -343,7 +336,7 @@ export default function TopBar({
           </ToggleButton>
         </ToggleButtonGroup>
 
-        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
+        <Box sx={{ width: 8 }} />
 
         {picker<number | 'all'>(
           'Lane shown in the compiled view',
@@ -407,7 +400,7 @@ export default function TopBar({
             )
           : null}
 
-        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
+        <Box sx={{ width: 8 }} />
 
         <ToggleButtonGroup
           size="small"
@@ -453,7 +446,7 @@ export default function TopBar({
           onCursorModeChange,
         )}
 
-        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
+        <Box sx={{ width: 8 }} />
 
         <ToggleButtonGroup
           size="small"

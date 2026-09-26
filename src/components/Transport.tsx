@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import ToggleButton from '@mui/material/ToggleButton'
 import Tooltip from '@mui/material/Tooltip'
+import { MINT_DIM, WELL } from '../theme'
 import PauseIcon from '@mui/icons-material/Pause'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import StopIcon from '@mui/icons-material/Stop'
@@ -56,6 +57,7 @@ export default function Transport({
         sx={{
           width: 44,
           height: 44,
+          borderRadius: 1.5,
           bgcolor: 'primary.main',
           color: 'primary.contrastText',
           '&:hover': { bgcolor: 'primary.dark' },
@@ -77,6 +79,7 @@ export default function Transport({
             gridTemplateColumns: 'repeat(6, auto)',
             gridAutoRows: 'auto',
             gap: '2px',
+            // plain numbers on the well, the chosen one lit: no box around each
             '& .MuiToggleButton-root': {
               px: 0.75,
               py: 0,
@@ -84,9 +87,11 @@ export default function Transport({
               fontSize: 12,
               lineHeight: '20px',
               textTransform: 'none',
-              border: 1,
-              borderColor: 'divider',
+              border: 0,
               borderRadius: 1,
+              bgcolor: WELL,
+              color: 'text.secondary',
+              '&.Mui-selected': { bgcolor: MINT_DIM, color: 'text.primary', fontWeight: 600 },
             },
           }}
         >

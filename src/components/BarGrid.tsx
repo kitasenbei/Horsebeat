@@ -68,6 +68,7 @@ import type { Range } from '../range'
 import { measure, stopwatch, tick } from '../trace'
 import { useLiveRangeEdit } from '../liveRange'
 import { BLOCK_HEIGHT, LIVE_COLOR } from './SectionBlocks'
+import { CANVAS } from '../theme'
 
 type BarGridProps = {
   envelope: Float32Array | null
@@ -159,7 +160,7 @@ function paintWave(
     shape,
     width,
     colormap,
-    theme.palette.background.paper,
+    CANVAS,
     style,
     theme.palette.primary.main,
   )
@@ -996,7 +997,7 @@ export default function BarGrid({
         width,
         height,
         window.devicePixelRatio || 1,
-        colorChannels(theme.palette.background.paper),
+        colorChannels(CANVAS),
         colorChannels(theme.palette.primary.main),
         cursor,
         key,

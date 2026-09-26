@@ -2,30 +2,36 @@ import { createTheme } from '@mui/material/styles'
 
 export const GRID_PURPLE = '#7b00ff'
 
-// The workstation shell: one dark surface, panels as regions of it divided by
-// hairlines, small square controls, colour kept for the data and for the one
-// thing that is live. Every MUI control takes its shape from here, so a new
-// panel looks like the rest without dressing
-export const SHELL = '#1c1c1f'
-export const PANEL = '#232327'
-export const WELL = '#151517'
-export const LINE = 'rgba(255, 255, 255, 0.1)'
+// The shell in three tones of one green black, and nothing else: the shell
+// behind everything, a panel a step lighter, a row or a well a step from
+// that. Edges are where two tones meet, so there are no lines in the chrome;
+// gaps do the separating. The one accent is a mint that fills, for a value
+// and for the thing that is on. Colour otherwise belongs to the data, drawn
+// on its own dark neutral so the maps stay true
+export const SHELL = '#121918'
+export const PANEL = '#1a2321'
+export const ROW = '#232e2c'
+export const WELL = '#0f1514'
+export const CANVAS = '#121316'
+export const LINE = 'rgba(255, 255, 255, 0.08)'
+export const MINT = '#4fd1a5'
+export const MINT_DIM = 'rgba(79, 209, 165, 0.22)'
 export const LIVE = '#e07c0a'
 
 export const theme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#2fb3a3', light: '#5ccbbd', dark: '#128476', contrastText: '#0c1211' },
-    secondary: { main: '#8f9aa5', light: '#b5bec6', dark: '#5f6a75' },
+    primary: { main: MINT, light: '#7fe0c0', dark: '#2fa17c', contrastText: '#08110e' },
+    secondary: { main: '#8fa39d', light: '#b3c4be', dark: '#5f716c' },
     info: { main: '#8b6ff0', light: '#a992ff', dark: '#6741d9' },
     warning: { main: LIVE, light: '#f4a04a', dark: '#a85700', contrastText: '#1a0e00' },
     error: { main: '#ef5350' },
     background: { default: SHELL, paper: PANEL },
     divider: LINE,
-    text: { primary: '#d8d8dc', secondary: '#9a9aa2', disabled: '#5e5e66' },
-    action: { hover: 'rgba(255, 255, 255, 0.06)', selected: 'rgba(255, 255, 255, 0.12)' },
+    text: { primary: '#dfe6e3', secondary: '#93a49e', disabled: '#56655f' },
+    action: { hover: 'rgba(255, 255, 255, 0.05)', selected: MINT_DIM },
   },
-  shape: { borderRadius: 3 },
+  shape: { borderRadius: 6 },
   typography: {
     fontSize: 12,
     button: { textTransform: 'none', fontWeight: 500 },
@@ -40,48 +46,48 @@ export const theme = createTheme({
     },
     MuiPaper: {
       defaultProps: { elevation: 0 },
-      styleOverrides: {
-        root: { backgroundImage: 'none', border: `1px solid ${LINE}` },
-      },
+      styleOverrides: { root: { backgroundImage: 'none' } },
     },
     MuiAppBar: {
-      styleOverrides: {
-        root: { backgroundColor: PANEL, backgroundImage: 'none', borderBottom: `1px solid ${LINE}` },
-      },
+      styleOverrides: { root: { backgroundColor: PANEL, backgroundImage: 'none' } },
     },
     MuiButton: {
       defaultProps: { size: 'small', disableElevation: true },
       styleOverrides: {
-        root: { minHeight: 26, paddingTop: 2, paddingBottom: 2, lineHeight: 1.4 },
+        root: { minHeight: 28, paddingTop: 3, paddingBottom: 3, lineHeight: 1.4, borderRadius: 6 },
       },
     },
     MuiIconButton: {
       defaultProps: { size: 'small' },
-      styleOverrides: { root: { borderRadius: 3 } },
+      styleOverrides: { root: { borderRadius: 6 } },
     },
     MuiToggleButton: {
       styleOverrides: {
         root: {
-          borderColor: LINE,
-          color: '#c4c4ca',
-          paddingTop: 3,
-          paddingBottom: 3,
-          paddingLeft: 8,
-          paddingRight: 8,
+          border: 0,
+          borderRadius: 6,
+          color: '#c9d3cf',
+          paddingTop: 4,
+          paddingBottom: 4,
+          paddingLeft: 10,
+          paddingRight: 10,
           lineHeight: 1.4,
           fontSize: 12,
-          '&.Mui-selected': { backgroundColor: 'rgba(47, 179, 163, 0.22)', color: '#e8fffb' },
-          '&.Mui-selected:hover': { backgroundColor: 'rgba(47, 179, 163, 0.3)' },
+          '&.Mui-selected': { backgroundColor: MINT_DIM, color: '#e9fff7' },
+          '&.Mui-selected:hover': { backgroundColor: 'rgba(79, 209, 165, 0.3)' },
         },
       },
     },
     MuiToggleButtonGroup: {
-      styleOverrides: { root: { backgroundColor: WELL } },
+      styleOverrides: {
+        root: { backgroundColor: WELL, borderRadius: 6 },
+        grouped: { border: 0, '&:not(:first-of-type)': { borderRadius: 6, marginLeft: 0 }, '&:first-of-type': { borderRadius: 6 } },
+      },
     },
     MuiOutlinedInput: {
       styleOverrides: {
-        root: { backgroundColor: WELL, fontSize: 12 },
-        notchedOutline: { borderColor: LINE },
+        root: { backgroundColor: WELL, fontSize: 12, borderRadius: 6 },
+        notchedOutline: { border: 0 },
         input: { paddingTop: 4, paddingBottom: 4 },
       },
     },
@@ -89,21 +95,22 @@ export const theme = createTheme({
       styleOverrides: { select: { paddingTop: 4, paddingBottom: 4, minHeight: 0 } },
     },
     MuiMenu: {
-      styleOverrides: { paper: { backgroundColor: PANEL } },
+      styleOverrides: { paper: { backgroundColor: ROW } },
     },
     MuiMenuItem: {
       styleOverrides: { root: { fontSize: 12, minHeight: 28 } },
     },
     MuiChip: {
-      styleOverrides: { root: { borderRadius: 3, height: 22, fontSize: 11 } },
+      styleOverrides: { root: { borderRadius: 6, height: 22, fontSize: 11 } },
     },
     MuiTooltip: {
-      styleOverrides: {
-        tooltip: { backgroundColor: '#0e0e10', border: `1px solid ${LINE}`, fontSize: 11 },
-      },
+      styleOverrides: { tooltip: { backgroundColor: '#0b100f', fontSize: 11 } },
     },
     MuiDialog: {
       styleOverrides: { paper: { backgroundColor: PANEL } },
+    },
+    MuiDivider: {
+      styleOverrides: { root: { borderColor: LINE } },
     },
   },
 })

@@ -6,7 +6,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import { useRafCallback } from '../useRafCallback'
 import { measure } from '../trace'
-import { WELL } from '../theme'
+import { MINT_DIM, WELL } from '../theme'
 
 type RulerSliderProps = {
   value: number
@@ -19,6 +19,9 @@ type RulerSliderProps = {
   unit?: string
   disabled?: boolean
   format?: (value: number) => string
+  // a mint fill from the left edge to where the value stands in its range,
+  // for a value whose range means something
+  fill?: boolean
   onChange: (value: number) => void
 }
 
@@ -37,6 +40,7 @@ export default function RulerSlider({
   unit,
   disabled = false,
   format,
+  fill = false,
   onChange,
 }: RulerSliderProps) {
   const dragRef = useRef<{ clientX: number; value: number; moved: boolean } | null>(null)
@@ -91,8 +95,6 @@ export default function RulerSlider({
         height: HEIGHT,
         width: '100%',
         borderRadius: 999,
-        border: 1,
-        borderColor: disabled ? 'divider' : 'primary.dark',
         bgcolor: WELL,
         overflow: 'hidden',
         userSelect: 'none',
@@ -105,6 +107,7 @@ export default function RulerSlider({
         onPointerUp={end}
         onPointerCancel={end}
         sx={{
+          position: 'relative',
           flex: 1,
           minWidth: 0,
           display: 'flex',
@@ -114,10 +117,25 @@ export default function RulerSlider({
           cursor: disabled ? 'default' : 'ew-resize',
         }}
       >
+        {fill && !disabled ? (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 0,
+              top: 3,
+              bottom: 3,
+              width: `${Math.max(0, Math.min(1, (value - min) / Math.max(1e-9, max - min))) * 100}%`,
+              borderRadius: 999,
+              bgcolor: MINT_DIM,
+              pointerEvents: 'none',
+            }}
+          />
+        ) : null}
         <Typography
           variant="body2"
           noWrap
           sx={{
+            position: 'relative',
             fontWeight: 600,
             fontVariantNumeric: 'tabular-nums',
             color: disabled ? 'text.disabled' : 'text.primary',

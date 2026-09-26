@@ -7,10 +7,10 @@ type PanelHeaderProps = {
   children?: ReactNode
 }
 
-// The strip a panel is named by: the title small and grey on the shell colour,
-// its actions on the right, the same height everywhere so the eye learns it
-// once and finds the next panel by it
-export const PANEL_HEADER_HEIGHT = 26
+// A panel is named, not boxed: its title with a short mint rule beneath, its
+// actions to the right, and a gap before what it holds. The same in every
+// panel, so the eye learns it once
+export const PANEL_HEADER_HEIGHT = 32
 
 export default function PanelHeader({ title, children }: PanelHeaderProps) {
   return (
@@ -20,21 +20,31 @@ export default function PanelHeader({ title, children }: PanelHeaderProps) {
         alignItems: 'center',
         gap: 0.5,
         height: PANEL_HEADER_HEIGHT,
-        px: 1,
+        px: 1.25,
         flex: '0 0 auto',
-        bgcolor: 'background.default',
-        borderBottom: 1,
-        borderColor: 'divider',
       }}
     >
       <Typography
-        variant="caption"
+        variant="body2"
         sx={{
           flex: 1,
-          fontSize: 11,
           fontWeight: 600,
-          color: 'text.secondary',
+          color: 'text.primary',
           userSelect: 'none',
+          position: 'relative',
+          alignSelf: 'stretch',
+          display: 'flex',
+          alignItems: 'center',
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            left: 0,
+            bottom: 4,
+            width: 28,
+            height: 2,
+            borderRadius: 1,
+            bgcolor: 'primary.main',
+          },
         }}
       >
         {title}

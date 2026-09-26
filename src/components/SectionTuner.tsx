@@ -54,6 +54,7 @@ export default function SectionTuner({
           pixelsPerStep={10}
           majorEvery={5}
           format={(value) => `${Math.round(value)} BPM`}
+          fill
           onChange={(whole) => tune({ bpm: whole + fraction / 100 })}
         />
       </Box>
@@ -67,6 +68,7 @@ export default function SectionTuner({
           pixelsPerStep={6}
           majorEvery={5}
           format={(value) => `.${String(Math.round(value)).padStart(2, '0')}`}
+          fill
           onChange={(part) => tune({ bpm: Math.floor(live?.bpm ?? 120) + part / 100 })}
         />
       </Box>

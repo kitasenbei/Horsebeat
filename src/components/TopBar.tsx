@@ -9,6 +9,7 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Tooltip from '@mui/material/Tooltip'
+import Divider from '@mui/material/Divider'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import UndoIcon from '@mui/icons-material/Undo'
 import RedoIcon from '@mui/icons-material/Redo'
@@ -19,9 +20,7 @@ import ShowChartIcon from '@mui/icons-material/ShowChart'
 import GridOnIcon from '@mui/icons-material/GridOn'
 import SpeedIcon from '@mui/icons-material/Speed'
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong'
-import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter'
-import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import {
   BLOCK_LABELS,
   COLORMAPS,
@@ -68,8 +67,6 @@ type TopBarProps = {
   onTraceOpenChange: (open: boolean) => void
   follow: boolean
   onFollowChange: (follow: boolean) => void
-  fullscreen: boolean
-  onFullscreenChange: () => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -192,8 +189,6 @@ export default function TopBar({
   onTraceOpenChange,
   follow,
   onFollowChange,
-  fullscreen,
-  onFullscreenChange,
   canUndo,
   canRedo,
   onUndo,
@@ -233,6 +228,8 @@ export default function TopBar({
             </span>
           </Tooltip>
         </ButtonGroup>
+
+        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
 
         <ToggleButtonGroup
           size="small"
@@ -280,6 +277,8 @@ export default function TopBar({
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>
+
+        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
 
         {picker<number | 'all'>(
           'Lane shown in the compiled view',
@@ -338,6 +337,8 @@ export default function TopBar({
             )
           : null}
 
+        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
+
         <ToggleButtonGroup
           size="small"
           exclusive
@@ -380,6 +381,8 @@ export default function TopBar({
           onCursorModeChange,
         )}
 
+        <Divider orientation="vertical" flexItem sx={{ my: 0.5, mx: 0.25 }} />
+
         <ToggleButtonGroup
           size="small"
           exclusive
@@ -394,29 +397,6 @@ export default function TopBar({
           </ToggleButton>
         </ToggleButtonGroup>
 
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={fullscreen ? 'fullscreen' : null}
-          onChange={() => onFullscreenChange()}
-          sx={PILL}
-        >
-          <ToggleButton
-            value="fullscreen"
-            aria-label="Compiled view full screen"
-            disabled={!compiled}
-            sx={selected('info')}
-          >
-            <Tooltip title="Show the compiled view on the whole screen">
-              <span>
-                {segment(
-                  'Full',
-                  fullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />,
-                )}
-              </span>
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
 
         {TRACING ? (
           <ToggleButtonGroup

@@ -1702,7 +1702,7 @@ export function drawProjection(
     context.lineTo(from, top + height)
     context.closePath()
     context.fillStyle = color
-    context.globalAlpha = 0.22
+    context.globalAlpha = 0.14
     context.fill()
     context.globalAlpha = 1
   }

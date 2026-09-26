@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
+import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
@@ -27,6 +28,7 @@ import FloatingWindow from './components/FloatingWindow'
 import TracePanel from './components/TracePanel'
 import SectionTuner from './components/SectionTuner'
 import TimingPanel from './components/TimingPanel'
+import PanelHeader from './components/PanelHeader'
 import BarGrid from './components/BarGrid'
 import {
   computeBands,
@@ -433,8 +435,6 @@ export default function App() {
         onTraceOpenChange={setTraceOpen}
         follow={follow}
         onFollowChange={setFollow}
-        fullscreen={fullscreen}
-        onFullscreenChange={toggleFullscreen}
       />
       {curveOpen ? (
         <CurvePanel
@@ -589,27 +589,28 @@ export default function App() {
               <>
                 <Box
                   ref={compiledRef}
-                  sx={{ position: 'relative', flex: 1, minHeight: 0, bgcolor: 'background.default' }}
+                  sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    bgcolor: 'background.default',
+                    border: 1,
+                    borderColor: 'divider',
+                  }}
                 >
-                  {fullscreen ? (
-                    <Tooltip title="Leave full screen">
+                  <PanelHeader title="Compiled view">
+                    <Tooltip title={fullscreen ? 'Leave full screen' : 'Show on the whole screen'}>
                       <IconButton
                         size="small"
-                        aria-label="Leave full screen"
+                        aria-label={fullscreen ? 'Leave full screen' : 'Compiled view on the whole screen'}
                         onClick={toggleFullscreen}
-                        sx={{
-                          position: 'absolute',
-                          top: 8,
-                          right: 8,
-                          zIndex: 1,
-                          bgcolor: 'background.paper',
-                          '&:hover': { bgcolor: 'action.hover' },
-                        }}
                       >
-                        <FullscreenExitIcon fontSize="small" />
+                        {fullscreen ? <FullscreenExitIcon fontSize="small" /> : <FullscreenIcon fontSize="small" />}
                       </IconButton>
                     </Tooltip>
-                  ) : null}
+                  </PanelHeader>
+                  <Box sx={{ flex: 1, minHeight: 0 }}>
                   <BarGrid
                     envelope={levels}
                     loudness={loudness}
@@ -637,6 +638,7 @@ export default function App() {
                     waveStyle={waveStyle}
                     follow={follow}
                   />
+                  </Box>
                 </Box>
               </>
             ) : null}
@@ -652,7 +654,18 @@ export default function App() {
               positionRef={positionRef}
               playing={playing}
             />
-            <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                border: 1,
+                borderColor: 'divider',
+              }}
+            >
+              <PanelHeader title="Falling" />
+              <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
               <VerticalWaveform
                 samples={samples}
                 // the falling view reads the envelope as it is, a width for an
@@ -689,6 +702,7 @@ export default function App() {
                   onChange={setFallSpeed}
                 />
               </Paper>
+              </Box>
             </Box>
           </Box>
         </Box>

@@ -344,7 +344,18 @@ export default function CurvePanel({
         }}
       >
         {embedded ? null : <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
-        <Typography variant="caption" sx={{ flex: 1 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            flex: 1,
+            textTransform: 'uppercase',
+            letterSpacing: 0.6,
+            fontSize: 10,
+            fontWeight: 600,
+            color: 'text.secondary',
+            userSelect: 'none',
+          }}
+        >
           Amplitude curve
         </Typography>
         <IconButton

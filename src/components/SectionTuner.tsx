@@ -1,7 +1,5 @@
 import type { RefObject } from 'react'
 import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
-import { WELL } from '../theme'
 import RulerSlider from './RulerSlider'
 import { useLiveSection } from '../useLiveSection'
 import { useLiveSectionsValue } from '../liveSections'
@@ -16,14 +14,7 @@ type SectionTunerProps = {
   onSectionsChange: (sections: Section[]) => void
 }
 
-const PILL = {
-  width: 200,
-  borderRadius: 0.75,
-  overflow: 'hidden',
-  border: 1,
-  borderColor: 'divider',
-  bgcolor: WELL,
-}
+const PILL = { width: 150 }
 
 // The three rulers that tune the section under the playhead. They follow the
 // playhead on their own while the song plays, so the app is not rendered to
@@ -53,7 +44,7 @@ export default function SectionTuner({
 
   return (
     <Box sx={{ display: 'flex', gap: 1 }}>
-      <Paper elevation={0} sx={PILL}>
+      <Box sx={PILL}>
         <RulerSlider
           value={Math.floor(live?.bpm ?? 120)}
           disabled={!live}
@@ -65,8 +56,8 @@ export default function SectionTuner({
           format={(value) => `${Math.round(value)} BPM`}
           onChange={(whole) => tune({ bpm: whole + fraction / 100 })}
         />
-      </Paper>
-      <Paper elevation={0} sx={PILL}>
+      </Box>
+      <Box sx={PILL}>
         <RulerSlider
           value={fraction}
           disabled={!live}
@@ -78,8 +69,8 @@ export default function SectionTuner({
           format={(value) => `.${String(Math.round(value)).padStart(2, '0')}`}
           onChange={(part) => tune({ bpm: Math.floor(live?.bpm ?? 120) + part / 100 })}
         />
-      </Paper>
-      <Paper elevation={0} sx={PILL}>
+      </Box>
+      <Box sx={PILL}>
         <RulerSlider
           value={Math.round(live?.offsetMs ?? 0)}
           disabled={!live}
@@ -91,7 +82,7 @@ export default function SectionTuner({
           format={(value) => `${Math.round(value)} ms`}
           onChange={(offsetMs) => tune({ offsetMs })}
         />
-      </Paper>
+      </Box>
     </Box>
   )
 }

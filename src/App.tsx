@@ -4,7 +4,6 @@ import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
-import Paper from '@mui/material/Paper'
 import TopBar from './components/TopBar'
 import StatusBar from './components/StatusBar'
 import Transport from './components/Transport'
@@ -46,7 +45,6 @@ import { clampRange, type Range } from './range'
 import { resolveTempo } from './bpm'
 import { readOsz, writeOsz, type BeatmapSource } from './osu'
 import { snapSection } from './fit/snap'
-import { WELL } from './theme'
 import { fitTrack, type Fit, type Progress } from './fit'
 import {
   createSection,
@@ -679,16 +677,13 @@ export default function App() {
                 seconds={FALL_RANGE - fallSpeed}
                 onSeek={seek}
               />
-              <Paper
+              <Box
                 sx={{
                   position: 'absolute',
                   left: '50%',
                   bottom: 8,
                   width: '60%',
                   transform: 'translateX(-50%)',
-                  borderRadius: 0.75,
-                  overflow: 'hidden',
-                  bgcolor: WELL,
                 }}
               >
                 <RulerSlider
@@ -701,7 +696,7 @@ export default function App() {
                   format={(value) => `${(FALL_RANGE - value).toFixed(1)}s`}
                   onChange={setFallSpeed}
                 />
-              </Paper>
+              </Box>
               </Box>
             </Box>
           </Box>

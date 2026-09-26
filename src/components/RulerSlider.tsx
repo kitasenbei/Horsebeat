@@ -1,10 +1,12 @@
 import { useRef } from 'react'
 import Box from '@mui/material/Box'
+import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
-import { useTheme } from '@mui/material/styles'
-import { useCanvas } from '../useCanvas'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import { useRafCallback } from '../useRafCallback'
 import { measure } from '../trace'
+import { WELL } from '../theme'
 
 type RulerSliderProps = {
   value: number
@@ -12,6 +14,7 @@ type RulerSliderProps = {
   max?: number
   step?: number
   pixelsPerStep?: number
+  // kept for callers that still pass it: a pill has no ticks to space
   majorEvery?: number
   unit?: string
   disabled?: boolean
@@ -19,7 +22,11 @@ type RulerSliderProps = {
   onChange: (value: number) => void
 }
 
-const HEIGHT = 56
+// A value in a pill, edged in the house green: a chevron either end steps it,
+// and a drag across the middle scrolls it, so many steps are one gesture and
+// one step is one press. Dragging right raises the value, the way a slider
+// would
+const HEIGHT = 28
 
 export default function RulerSlider({
   value,
@@ -27,126 +34,100 @@ export default function RulerSlider({
   max = 400,
   step = 1,
   pixelsPerStep = 8,
-  majorEvery = 5,
   unit,
   disabled = false,
   format,
   onChange,
 }: RulerSliderProps) {
-  const theme = useTheme()
-  const dragRef = useRef<{ clientX: number; value: number } | null>(null)
+  const dragRef = useRef<{ clientX: number; value: number; moved: boolean } | null>(null)
   const applyValue = useRafCallback(onChange)
+  const clamp = (next: number) => Math.min(max, Math.max(min, Math.round(next / step) * step))
+  const shown = format ? format(value) : unit ? `${value} ${unit}` : String(value)
 
-  const canvasRef = useCanvas((context, width, height) => {
-    const middle = width / 2
-    const baseline = height - 14
-
-    context.strokeStyle = theme.palette.divider
-    context.lineWidth = 1
-    context.beginPath()
-    context.moveTo(0, Math.round(baseline) + 0.5)
-    context.lineTo(width, Math.round(baseline) + 0.5)
-    context.stroke()
-
-    const reach = (middle / pixelsPerStep) * step
-    const firstStep = Math.ceil((value - reach) / step) * step
-    const lastStep = value + reach
-
-    context.textAlign = 'center'
-    context.textBaseline = 'top'
-    context.font = `10px ${theme.typography.fontFamily}`
-
-    for (let tick = firstStep; tick <= lastStep; tick += step) {
-      if (tick < min || tick > max) continue
-
-      const x = Math.round(middle + ((tick - value) / step) * pixelsPerStep) + 0.5
-      const major = Math.round(tick / step) % majorEvery === 0
-      const length = major ? 14 : 7
-
-      context.strokeStyle = disabled
-        ? theme.palette.action.disabled
-        : major
-          ? theme.palette.text.secondary
-          : theme.palette.text.disabled
-      context.beginPath()
-      context.moveTo(x, baseline - length)
-      context.lineTo(x, baseline)
-      context.stroke()
-
-      if (major) {
-        context.fillStyle = disabled
-          ? theme.palette.action.disabled
-          : theme.palette.text.secondary
-        context.fillText(String(Math.round(tick)), x, baseline + 2)
-      }
-    }
-
-    context.strokeStyle = disabled ? theme.palette.action.disabled : theme.palette.error.main
-    context.lineWidth = 2
-    context.beginPath()
-    context.moveTo(Math.round(middle) + 0.5, 0)
-    context.lineTo(Math.round(middle) + 0.5, baseline)
-    context.stroke()
-  }, false, `${value}|${min}|${max}|${step}|${pixelsPerStep}|${disabled}`)
-
-  const begin = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const begin = (event: React.PointerEvent<HTMLDivElement>) => {
     if (disabled || event.button !== 0) return
-    dragRef.current = { clientX: event.clientX, value }
+    dragRef.current = { clientX: event.clientX, value, moved: false }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
-  const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const move = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag) return
     measure('drag RulerSlider', () => {
-      const shift = ((drag.clientX - event.clientX) / pixelsPerStep) * step
-      const next = Math.round((drag.value + shift) / step) * step
-      applyValue(Math.min(max, Math.max(min, next)))
+      const shift = ((event.clientX - drag.clientX) / pixelsPerStep) * step
+      if (Math.abs(event.clientX - drag.clientX) > 2) drag.moved = true
+      applyValue(clamp(drag.value + shift))
     })
   }
 
-  const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const end = (event: React.PointerEvent<HTMLDivElement>) => {
     dragRef.current = null
     event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
+  const chevron = (direction: -1 | 1, label: string) => (
+    <ButtonBase
+      disabled={disabled || (direction < 0 ? value <= min : value >= max)}
+      aria-label={label}
+      onClick={() => onChange(clamp(value + direction * step))}
+      sx={{
+        height: '100%',
+        px: 0.25,
+        color: 'primary.main',
+        borderRadius: 999,
+        '&.Mui-disabled': { color: 'text.disabled' },
+      }}
+    >
+      {direction < 0 ? <ChevronLeftIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+    </ButtonBase>
+  )
+
   return (
-    <Box sx={{ position: 'relative', width: '100%' }}>
-      <Box
-        component="canvas"
-        ref={canvasRef}
+    <Box
       data-trace="RulerSlider"
+      sx={{
+        display: 'flex',
+        alignItems: 'stretch',
+        height: HEIGHT,
+        width: '100%',
+        borderRadius: 999,
+        border: 1,
+        borderColor: disabled ? 'divider' : 'primary.dark',
+        bgcolor: WELL,
+        overflow: 'hidden',
+        userSelect: 'none',
+      }}
+    >
+      {chevron(-1, 'Lower')}
+      <Box
         onPointerDown={begin}
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
         sx={{
-          display: 'block',
-          width: '100%',
-          height: HEIGHT,
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           touchAction: 'none',
           cursor: disabled ? 'default' : 'ew-resize',
         }}
-      />
-      <Typography
-        variant="caption"
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          px: 0.5,
-          bgcolor: 'inherit',
-          color: disabled ? 'text.disabled' : 'text.primary',
-          fontVariantNumeric: 'tabular-nums',
-          // the label sits over the ruler; a drag that starts on it should
-          // drag the ruler, not select the text
-          userSelect: 'none',
-          pointerEvents: 'none',
-        }}
       >
-        {format ? format(value) : unit ? `${value} ${unit}` : value}
-      </Typography>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{
+            fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums',
+            color: disabled ? 'text.disabled' : 'text.primary',
+            pointerEvents: 'none',
+          }}
+        >
+          {shown}
+        </Typography>
+      </Box>
+      {chevron(1, 'Raise')}
     </Box>
   )
 }

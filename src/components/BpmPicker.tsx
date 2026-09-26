@@ -136,6 +136,7 @@ export default function BpmPicker({
           />
         </Box>
         <Divider />
+        <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
           <RulerSlider
             value={fraction}
             min={0}
@@ -154,8 +155,9 @@ export default function BpmPicker({
             pixelsPerStep={10}
             majorEvery={5}
             unit="BPM"
-          onChange={(next) => compose(next, fraction)}
-        />
+            onChange={(next) => compose(next, fraction)}
+          />
+        </Box>
         <Divider />
         <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
           <ButtonGroup size="small" variant="outlined">

@@ -29,7 +29,8 @@ type LiveWaveProps = {
 export type StructureScope = 'bar' | 'beat'
 
 // An oscilloscope triggered on the bar. The last eight bars of the envelope
-// are laid over one bar's width, fading a little with age, with
+// are laid over one bar's width, faint and additive so they build where they
+// agree, with
 // the beats ruled behind them. A grid that sits on the music stacks the
 // traces and puts their peaks on the beat lines. An offset that is wrong
 // keeps them stacked but slides every peak off its line by the same amount,
@@ -42,10 +43,11 @@ const BARS_BACK = 8
 const EDGE = 4
 const MOST_BEATS = 8
 
-// every trace the same weight, fading a little with age so the eye can tell
-// which way a fan opens without any one bar being singled out
-const ALPHA_NEWEST = 0.85
-const ALPHA_OLDEST = 0.3
+// Every trace the same weight and faint, laid down with an additive blend:
+// where traces cross or lie together the mint builds towards white, so eight
+// stacked bars burn as one bright line and a fan reads as eight pale ones
+const TRACE_ALPHA = 0.28
+const TRACE_WIDTH = 1.4
 
 // The amplitude curve as a table of the same size the compiled view uses, so
 // a moment here is read through exactly the steps its pixels are painted
@@ -122,16 +124,18 @@ export default function LiveWave({
       }
       context.globalAlpha = 1
 
-      // a trace per bar, oldest first so the newest lies on top: each pixel
-      // column the level at that place in that bar, read through the curve
+      // a trace per bar: each pixel column the level at that place in that
+      // bar, read through the curve
       const frames = envelope.length
+      context.save()
+      context.globalCompositeOperation = 'lighter'
       for (let back = BARS_BACK - 1; back >= 0; back -= 1) {
         const from = start - bar * back
         // before the section began there is no bar to compare with
         if (from + bar <= span.start) continue
         context.strokeStyle = MINT
-        context.globalAlpha = ALPHA_NEWEST - ((ALPHA_NEWEST - ALPHA_OLDEST) * back) / Math.max(1, BARS_BACK - 1)
-        context.lineWidth = 1.2
+        context.globalAlpha = TRACE_ALPHA
+        context.lineWidth = TRACE_WIDTH
         context.beginPath()
         let drawn = false
         for (let x = 0; x <= width; x += 1) {
@@ -148,7 +152,7 @@ export default function LiveWave({
         }
         context.stroke()
       }
-      context.globalAlpha = 1
+      context.restore()
 
       // where the playhead stands in the stretch
       const x = Math.round(phase * width) + 0.5

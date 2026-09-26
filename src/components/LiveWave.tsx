@@ -69,22 +69,13 @@ const NEWEST_ALPHA = 0.9
 // how long a bar takes to roll into the past, in milliseconds
 const ROLL_MS = 420
 
-// a bounce out: the roll lands on its new shape, springs back a little,
-// lands again, and settles through two smaller bounces
+// an elastic out: the roll overshoots its new shape and swings back through
+// it, each swing smaller than the last, before it comes to rest
 function eased(t: number): number {
-  const n1 = 7.5625
-  const d1 = 2.75
-  if (t < 1 / d1) return n1 * t * t
-  if (t < 2 / d1) {
-    const u = t - 1.5 / d1
-    return n1 * u * u + 0.75
-  }
-  if (t < 2.5 / d1) {
-    const u = t - 2.25 / d1
-    return n1 * u * u + 0.9375
-  }
-  const u = t - 2.625 / d1
-  return n1 * u * u + 0.984375
+  if (t <= 0) return 0
+  if (t >= 1) return 1
+  const period = 0.4
+  return Math.pow(2, -10 * t) * Math.sin(((t * 10 - 0.75) * 2 * Math.PI) / (period * 10 / 4)) + 1
 }
 
 // The amplitude curve as a table of the same size the compiled view uses, so

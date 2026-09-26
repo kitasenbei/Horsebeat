@@ -28,6 +28,9 @@ type RangeStripProps = {
   positionRef: RefObject<number>
   playing: boolean
   onSeek: (position: number) => void
+  // the drag's start and end, so the app can treat its frames as a scrub
+  onScrubStart?: () => void
+  onScrubEnd?: () => void
   onRangeChange: (range: Range) => void
 }
 
@@ -50,6 +53,8 @@ export default function RangeStrip({
   positionRef,
   playing,
   onSeek,
+  onScrubStart,
+  onScrubEnd,
   onRangeChange,
 }: RangeStripProps) {
   const sections = useLiveSectionsValue(givenSections)
@@ -76,6 +81,7 @@ export default function RangeStrip({
     if (event.button !== 0) return
     draggingRef.current = true
     event.currentTarget.setPointerCapture(event.pointerId)
+    onScrubStart?.()
     onSeek(positionAt(event))
   }
 
@@ -89,6 +95,7 @@ export default function RangeStrip({
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
     draggingRef.current = false
     event.currentTarget.releasePointerCapture(event.pointerId)
+    onScrubEnd?.()
   }
 
   // the wheel zooms the window about the moment under the pointer, the way

@@ -31,6 +31,9 @@ type VerticalWaveformProps = {
   fallSpeed: number
   onFallSpeedChange: (fallSpeed: number) => void
   onSeek: (position: number) => void
+  // the drag's start and end, so the app can treat its frames as a scrub
+  onScrubStart?: () => void
+  onScrubEnd?: () => void
 }
 
 export default function VerticalWaveform({
@@ -44,6 +47,8 @@ export default function VerticalWaveform({
   fallSpeed,
   onFallSpeedChange,
   onSeek,
+  onScrubStart,
+  onScrubEnd,
 }: VerticalWaveformProps) {
   const sections = useLiveSectionsValue(givenSections)
   const [live, editFall, settleFall] = useLiveFallEdit(fallSpeed, onFallSpeedChange)
@@ -66,6 +71,7 @@ export default function VerticalWaveform({
     if (event.button !== 0 || !samples) return
     dragRef.current = { clientY: event.clientY, position: positionRef.current }
     event.currentTarget.setPointerCapture(event.pointerId)
+    onScrubStart?.()
   }
 
   const move = (event: React.PointerEvent<HTMLCanvasElement>) => {
@@ -82,6 +88,7 @@ export default function VerticalWaveform({
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
     dragRef.current = null
     event.currentTarget.releasePointerCapture(event.pointerId)
+    onScrubEnd?.()
   }
 
   const canvasRef = useCanvas((context, full, height) => {

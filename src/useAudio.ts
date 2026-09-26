@@ -12,6 +12,11 @@ export function useAudio(file: File | null) {
   const [rate, setRate] = useState(1)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
+  // a drag on the playhead: the audio and the ref move with every frame of
+  // it, the app's position once at its end. While it lasts the views animate
+  // as they do in playback, reading the ref
+  const [scrubbing, setScrubbing] = useState(false)
+  const scrubbingRef = useRef(false)
 
   useEffect(() => {
     if (!file) {
@@ -39,7 +44,7 @@ export function useAudio(file: File | null) {
     }
     const onMeta = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
     const onTime = () => {
-      if (audio.paused) land()
+      if (audio.paused && !scrubbingRef.current) land()
     }
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onStop)
@@ -134,6 +139,27 @@ export function useAudio(file: File | null) {
     setPosition(clamped)
   }, [])
 
+  const beginScrub = useCallback(() => {
+    if (scrubbingRef.current) return
+    scrubbingRef.current = true
+    setScrubbing(true)
+  }, [])
+
+  const scrub = useCallback((next: number) => {
+    const audio = audioRef.current
+    if (!audio || !(audio.duration > 0)) return
+    const clamped = Math.min(1, Math.max(0, next))
+    audio.currentTime = clamped * audio.duration
+    positionRef.current = clamped
+  }, [])
+
+  const endScrub = useCallback(() => {
+    if (!scrubbingRef.current) return
+    scrubbingRef.current = false
+    setScrubbing(false)
+    setPosition(positionRef.current)
+  }, [])
+
   const playFrom = useCallback((next: number) => {
     const audio = audioRef.current
     if (!audio || !(audio.duration > 0)) return
@@ -176,5 +202,9 @@ export function useAudio(file: File | null) {
     setMuted,
     setRate,
     previewVolume,
+    scrubbing,
+    beginScrub,
+    scrub,
+    endScrub,
   }
 }

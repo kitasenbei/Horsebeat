@@ -13,6 +13,9 @@ type PlayheadRailProps = {
   playing: boolean
   enabled: boolean
   onSeek: (position: number) => void
+  // the drag's start and end, so the app can treat its frames as a scrub
+  onScrubStart?: () => void
+  onScrubEnd?: () => void
   range?: Range
 }
 
@@ -27,6 +30,8 @@ export default function PlayheadRail({
   playing,
   enabled,
   onSeek,
+  onScrubStart,
+  onScrubEnd,
   range: givenRange,
 }: PlayheadRailProps) {
   // a rail given a window follows it while it moves; a rail given none runs
@@ -69,6 +74,7 @@ export default function PlayheadRail({
     if (!enabled || event.button !== 0) return
     draggingRef.current = true
     event.currentTarget.setPointerCapture(event.pointerId)
+    onScrubStart?.()
     onSeek(positionAt(event.clientX))
   }
 
@@ -80,6 +86,7 @@ export default function PlayheadRail({
   const end = (event: React.PointerEvent<HTMLCanvasElement>) => {
     draggingRef.current = false
     event.currentTarget.releasePointerCapture(event.pointerId)
+    onScrubEnd?.()
   }
 
   return (

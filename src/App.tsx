@@ -194,8 +194,15 @@ export default function App() {
     setVolume,
     setMuted,
     previewVolume,
+    scrubbing,
+    beginScrub,
+    scrub,
+    endScrub,
     setRate,
   } = useAudio(file)
+  // the views animate their playheads from the ref while the song plays and
+  // while it is scrubbed, and read the app's position otherwise
+  const moving = playing || scrubbing
 
   const focus = editingSection
     ? (sectionSpans(sections, duration).find((item) => item.section.id === editingSection) ?? null)
@@ -451,7 +458,7 @@ export default function App() {
                 sections={sections}
                 position={position}
                 positionRef={positionRef}
-                playing={playing}
+                playing={moving}
                 durationMs={duration * 1000}
                 onJump={(fromMs, toMs) => {
                   if (duration <= 0) return
@@ -536,7 +543,7 @@ export default function App() {
                   duration={duration}
                   position={position}
                   positionRef={positionRef}
-                  playing={playing}
+                  playing={moving}
                   onSectionsChange={setSections}
                 />
               </Box>
@@ -583,10 +590,12 @@ export default function App() {
                 <PlayheadRail
                   position={position}
                   positionRef={positionRef}
-                  playing={playing}
+                  playing={moving}
                   range={range}
                   enabled={Boolean(samples)}
-                  onSeek={seek}
+                  onSeek={scrub}
+                  onScrubStart={beginScrub}
+                  onScrubEnd={endScrub}
                 />
               </>
             )}
@@ -596,7 +605,7 @@ export default function App() {
                 envelope={levels}
                 position={position}
                 positionRef={positionRef}
-                playing={playing}
+                playing={moving}
                 markers={markers}
                 focus={focus}
                 sections={sections}
@@ -678,7 +687,7 @@ export default function App() {
                     duration={duration}
                     position={position}
                     positionRef={positionRef}
-                    playing={playing}
+                    playing={moving}
                     curve={curve}
                     range={range}
                     onRangeChange={changeRange}
@@ -711,7 +720,7 @@ export default function App() {
                   duration={duration}
                   position={position}
                   positionRef={positionRef}
-                  playing={playing}
+                  playing={moving}
                 />
               </Box>
             </Box>
@@ -738,11 +747,13 @@ export default function App() {
                 sections={sections}
                 position={position}
                 positionRef={positionRef}
-                playing={playing}
+                playing={moving}
                 duration={duration}
                 fallSpeed={fallSpeed}
                 onFallSpeedChange={setFallSpeed}
-                onSeek={seek}
+                onSeek={scrub}
+                onScrubStart={beginScrub}
+                onScrubEnd={endScrub}
               />
               </Box>
             </Box>
@@ -762,7 +773,7 @@ export default function App() {
                 duration={duration}
                 position={position}
                 positionRef={positionRef}
-                playing={playing}
+                playing={moving}
                 onSectionsChange={setSections}
               />
             ) : null
@@ -841,14 +852,14 @@ export default function App() {
             range={range}
             position={position}
             positionRef={positionRef}
-            playing={playing}
+            playing={moving}
             onRangeChange={changeRange}
             onSeek={seek}
           />
           <PlayheadRail
             position={position}
             positionRef={positionRef}
-            playing={playing}
+            playing={moving}
             range={range}
             enabled={Boolean(samples)}
             onSeek={seek}
@@ -861,14 +872,16 @@ export default function App() {
             range={range}
             position={position}
             positionRef={positionRef}
-            playing={playing}
-            onSeek={seek}
+            playing={moving}
+            onSeek={scrub}
+            onScrubStart={beginScrub}
+            onScrubEnd={endScrub}
             onRangeChange={changeRange}
           />
           <PlayheadRail
             position={position}
             positionRef={positionRef}
-            playing={playing}
+            playing={moving}
             enabled={Boolean(peaks)}
             onSeek={seek}
           />
@@ -877,7 +890,7 @@ export default function App() {
               peaks={peaks}
               position={position}
               positionRef={positionRef}
-              playing={playing}
+              playing={moving}
               curve={curve}
               range={range}
               onRangeChange={changeRange}
@@ -914,7 +927,7 @@ export default function App() {
         positionRef={positionRef}
         position={position}
         duration={duration}
-        playing={playing}
+        playing={moving}
       />
       <input
         ref={inputRef}

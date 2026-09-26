@@ -182,6 +182,13 @@ export default function App() {
   // a picture of the user's own, or the beatmap's, laid faintly over the app
   const [background, setBackground] = useState<string | null>(null)
   const [dim, setDim] = useState(DIM_DEFAULT)
+  // off unless asked: a picture the user chose is theirs, and a beatmap
+  // should not take it away on opening
+  const [useBeatmapPicture, setUseBeatmapPicture] = useState(false)
+  const useBeatmapPictureRef = useRef(useBeatmapPicture)
+  useEffect(() => {
+    useBeatmapPictureRef.current = useBeatmapPicture
+  }, [useBeatmapPicture])
   const setBackgroundFrom = (blob: Blob | null) => {
     setBackground((held) => {
       if (held) URL.revokeObjectURL(held)
@@ -397,8 +404,9 @@ export default function App() {
       setAnchorId(null)
       setFile(next)
       setSource(beatmap ? beatmap.source : null)
-      // a beatmap that came with a picture opens with it behind the app
-      if (beatmap?.background) setBackgroundFrom(beatmap.background)
+      // a beatmap that came with a picture opens with it behind the app,
+      // only when the user has asked for that
+      if (beatmap?.background && useBeatmapPictureRef.current) setBackgroundFrom(beatmap.background)
       setTitle(beatmap ? beatmap.title : source.name.replace(/\.[^.]+$/, ''))
     } finally {
       await context.close()
@@ -604,6 +612,8 @@ export default function App() {
                 dim={dim}
                 onBackgroundChange={setBackgroundFrom}
                 onDimChange={setDim}
+                useBeatmap={useBeatmapPicture}
+                onUseBeatmapChange={setUseBeatmapPicture}
               />
             </Box>
             {TRACING ? (

@@ -1,10 +1,11 @@
 import { useRef } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import ToggleButton from '@mui/material/ToggleButton'
 import Typography from '@mui/material/Typography'
 import PanelHeader from './PanelHeader'
 import RulerSlider from './RulerSlider'
-import { ROW } from '../theme'
+import { ROW, WELL } from '../theme'
 
 type LookPanelProps = {
   // the picture laid faintly over the whole app, if any, and how strongly
@@ -12,6 +13,9 @@ type LookPanelProps = {
   dim: number
   onBackgroundChange: (file: File | null) => void
   onDimChange: (dim: number) => void
+  // whether a beatmap's own picture is taken up when one is opened
+  useBeatmap: boolean
+  onUseBeatmapChange: (use: boolean) => void
 }
 
 // How the app looks, as opposed to what it shows: a picture of the user's
@@ -19,7 +23,14 @@ type LookPanelProps = {
 export const DIM_DEFAULT = 4
 const DIM_MAX = 40
 
-export default function LookPanel({ background, dim, onBackgroundChange, onDimChange }: LookPanelProps) {
+export default function LookPanel({
+  background,
+  dim,
+  onBackgroundChange,
+  onDimChange,
+  useBeatmap,
+  onUseBeatmapChange,
+}: LookPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -58,6 +69,20 @@ export default function LookPanel({ background, dim, onBackgroundChange, onDimCh
               event.target.value = ''
             }}
           />
+        </Box>
+        <Box sx={{ borderRadius: 1.5, bgcolor: ROW, px: 1.25, py: 0.75, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" sx={{ flex: 1, color: 'text.secondary' }}>
+            Use the beatmap's picture
+          </Typography>
+          <ToggleButton
+            value="on"
+            selected={useBeatmap}
+            onChange={() => onUseBeatmapChange(!useBeatmap)}
+            aria-label="Use the beatmap's picture"
+            sx={{ width: 148, bgcolor: WELL, py: '5px', justifyContent: 'center' }}
+          >
+            {useBeatmap ? 'On' : 'Off'}
+          </ToggleButton>
         </Box>
         <Box sx={{ borderRadius: 1.5, bgcolor: ROW, px: 1.25, py: 0.75, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2" sx={{ flex: 1, color: 'text.secondary' }}>

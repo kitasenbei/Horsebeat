@@ -159,7 +159,9 @@ export default function LiveWave({
       const column = slice === 'auto' ? meter : Math.max(1, slice)
       const cells = scope === 'bar' ? Math.max(1, divisions) : Math.max(1, subdivisions)
       const bar = scope === 'bar' ? span.beat * column : span.beat
-      const early = centred ? bar / (2 * cells) : 0
+      // and in beat mode a quarter of the beat later again, window and lines
+      // together, which is where the beat reads right against the columns
+      const early = centred ? bar / (2 * cells) - (scope === 'beat' ? bar / 4 : 0) : 0
       const index = Math.floor((at - span.start + early) / bar)
       const start = span.start - early + index * bar
       const floor = height - EDGE

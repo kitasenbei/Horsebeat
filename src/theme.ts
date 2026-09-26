@@ -7,29 +7,79 @@ export const GRID_PURPLE = '#7b00ff'
 // that. Edges are where two tones meet, so there are no lines in the chrome;
 // gaps do the separating. The one accent is a mint that fills, for a value
 // and for the thing that is on. Colour otherwise belongs to the data, drawn
-// on its own dark neutral so the maps stay true
-export const SHELL = '#121918'
-export const PANEL = '#1a2321'
-export const ROW = '#232e2c'
-export const WELL = '#0f1514'
+// on its own dark neutral so the maps stay true.
+//
+// The tones can be taken from a picture instead, so the shell wears the
+// user's own colours: the components style themselves through variables on
+// the root, and the theme is rebuilt from the same values, so one change of
+// tones reaches every well, pill and pressed toggle at once
+export type Tones = {
+  shell: string
+  panel: string
+  row: string
+  well: string
+  mint: string
+}
+
+export const DEFAULT_TONES: Tones = {
+  shell: '#121918',
+  panel: '#1a2321',
+  row: '#232e2c',
+  well: '#0f1514',
+  mint: '#4fd1a5',
+}
+
+// what the components ask for: the variables, so a change of tones is a
+// change of style and not a render
+export const SHELL = 'var(--hb-shell)'
+export const PANEL = 'var(--hb-panel)'
+export const ROW = 'var(--hb-row)'
+export const WELL = 'var(--hb-well)'
+export const MINT = 'var(--hb-mint)'
+export const MINT_DIM = 'color-mix(in srgb, var(--hb-mint) 22%, transparent)'
+// the picture's own neutral stays whatever the tones, so the maps stay true
 export const CANVAS = '#121316'
 export const LINE = 'rgba(255, 255, 255, 0.08)'
-export const MINT = '#4fd1a5'
-export const MINT_DIM = 'rgba(79, 209, 165, 0.22)'
 export const LIVE = '#e07c0a'
 
-export const theme = createTheme({
+let held: Tones = DEFAULT_TONES
+
+// the tones as they stand, for a canvas that cannot read a variable
+export function currentTones(): Tones {
+  return held
+}
+
+export function applyTones(tones: Tones) {
+  held = tones
+  const root = document.documentElement.style
+  root.setProperty('--hb-shell', tones.shell)
+  root.setProperty('--hb-panel', tones.panel)
+  root.setProperty('--hb-row', tones.row)
+  root.setProperty('--hb-well', tones.well)
+  root.setProperty('--hb-mint', tones.mint)
+}
+
+function withAlpha(hex: string, alpha: number): string {
+  const value = Number.parseInt(hex.slice(1), 16)
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`
+}
+
+export function makeTheme(tones: Tones) {
+  const mintDim = withAlpha(tones.mint, 0.22)
+  const mintPressed = withAlpha(tones.mint, 0.3)
+  return createTheme({
+
   palette: {
     mode: 'dark',
-    primary: { main: MINT, light: '#7fe0c0', dark: '#2fa17c', contrastText: '#08110e' },
+    primary: { main: tones.mint, light: '#7fe0c0', dark: '#2fa17c', contrastText: '#08110e' },
     secondary: { main: '#8fa39d', light: '#b3c4be', dark: '#5f716c' },
     info: { main: '#8b6ff0', light: '#a992ff', dark: '#6741d9' },
     warning: { main: LIVE, light: '#f4a04a', dark: '#a85700', contrastText: '#1a0e00' },
     error: { main: '#ef5350' },
-    background: { default: SHELL, paper: PANEL },
+    background: { default: tones.shell, paper: tones.panel },
     divider: LINE,
     text: { primary: '#dfe6e3', secondary: '#93a49e', disabled: '#56655f' },
-    action: { hover: 'rgba(255, 255, 255, 0.05)', selected: MINT_DIM },
+    action: { hover: 'rgba(255, 255, 255, 0.05)', selected: mintDim },
   },
   shape: { borderRadius: 6 },
   typography: {
@@ -73,8 +123,8 @@ export const theme = createTheme({
           paddingRight: 10,
           lineHeight: 1.4,
           fontSize: 12,
-          '&.Mui-selected': { backgroundColor: MINT_DIM, color: '#e9fff7' },
-          '&.Mui-selected:hover': { backgroundColor: 'rgba(79, 209, 165, 0.3)' },
+          '&.Mui-selected': { backgroundColor: mintDim, color: '#e9fff7' },
+          '&.Mui-selected:hover': { backgroundColor: mintPressed },
         },
       },
     },
@@ -114,3 +164,7 @@ export const theme = createTheme({
     },
   },
 })
+}
+
+export const theme = makeTheme(DEFAULT_TONES)
+applyTones(DEFAULT_TONES)

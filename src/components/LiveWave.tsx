@@ -6,7 +6,7 @@ import { applyCurve, type Curve } from '../curve'
 import { useCanvasControl } from '../useCanvas'
 import { sectionSpans, type Section } from '../timing'
 import { useLiveSectionsValue } from '../liveSections'
-import { MINT } from '../theme'
+import { currentTones } from '../theme'
 
 type LiveWaveProps = {
   envelope: Float32Array | null
@@ -240,7 +240,7 @@ export default function LiveWave({
         // and weight throughout, so the blue is always the bar the playhead
         // is in and the mint always the ones before
         if (back === depth) continue
-        gather(from, MINT, alpha, back)
+        gather(from, currentTones().mint, alpha, back)
       }
       // the bar the playhead is in last, so it is drawn on top, in blue
       gather(start, NEWEST, NEWEST_ALPHA, 0)

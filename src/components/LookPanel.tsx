@@ -16,6 +16,9 @@ type LookPanelProps = {
   // whether a beatmap's own picture is taken up when one is opened
   useBeatmap: boolean
   onUseBeatmapChange: (use: boolean) => void
+  // whether the shell takes its tones from the picture
+  wallTones: boolean
+  onWallTonesChange: (use: boolean) => void
 }
 
 // How the app looks, as opposed to what it shows: a picture of the user's
@@ -30,6 +33,8 @@ export default function LookPanel({
   onDimChange,
   useBeatmap,
   onUseBeatmapChange,
+  wallTones,
+  onWallTonesChange,
 }: LookPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   return (
@@ -82,6 +87,21 @@ export default function LookPanel({
             sx={{ width: 148, bgcolor: WELL, py: '5px', justifyContent: 'center' }}
           >
             {useBeatmap ? 'On' : 'Off'}
+          </ToggleButton>
+        </Box>
+        <Box sx={{ borderRadius: 1.5, bgcolor: ROW, px: 1.25, py: 0.75, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" sx={{ flex: 1, color: 'text.secondary' }}>
+            Colours from the picture
+          </Typography>
+          <ToggleButton
+            value="on"
+            selected={wallTones}
+            disabled={!background}
+            onChange={() => onWallTonesChange(!wallTones)}
+            aria-label="Colours from the picture"
+            sx={{ width: 148, bgcolor: WELL, py: '5px', justifyContent: 'center' }}
+          >
+            {wallTones ? 'On' : 'Off'}
           </ToggleButton>
         </Box>
         <Box sx={{ borderRadius: 1.5, bgcolor: ROW, px: 1.25, py: 0.75, display: 'flex', alignItems: 'center', gap: 1 }}>

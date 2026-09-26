@@ -40,7 +40,9 @@ import TracePanel from './components/TracePanel'
 import SectionTuner from './components/SectionTuner'
 import TimingPanel from './components/TimingPanel'
 import PanelHeader from './components/PanelHeader'
-import { CANVAS } from './theme'
+import { CANVAS, DEFAULT_TONES, applyTones, makeTheme, type Tones } from './theme'
+import { extractTones } from './palette'
+import { ThemeProvider } from '@mui/material/styles'
 import BarGrid from './components/BarGrid'
 import {
   computeBands,
@@ -185,6 +187,29 @@ export default function App() {
   // off unless asked: a picture the user chose is theirs, and a beatmap
   // should not take it away on opening
   const [useBeatmapPicture, setUseBeatmapPicture] = useState(false)
+  // the shell's tones, the defaults or the picture's when asked
+  const [wallTones, setWallTones] = useState(false)
+  // the tones read from the picture, remembered with the picture they came
+  // from, so a picture put away takes its tones with it
+  const [extracted, setExtracted] = useState<{ url: string; tones: Tones } | null>(null)
+  useEffect(() => {
+    if (!wallTones || !background) return
+    let stale = false
+    extractTones(background).then(
+      (found) => {
+        if (!stale) setExtracted({ url: background, tones: found })
+      },
+      () => undefined,
+    )
+    return () => {
+      stale = true
+    }
+  }, [wallTones, background])
+  const tones = wallTones && background && extracted?.url === background ? extracted.tones : DEFAULT_TONES
+  useEffect(() => {
+    applyTones(tones)
+  }, [tones])
+  const shellTheme = useMemo(() => makeTheme(tones), [tones])
   const useBeatmapPictureRef = useRef(useBeatmapPicture)
   useEffect(() => {
     useBeatmapPictureRef.current = useBeatmapPicture
@@ -444,6 +469,7 @@ export default function App() {
   }
 
   return (
+    <ThemeProvider theme={shellTheme}>
     <Box sx={{ display: 'flex', height: '100vh', position: 'relative' }}>
       {background ? (
         // over everything and under the pointer: a screen blend lifts the
@@ -614,6 +640,8 @@ export default function App() {
                 onDimChange={setDim}
                 useBeatmap={useBeatmapPicture}
                 onUseBeatmapChange={setUseBeatmapPicture}
+                wallTones={wallTones}
+                onWallTonesChange={setWallTones}
               />
             </Box>
             {TRACING ? (
@@ -1044,5 +1072,6 @@ export default function App() {
       />
     </Box>
     </Box>
+    </ThemeProvider>
   )
 }

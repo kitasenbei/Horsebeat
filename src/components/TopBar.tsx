@@ -53,7 +53,7 @@ const SELECTED = {
   '&.Mui-selected': {
     bgcolor: MINT_DIM,
     color: '#e9fff7',
-    '&:hover': { bgcolor: 'rgba(79, 209, 165, 0.3)' },
+    '&:hover': { bgcolor: 'color-mix(in srgb, var(--hb-mint) 30%, transparent)' },
   },
 }
 

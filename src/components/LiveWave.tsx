@@ -103,12 +103,17 @@ export default function LiveWave({
 
       const phase = Math.min(1, Math.max(0, (at - start) / bar))
 
-      // the cells ruled behind, the first line a little stronger
+      // the cells ruled behind, moved by the same shift as the window so the
+      // beats stay on the lines as they do in the columns; the line at a
+      // beat is a little stronger than one within it
       context.lineWidth = 1
-      for (let line = 0; line <= cells; line += 1) {
-        const x = Math.round((line / cells) * width) + 0.5
+      const offset = early / bar
+      for (let line = -1; line <= cells; line += 1) {
+        const share = line / cells + offset
+        if (share < 0 || share > 1) continue
+        const x = Math.round(share * width) + 0.5
         context.strokeStyle = theme.palette.text.secondary
-        context.globalAlpha = line % cells === 0 ? 0.5 : 0.25
+        context.globalAlpha = ((line % cells) + cells) % cells === 0 ? 0.5 : 0.25
         context.beginPath()
         context.moveTo(x, 0)
         context.lineTo(x, height)

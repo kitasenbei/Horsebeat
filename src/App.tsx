@@ -664,7 +664,7 @@ export default function App() {
                 borderColor: 'divider',
               }}
             >
-              <PanelHeader title="Falling" />
+              <PanelHeader title="Approach" />
               <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
               <VerticalWaveform
                 samples={samples}

@@ -28,6 +28,14 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: Prepare the source
+              env:
+                  GIT_CRYPT_KEY: ${{ secrets.GIT_CRYPT_KEY }}
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y git-crypt
+                  printf '%s' "$GIT_CRYPT_KEY" | base64 -d | git-crypt unlock -
+
             - uses: actions/setup-node@v4
               with:
                   node-version: 22
